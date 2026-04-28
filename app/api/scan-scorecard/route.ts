@@ -10,7 +10,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No image received." }, { status: 400 });
     }
 
-    // Clean up the base64 string for Google
     const base64Data = imageBase64.split(',')[1];
     const mimeType = imageBase64.substring(imageBase64.indexOf(':') + 1, imageBase64.indexOf(';')) || 'image/jpeg';
 
@@ -19,8 +18,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "API Key missing in Vercel settings." }, { status: 500 });
     }
 
-    // Using stable v1 endpoint and Gemini 2.0 Flash
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    // Using stable v1 endpoint
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -28,7 +27,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Extract the Par and Handicap (HCP / Stroke Index) for holes 1-18 from this golf scorecard. Return ONLY a JSON array of 18 objects like this: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. Ensure all 18 holes are present." },
+            { text: "Extract the Par and Handicap (HCP) for holes 1-18 from this golf scorecard. Output MUST be a raw JSON array of 18 objects. Example format: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. Do not include any markdown, backticks, or text other than the JSON." },
             {
               inline_data: {
                 mime_type: mimeType,
@@ -36,10 +35,8 @@ export async function POST(req: Request) {
               }
             }
           ]
-        }],
-        generationConfig: {
-          responseMimeType: "application/json" 
-        }
+        }]
+        // Removed generationConfig to avoid 'responseMimeType' error in v1
       })
     });
 
@@ -48,11 +45,15 @@ export async function POST(req: Request) {
     if (!response.ok) {
        return NextResponse.json({ 
          success: false, 
-         error: data.error?.message || "Google API refused the request." 
+         error: data.error?.message || "Google API error." 
        }, { status: response.status });
     }
 
-    const rawContent = data.candidates[0].content.parts[0].text;
+    let rawContent = data.candidates[0].content.parts[0].text;
+    
+    // Clean up potential markdown formatting if the AI ignores instructions
+    rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+    
     const parsedHoles = JSON.parse(rawContent);
     
     return NextResponse.json({ success: true, holes: parsedHoles });
