@@ -18,9 +18,7 @@ export default function PayoutsPage() {
     onValue(ref(db, 'tournament/matchups'), snap => snap.val() && setMatches(Object.values(snap.val())))
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
-    onValue(ref(db, 'tournament/course'), snap => {
-      if(snap.val()) setCourse({ pars: snap.val().pars || Array(18).fill(4), holes: snap.val().holes || defaultHoles })
-    })
+    onValue(ref(db, 'tournament/course'), snap => { if(snap.val()) setCourse({ pars: snap.val().pars || Array(18).fill(4), holes: snap.val().holes || defaultHoles }) })
   }, [])
 
   const calculateMatch = (m: any) => {
@@ -30,75 +28,68 @@ export default function PayoutsPage() {
 
     const allHcps = [...pA, ...pB].map(p => Number(p.handicap) || 0);
     const baseHcp = Math.min(...allHcps);
-
-    const getStrokes = (playerHcp: number, holeIndex: number) => {
-      const holeHcpRating = Number(course.holes[holeIndex]?.hcp) || (holeIndex + 1);
+    const getStrokes = (playerHcp: number, holeIdx: number) => {
+      const hcpRating = Number(course.holes[holeIdx]?.hcp) || (holeIdx + 1);
       const diff = Math.max(0, playerHcp - baseHcp);
-      let strokes = Math.floor(diff / 18);
-      if (holeHcpRating <= (diff % 18)) strokes += 1;
-      return strokes;
+      let s = Math.floor(diff / 18);
+      if (hcpRating <= (diff % 18)) s += 1;
+      return s;
     };
 
     const sA_agg = Array(18).fill(0); const sB_agg = Array(18).fill(0);
     const sA_dots = Array(18).fill(0); const sB_dots = Array(18).fill(0);
     let birdieA = 0; let birdieB = 0;
-    let strokesA = Math.max(...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
-    let strokesB = Math.max(...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
 
     for (let i = 0; i < 18; i++) {
       const par = course.pars[i] || 4;
       const count = par === 3 ? 3 : 2;
 
-      // SIDE A
+      // TEAM A
       const netsA = pA.map(p => ({ gross: scores[p.id]?.[i] || 0, net: (scores[p.id]?.[i] || 0) - getStrokes(Number(p.handicap)||0, i) })).filter(x => x.gross > 0).sort((a,b) => a.net - b.net);
       if (netsA.length >= count) {
-        sA_agg[i] = netsA.slice(0, count).reduce((acc, curr) => acc + curr.net, 0);
+        sA_agg[i] = netsA.slice(0, count).reduce((a,b) => a + b.net, 0);
         sA_dots[i] = Math.max(...pA.map(p => getStrokes(Number(p.handicap)||0, i)));
-        const bestG = Math.min(...netsA.map(x => x.gross));
-        if (bestG < par) birdieA += bestG <= par - 2 ? (m.eagle || (m.birdie * 2) || 0) : (m.birdie || 0);
+        const bg = Math.min(...netsA.map(x => x.gross));
+        if (bg < par) birdieA += bg <= par - 2 ? (m.eagle || (m.birdie*2) || 0) : (m.birdie || 0);
       }
-
-      // SIDE B
+      // TEAM B
       const netsB = pB.map(p => ({ gross: scores[p.id]?.[i] || 0, net: (scores[p.id]?.[i] || 0) - getStrokes(Number(p.handicap)||0, i) })).filter(x => x.gross > 0).sort((a,b) => a.net - b.net);
       if (netsB.length >= count) {
-        sB_agg[i] = netsB.slice(0, count).reduce((acc, curr) => acc + curr.net, 0);
+        sB_agg[i] = netsB.slice(0, count).reduce((a,b) => a + b.net, 0);
         sB_dots[i] = Math.max(...pB.map(p => getStrokes(Number(p.handicap)||0, i)));
-        const bestG = Math.min(...netsB.map(x => x.gross));
-        if (bestG < par) birdieB += bestG <= par - 2 ? (m.eagle || (m.birdie * 2) || 0) : (m.birdie || 0);
+        const bg = Math.min(...netsB.map(x => x.gross));
+        if (bg < par) birdieB += bg <= par - 2 ? (m.eagle || (m.birdie*2) || 0) : (m.birdie || 0);
       }
     }
 
     const runNine = (start: number, end: number) => {
-      let activeBets = [{ score: 0, pressed: false, isBase: true }];
+      let bets = [{ score: 0, pressed: false, isBase: true }];
       let holeResults = []; let totalPresses = 0;
       for (let i = start; i <= end; i++) {
-        let winner = null; let newPresses = 0;
+        let winner = null; let newP = 0;
         if (sA_agg[i] > 0 && sB_agg[i] > 0) {
-          if (sA_agg[i] < sB_agg[i]) winner = 'A';
-          else if (sB_agg[i] < sA_agg[i]) winner = 'B';
-          else winner = 'T';
+          if (sA_agg[i] < sB_agg[i]) winner = 'A'; else if (sB_agg[i] < sA_agg[i]) winner = 'B'; else winner = 'T';
         }
         let delta = winner === 'A' ? 1 : winner === 'B' ? -1 : 0;
         if (delta !== 0) {
-          activeBets.forEach(bet => {
-            bet.score += delta;
-            if (Math.abs(bet.score) >= 2 && !bet.pressed) { bet.pressed = true; newPresses++; totalPresses++; }
-          });
-          for (let p = 0; p < newPresses; p++) activeBets.push({ score: 0, pressed: false, isBase: false });
+          bets.forEach(b => { b.score += delta; if (Math.abs(b.score) >= 2 && !b.pressed) { b.pressed = true; newP++; totalPresses++; } });
+          for (let p = 0; p < newP; p++) bets.push({ score: 0, pressed: false, isBase: false });
         }
-        holeResults.push({ winner, newPresses });
+        holeResults.push({ winner, newP });
       }
-      let payA = 0; let payB = 0;
-      activeBets.forEach(bet => {
-        const amt = bet.isBase ? (m.nassau || 0) : (m.press || 0);
-        if (bet.score > 0) payA += amt; else if (bet.score < 0) payB += amt;
+      let pA = 0; let pB = 0;
+      bets.forEach(b => {
+        const amt = b.isBase ? (m.nassau || 0) : (m.press || 0);
+        if (b.score > 0) pA += amt; else if (b.score < 0) pB += amt;
       });
-      return { holeResults, payoutA: payA, payoutB: payB, totalPresses };
+      return { holeResults, payoutA: pA, payoutB: pB, totalPresses };
     }
 
     const f9 = runNine(0, 8); const b9 = runNine(9, 17);
-    const net = (f9.payoutA + b9.payoutA + birdieA) - (f9.payoutB + b9.payoutB + birdieB);
-    return { sA_net: sA_agg, sB_net: sB_agg, sA_dots, sB_dots, strokesA, strokesB, f9, b9, birdieA, birdieB, net };
+    const totalStrokesA = Math.max(...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
+    const totalStrokesB = Math.max(...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
+    const netTotal = (f9.payoutA + b9.payoutA + birdieA) - (f9.payoutB + b9.payoutB + birdieB);
+    return { sA_net: sA_agg, sB_net: sB_agg, sA_dots, sB_dots, totalStrokesA, totalStrokesB, f9, b9, birdieA, birdieB, netTotal };
   }
 
   const renderDots = (count: number) => {
@@ -115,13 +106,13 @@ export default function PayoutsPage() {
           const res = calculateMatch(m);
           if (!res) return null;
           return (
-            <div key={m.id} className="bg-zinc-950 p-6 sm:p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl relative overflow-hidden">
+            <div key={m.id} className="bg-zinc-950 p-6 sm:p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl overflow-hidden">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 border-b-2 border-zinc-900 pb-8 gap-4">
                 <div>
-                  <h2 className="text-3xl font-black text-white">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
+                  <h2 className="text-3xl font-black">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
                   <div className="mt-3 flex gap-2">
-                    {res.strokesA > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideA} GETS {res.strokesA} STROKES</span>}
-                    {res.strokesB > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideB} GETS {res.strokesB} STROKES</span>}
+                    {res.totalStrokesA > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest">{m.sideA} GETS {res.totalStrokesA} STROKES</span>}
+                    {res.totalStrokesB > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest">{m.sideB} GETS {res.totalStrokesB} STROKES</span>}
                   </div>
                   <div className="text-zinc-500 font-black text-xs mt-3 tracking-widest flex items-center gap-3">
                     <span className="bg-zinc-900 px-3 py-1 rounded-lg">NASSAU: ${m.nassau || 0}</span>
@@ -130,7 +121,7 @@ export default function PayoutsPage() {
                   </div>
                 </div>
               </div>
-              <div className="overflow-x-auto mb-8 bg-black rounded-2xl border border-zinc-900">
+              <div className="overflow-x-auto mb-8 bg-black rounded-2xl border border-zinc-900 shadow-inner">
                 <table className="w-full text-center border-collapse min-w-[700px]">
                   <thead className="text-[10px] text-zinc-600 font-black bg-zinc-950">
                     <tr><th className="p-4 text-left border-r border-zinc-900">HOLE (AGG)</th>{Array.from({length:18}).map((_,i) => <th key={i} className={`p-2 w-8 ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}>{i+1}</th>)}</tr>
@@ -149,7 +140,7 @@ export default function PayoutsPage() {
                       {[...res.f9.holeResults, ...res.b9.holeResults].map((h, i) => (
                         <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${h.winner === 'A' ? 'text-emerald-500' : h.winner === 'B' ? 'text-blue-500' : 'text-zinc-600'}`}>
                           {h.winner || '-'}
-                          {h.newPresses > 0 && <div className="absolute top-1 left-1 flex"><Zap size={10} className="text-yellow-500 animate-pulse"/></div>}
+                          {h.newP > 0 && <div className="absolute top-1 left-1 flex"><Zap size={10} className="text-yellow-500 animate-pulse"/></div>}
                         </td>
                       ))}
                     </tr>
@@ -158,22 +149,22 @@ export default function PayoutsPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2 uppercase">Front 9 (${m.nassau})</div>
-                  <div className="text-white font-black mt-1"><span className="text-emerald-500">${res.f9.payoutA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.f9.payoutB}</span></div>
+                  <div className="text-zinc-500 text-[10px] font-black uppercase mb-2">Front 9 (Presses: {res.f9.totalPresses})</div>
+                  <div className="text-white font-black"><span className="text-emerald-500">${res.f9.payoutA}</span> <span className="text-zinc-600">to</span> <span className="text-blue-500">${res.f9.payoutB}</span></div>
                 </div>
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2 uppercase">Back 9 (${m.nassau})</div>
-                  <div className="text-white font-black mt-1"><span className="text-emerald-500">${res.b9.payoutA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.b9.payoutB}</span></div>
+                  <div className="text-zinc-500 text-[10px] font-black uppercase mb-2">Back 9 (Presses: {res.b9.totalPresses})</div>
+                  <div className="text-white font-black"><span className="text-emerald-500">${res.b9.payoutA}</span> <span className="text-zinc-600">to</span> <span className="text-blue-500">${res.b9.payoutB}</span></div>
                 </div>
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black tracking-widest mb-2 uppercase"><Target size={12}/> Birdie Pool</div>
-                  <div className="text-white font-black mt-1"><span className="text-emerald-500">${res.birdieA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.birdieB}</span></div>
+                  <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase mb-2"><Target size={12}/> Birdie Pool</div>
+                  <div className="text-white font-black"><span className="text-emerald-500">${res.birdieA}</span> <span className="text-zinc-600">to</span> <span className="text-blue-500">${res.birdieB}</span></div>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-8 rounded-3xl">
-                <div className="text-zinc-500 font-black mb-4 sm:mb-0 uppercase">Match Net</div>
+                <div className="text-zinc-500 font-black mb-4 sm:mb-0 uppercase italic tracking-widest">Match Net</div>
                 <div className="text-4xl font-black">
-                  {res.net > 0 ? <span className="text-emerald-400">{m.sideB} OWES ${res.net}</span> : res.net < 0 ? <span className="text-blue-400">{m.sideA} OWES ${Math.abs(res.net)}</span> : <span className="text-zinc-500">EVEN MATCH</span>}
+                  {res.netTotal > 0 ? <span className="text-emerald-400">{m.sideB} OWES ${res.netTotal}</span> : res.netTotal < 0 ? <span className="text-blue-400">{m.sideA} OWES ${Math.abs(res.netTotal)}</span> : <span className="text-zinc-500">EVEN MATCH</span>}
                 </div>
               </div>
             </div>
