@@ -15,11 +15,11 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ success: false, error: "API Key missing in Vercel settings." }, { status: 500 });
+      return NextResponse.json({ success: false, error: "GEMINI_API_KEY is missing in Vercel." }, { status: 500 });
     }
 
-    // Using stable v1 endpoint
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // STABLE v1 URL with the 'latest' alias for Flash
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Extract the Par and Handicap (HCP) for holes 1-18 from this golf scorecard. Output MUST be a raw JSON array of 18 objects. Example format: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. Do not include any markdown, backticks, or text other than the JSON." },
+            { text: "Read this scorecard. Extract Par and Handicap for holes 1-18. Output ONLY a raw JSON array of 18 objects: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. No markdown, no backticks, no extra text." },
             {
               inline_data: {
                 mime_type: mimeType,
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
             }
           ]
         }]
-        // Removed generationConfig to avoid 'responseMimeType' error in v1
+        // We omit generationConfig here to ensure the v1 endpoint accepts the request without field errors.
       })
     });
 
@@ -45,21 +45,20 @@ export async function POST(req: Request) {
     if (!response.ok) {
        return NextResponse.json({ 
          success: false, 
-         error: data.error?.message || "Google API error." 
+         error: `Google API Error: ${data.error?.message || "Check your API key or model access."}` 
        }, { status: response.status });
     }
 
+    // Get the text and strip any markdown backticks the AI might have added
     let rawContent = data.candidates[0].content.parts[0].text;
+    const sanitizedJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    // Clean up potential markdown formatting if the AI ignores instructions
-    rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    const parsedHoles = JSON.parse(rawContent);
+    const parsedHoles = JSON.parse(sanitizedJson);
     
     return NextResponse.json({ success: true, holes: parsedHoles });
 
   } catch (error: any) {
-    console.error("Server Error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("Vision Error:", error);
+    return NextResponse.json({ success: false, error: `Server Error: ${error.message}` }, { status: 500 });
   }
 }
