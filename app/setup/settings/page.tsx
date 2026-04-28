@@ -1,14 +1,16 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue } from 'firebase/database'
-import { ArrowLeft, Save, Flag, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, Flag, AlertTriangle, Camera, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function CourseSetup() {
   const [courseName, setCourseName] = useState("BLITZ COURSE")
   const [holes, setHoles] = useState(Array.from({length: 18}, (_, i) => ({ par: 4, hcp: i + 1 })))
   const [error, setError] = useState("")
+  const [isScanning, setIsScanning] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     onValue(ref(db, 'tournament/course'), snap => {
@@ -26,7 +28,6 @@ export default function CourseSetup() {
   }
 
   const saveCourse = () => {
-    // Validate unique handicaps 1-18
     const hcpSet = new Set(holes.map(h => h.hcp));
     if (hcpSet.size !== 18) return setError("ALL 18 HOLE HANDICAP RATINGS MUST BE UNIQUE (1-18)");
     
@@ -35,11 +36,65 @@ export default function CourseSetup() {
       .then(() => alert("COURSE SAVED"));
   }
 
+  // --- AI VISION SCANNER ---
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    setError("");
+
+    try {
+      // Convert image to Base64
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = async () => {
+        const base64data = reader.result;
+
+        // Send to our Next.js API route
+        const res = await fetch('/api/scan-scorecard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64data })
+        });
+
+        const data = await res.json();
+        
+        if (data.success && data.holes && data.holes.length === 18) {
+          // Auto-fill the grid!
+          setHoles(data.holes);
+        } else {
+          setError("COULD NOT READ SCORECARD. PLEASE ENTER MANUALLY.");
+        }
+        setIsScanning(false);
+      };
+    } catch (err) {
+      console.error(err);
+      setError("SCAN FAILED. PLEASE TRY AGAIN.");
+      setIsScanning(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-black text-white p-6 font-sans uppercase italic">
       <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2"/> HUB</Link>
+      
       <div className="max-w-4xl mx-auto bg-zinc-900 p-8 rounded-[3rem] border-2 border-zinc-800 shadow-2xl">
-        <div className="flex items-center gap-3 mb-8 text-emerald-500"><Flag size={32}/><h1 className="text-4xl font-black">Course Specs</h1></div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div className="flex items-center gap-3 text-emerald-500">
+            <Flag size={32}/><h1 className="text-4xl font-black">Course Specs</h1>
+          </div>
+          
+          {/* THE MAGIC BUTTON */}
+          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+          <button 
+            onClick={() => fileInputRef.current?.click()} 
+            disabled={isScanning}
+            className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-3 transition-colors shadow-lg disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            {isScanning ? <><Loader2 size={20} className="animate-spin"/> SCANNING...</> : <><Camera size={20}/> SCAN SCORECARD</>}
+          </button>
+        </div>
         
         <input value={courseName} onChange={e => setCourseName(e.target.value)} className="w-full bg-black border-2 border-zinc-800 p-6 rounded-2xl font-black text-3xl mb-8 outline-none focus:border-emerald-500 text-white" placeholder="COURSE NAME" />
 
