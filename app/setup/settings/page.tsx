@@ -27,16 +27,7 @@ export default function CourseSetup() {
     setHoles(newHoles);
   }
 
-  const saveCourse = () => {
-    const hcpSet = new Set(holes.map(h => h.hcp));
-    if (hcpSet.size !== 18) return setError("ALL 18 HOLE HANDICAP RATINGS MUST BE UNIQUE (1-18)");
-    
-    setError("");
-    set(ref(db, 'tournament/course'), { name: courseName, holes, pars: holes.map(h => h.par) })
-      .then(() => alert("COURSE SAVED"));
-  }
-
-  // --- HTML5 IMAGE COMPRESSOR ---
+  // --- HTML5 IMAGE COMPRESSOR (Ensures Vercel 4MB limit is never hit) ---
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -44,15 +35,13 @@ export default function CourseSetup() {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const maxWidth = 800; // AI only needs 800px to read text
+          const maxWidth = 1000; 
           const scale = Math.min(maxWidth / img.width, 1);
           canvas.width = img.width * scale;
           canvas.height = img.height * scale;
-          
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-          
-          resolve(canvas.toDataURL('image/jpeg', 0.7)); // Shrink payload
+          resolve(canvas.toDataURL('image/jpeg', 0.7)); 
         };
         img.src = event.target?.result as string;
       };
@@ -60,17 +49,14 @@ export default function CourseSetup() {
     });
   }
 
-  // --- AI VISION SCANNER ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsScanning(true);
     setError("");
 
     try {
       const compressedBase64 = await compressImage(file);
-
       const res = await fetch('/api/scan-scorecard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,21 +65,25 @@ export default function CourseSetup() {
 
       const data = await res.json();
       
-      // UPGRADED ERROR HANDLING
-      if (res.ok && data.success && data.holes && data.holes.length === 18) {
+      if (res.ok && data.success && data.holes?.length === 18) {
         setHoles(data.holes);
-        setError(""); // Clear errors on success
       } else {
-        // Show exact error from Google/Vercel
-        setError(`SCAN FAILED: ${data.error || "Bad data returned by AI."}`);
+        setError(`SCAN FAILED: ${data.error || "Could not parse scorecard structure."}`);
       }
     } catch (err: any) {
-      console.error(err);
-      setError(`NETWORK ERROR: Could not reach the API.`);
+      setError("NETWORK ERROR: Check your internet or Vercel deployment.");
     } finally {
       setIsScanning(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  }
+
+  const saveCourse = () => {
+    const hcpSet = new Set(holes.map(h => h.hcp));
+    if (hcpSet.size !== 18) return setError("ALL 18 HOLE HANDICAP RATINGS MUST BE UNIQUE (1-18)");
+    setError("");
+    set(ref(db, 'tournament/course'), { name: courseName, holes, pars: holes.map(h => h.par) })
+      .then(() => alert("COURSE SPECS SAVED TO FIREBASE"));
   }
 
   return (
@@ -110,7 +100,7 @@ export default function CourseSetup() {
           <button 
             onClick={() => fileInputRef.current?.click()} 
             disabled={isScanning}
-            className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-3 transition-colors shadow-lg disabled:bg-zinc-800 disabled:text-zinc-500"
+            className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 transition-colors shadow-lg disabled:bg-zinc-800 disabled:text-zinc-500"
           >
             {isScanning ? <><Loader2 size={20} className="animate-spin"/> SCANNING...</> : <><Camera size={20}/> SCAN SCORECARD</>}
           </button>
@@ -118,7 +108,7 @@ export default function CourseSetup() {
         
         <input value={courseName} onChange={e => setCourseName(e.target.value)} className="w-full bg-black border-2 border-zinc-800 p-6 rounded-2xl font-black text-3xl mb-8 outline-none focus:border-emerald-500 text-white" placeholder="COURSE NAME" />
 
-        {error && <div className="bg-rose-500/20 text-rose-500 p-4 rounded-xl font-black mb-6 flex items-center gap-2"><AlertTriangle size={18}/> {error}</div>}
+        {error && <div className="bg-rose-500/20 text-rose-500 p-4 rounded-xl font-black mb-6 flex items-center gap-2 border border-rose-500/50 italic text-sm uppercase tracking-tighter"><AlertTriangle size={18}/> {error}</div>}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
           {holes.map((hole, i) => (
@@ -140,7 +130,7 @@ export default function CourseSetup() {
           ))}
         </div>
 
-        <button onClick={saveCourse} className="w-full bg-emerald-500 text-black py-6 rounded-2xl font-black text-2xl flex justify-center items-center gap-2 hover:bg-emerald-400 transition-colors"><Save size={24}/> SAVE COURSE RATINGS</button>
+        <button onClick={saveCourse} className="w-full bg-emerald-500 text-black py-6 rounded-2xl font-black text-2xl flex justify-center items-center gap-2 hover:bg-emerald-400 transition-colors shadow-xl"><Save size={24}/> SAVE COURSE RATINGS</button>
       </div>
     </div>
   )

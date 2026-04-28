@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// FORCE VERCEL TO TREAT THIS AS A LIVE FUNCTION
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
@@ -11,15 +10,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No image received." }, { status: 400 });
     }
 
+    // Clean up the base64 string for Google
     const base64Data = imageBase64.split(',')[1];
     const mimeType = imageBase64.substring(imageBase64.indexOf(':') + 1, imageBase64.indexOf(';')) || 'image/jpeg';
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ success: false, error: "API Key missing in Vercel." }, { status: 500 });
+      return NextResponse.json({ success: false, error: "API Key missing in Vercel settings." }, { status: 500 });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Using stable v1 endpoint and Gemini 2.0 Flash
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -27,24 +28,37 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "You are a golf data extraction tool. Read this scorecard and extract the Par and Handicap (HCP / Stroke Index) for holes 1 through 18. Return ONLY a valid JSON array of exactly 18 objects. Use this exact format: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. Do not include markdown formatting, backticks, or any other text." },
-            { inline_data: { mime_type: mimeType, data: base64Data } }
+            { text: "Extract the Par and Handicap (HCP / Stroke Index) for holes 1-18 from this golf scorecard. Return ONLY a JSON array of 18 objects like this: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. Ensure all 18 holes are present." },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data
+              }
+            }
           ]
         }],
-        generationConfig: { responseMimeType: "application/json" }
+        generationConfig: {
+          responseMimeType: "application/json" 
+        }
       })
     });
 
     const data = await response.json();
     
     if (!response.ok) {
-       return NextResponse.json({ success: false, error: data.error?.message || "Google API Refusal" }, { status: response.status });
+       return NextResponse.json({ 
+         success: false, 
+         error: data.error?.message || "Google API refused the request." 
+       }, { status: response.status });
     }
 
     const rawContent = data.candidates[0].content.parts[0].text;
-    return NextResponse.json({ success: true, holes: JSON.parse(rawContent) });
+    const parsedHoles = JSON.parse(rawContent);
+    
+    return NextResponse.json({ success: true, holes: parsedHoles });
 
   } catch (error: any) {
+    console.error("Server Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
