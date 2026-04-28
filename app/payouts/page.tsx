@@ -1,165 +1,71 @@
-"use client";
+"use client"
+import { useState, useEffect } from 'react'
+import { db } from '@/lib/firebase'
+import { ref, onValue } from 'firebase/database'
+import { golfers } from '@/lib/data'
+import { ArrowLeft, Zap, DollarSign } from 'lucide-react'
+import Link from 'next/link'
 
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Trophy, Swords } from 'lucide-react';
-import Link from 'next/link';
-
-export default function PayoutDetails() {
-  const [teams, setTeams] = useState<any[]>([]);
-  const [scores, setScores] = useState<any>({});
-  const [matchups, setMatchups] = useState<any[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+export default function PayoutsPage() {
+  const [scores, setScores] = useState<Record<string, number[]>>({})
+  const [matches, setMatches] = useState<any[]>([])
 
   useEffect(() => {
-    const t = localStorage.getItem('final-teams');
-    const s = localStorage.getItem('blitz-scores-v1');
-    const m = localStorage.getItem('side-matchups');
+    onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
+    onValue(ref(db, 'tournament/matchups'), snap => snap.val() && setMatches(Object.values(snap.val())))
+  }, [])
 
-    if (t) setTeams(JSON.parse(t));
-    if (s) setScores(JSON.parse(s));
-    if (m) setMatchups(JSON.parse(m));
-
-    setIsLoaded(true);
-  }, []);
-
-  const getPlayerScore = (playerName: string, holeIdx: number): number => {
-    let found = 0;
-    teams.forEach(t => {
-      const idx = t.members.indexOf(playerName);
-      if (idx !== -1) found = scores[t.name]?.[holeIdx]?.[idx] || 0;
-    });
-    return found;
-  };
-
-  const getTeamScore = (teamName: string, holeIdx: number): number => {
-    const hScores = (scores[teamName]?.[holeIdx] || []).filter((s: number) => s > 0);
-    if (hScores.length < 2) return 0;
-    const sorted = [...hScores].sort((a, b) => a - b);
-    return sorted[0] + sorted[1];
-  };
-
-  const getSkinWinner = (holeIdx: number) => {
-    let holeResults: { name: string, s: number }[] = [];
-    teams.forEach(t => {
-      t.members.forEach((m: string, idx: number) => {
-        const val = scores[t.name]?.[holeIdx]?.[idx];
-        if (val > 0) holeResults.push({ name: m, s: val });
-      });
-    });
-    if (holeResults.length === 0) return null;
-    const min = Math.min(...holeResults.map(x => x.s));
-    const winners = holeResults.filter(x => x.s === min);
-    return winners.length === 1 ? winners[0].name : "TIED";
-  };
-
-  if (!isLoaded) return <div className="min-h-screen bg-black" />;
+  const getHoleWinner = (h: number, a: string, b: string) => {
+    const pA = golfers.find(g => g.name === a), pB = golfers.find(g => g.name === b);
+    if (!pA || !pB) return null;
+    const sA = scores[pA.id]?.[h] || 0, sB = scores[pB.id]?.[h] || 0;
+    if (sA === 0 || sB === 0) return null;
+    return sA < sB ? 'A' : sB < sA ? 'B' : 'T';
+  }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-6 font-sans uppercase">
-      <div className="max-w-7xl mx-auto space-y-12 pb-20">
-        <Link href="/" className="inline-flex items-center gap-2 text-emerald-500 font-black mb-8 opacity-60 hover:opacity-100 transition-all">
-          <ChevronLeft /> Back to Hub
-        </Link>
-
-        <header className="border-b-4 border-amber-500 pb-4">
-          <h1 className="text-4xl font-black italic text-amber-400">Payout Scorecards</h1>
-          <p className="text-[10px] text-zinc-600 font-black tracking-[.4em] mt-2 italic uppercase">Hole-by-Hole Evidence</p>
-        </header>
-
-        {/* SKINS GRID */}
-        <section className="space-y-6">
-          <h2 className="text-xl font-black italic text-zinc-500 flex items-center gap-3">
-            <Trophy size={20} className="text-amber-500" /> Individual Skins Log
-          </h2>
-          <div className="overflow-x-auto bg-zinc-900/40 rounded-[2.5rem] border border-zinc-800 p-8 shadow-2xl">
-            <table className="min-w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  <th className="p-4 text-left border-b border-zinc-800 min-w-[150px] text-[10px] text-zinc-600">PLAYER</th>
-                  {Array.from({ length: 18 }).map((_, i) => (
-                    <th key={i} className="p-2 border-b border-zinc-800 text-center min-w-[45px] text-[10px] text-zinc-800 font-black">H{i + 1}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {teams.flatMap(t => t.members).filter(m => m !== "").map((player) => (
-                  <tr key={player}>
-                    <td className="p-4 border-b border-zinc-800 font-black text-xs text-zinc-300 italic">{player}</td>
-                    {Array.from({ length: 18 }).map((_, h) => (
-                      <td key={h} className="p-2 border-b border-zinc-800 text-center">
-                        {getSkinWinner(h) === player ? (
-                          <div className="w-8 h-8 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-zinc-950 shadow-[0_0_15px_rgba(232,184,48,0.4)]">
-                            <Trophy size={14} />
-                          </div>
-                        ) : <div className="w-1 h-1 bg-zinc-800 rounded-full mx-auto" />}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* SIDE MATCHES WITH PLAYER SCORES */}
-        <section className="space-y-6">
-          <h2 className="text-xl font-black italic text-zinc-500 flex items-center gap-3">
-            <Swords size={20} className="text-rose-500" /> Side Match Timeline
-          </h2>
-          <div className="space-y-8">
-            {matchups.map((m, mIdx) => (
-              <div key={mIdx} className="bg-zinc-900/60 border-2 border-zinc-800 rounded-[3rem] p-8 shadow-2xl overflow-hidden">
-                <div className="flex justify-between items-end mb-8 border-b border-zinc-800 pb-4">
-                  <div className="text-2xl font-black italic">{m.sideA} <span className="text-zinc-700 mx-2 text-sm">VS</span> {m.sideB}</div>
-                  <div className="text-[10px] font-black text-zinc-600 tracking-widest italic">18-HOLE MATCHPLAY TRACKER</div>
-                </div>
-
-                {/* MATCHPLAY VISUAL (A/B) */}
-                <div className="flex gap-1 mb-8 overflow-x-auto pb-4">
-                  {Array.from({ length: 18 }).map((_, h) => {
-                    const isTeamA = teams.some(t => t.name === m.sideA);
-                    const isTeamB = teams.some(t => t.name === m.sideB);
-                    const sA = isTeamA ? getTeamScore(m.sideA, h) : getPlayerScore(m.sideA, h);
-                    const sB = isTeamB ? getTeamScore(m.sideB, h) : getPlayerScore(m.sideB, h);
-                    const win = (sA > 0 && sB > 0) ? (sA < sB ? 'A' : (sB < sA ? 'B' : 'T')) : '-';
-
-                    return (
-                      <div key={h} className="flex-1 flex flex-col items-center gap-2 min-w-[34px]">
-                        <span className="text-[8px] font-black text-zinc-700">H{h + 1}</span>
-                        <div className={`w-full h-10 rounded-xl flex items-center justify-center text-[10px] font-black transition-all ${win === 'A' ? 'bg-emerald-500 text-emerald-950' :
-                            win === 'B' ? 'bg-rose-500 text-rose-950' : 'bg-zinc-950 text-zinc-800 border border-zinc-800'
-                          }`}>
-                          {win === 'T' ? '•' : win}
-                        </div>
+    <div className="min-h-screen bg-black text-white p-6 font-sans uppercase italic">
+      <Link href="/" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2"/> HUB</Link>
+      <h1 className="text-4xl font-black text-emerald-400 mb-12 uppercase tracking-tighter">Match Payouts & Timeline</h1>
+      <div className="max-w-6xl mx-auto space-y-12">
+        {matches.map((m) => {
+          let score = 0, presses = 0;
+          return (
+            <div key={m.id} className="bg-zinc-900 p-8 rounded-[3rem] border-2 border-zinc-800 shadow-2xl">
+              <div className="flex justify-between items-center mb-8 pb-6 border-b border-zinc-900 font-black">
+                <h2 className="text-2xl uppercase tracking-widest">{m.sideA} <span className="text-zinc-600 px-2 text-sm">VS</span> {m.sideB}</h2>
+                <div className="bg-emerald-500 text-black px-6 py-2 rounded-full italic">STAKE: ${m.stake}</div>
+              </div>
+              <div className="grid grid-cols-9 gap-4 mb-10">
+                {Array.from({ length: 18 }).map((_, i) => {
+                  const res = getHoleWinner(i, m.sideA, m.sideB);
+                  if (res === 'A') score++; else if (res === 'B') score--;
+                  const isPress = Math.abs(score) >= 2;
+                  if (isPress) presses++;
+                  return (
+                    <div key={i} className="flex flex-col items-center">
+                      <span className="text-[8px] text-zinc-600 font-bold mb-1">H{i+1}</span>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 ${res === 'A' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : res === 'B' ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-zinc-800 text-zinc-700'}`}>
+                        <span className="font-black italic">{res || '-'}</span>
                       </div>
-                    );
-                  })}
+                      {isPress && <Zap size={14} className="text-yellow-500 mt-1" />}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="bg-black/50 p-8 rounded-[2rem] flex justify-between items-center font-black italic">
+                <div className="flex items-center gap-6">
+                   <div className="text-zinc-500 text-xs">AUTO-PRESSES: <span className="text-yellow-500 text-lg">{presses} ⚡</span></div>
+                   <div className="text-zinc-500 text-xs">STATE: <span className="text-white text-lg">{score > 0 ? `${score} UP` : score < 0 ? `${Math.abs(score)} DN` : 'ALL SQ'}</span></div>
                 </div>
-
-                {/* DETAILED PLAYER SCORES (NEW) */}
-                <div className="space-y-2 bg-zinc-950/50 p-6 rounded-3xl border border-zinc-900">
-                  <div className="flex gap-1">
-                    <div className="w-24 text-[9px] font-black text-zinc-600 self-center">{m.sideA}</div>
-                    {Array.from({ length: 18 }).map((_, h) => {
-                      const isT = teams.some(t => t.name === m.sideA);
-                      const score = isT ? getTeamScore(m.sideA, h) : getPlayerScore(m.sideA, h);
-                      return <div key={h} className={`flex-1 text-center py-2 text-xs font-black ${score === 0 ? 'text-zinc-900' : 'text-zinc-400'}`}>{score || '-'}</div>
-                    })}
-                  </div>
-                  <div className="flex gap-1 border-t border-zinc-900 pt-2">
-                    <div className="w-24 text-[9px] font-black text-zinc-600 self-center">{m.sideB}</div>
-                    {Array.from({ length: 18 }).map((_, h) => {
-                      const isT = teams.some(t => t.name === m.sideB);
-                      const score = isT ? getTeamScore(m.sideB, h) : getPlayerScore(m.sideB, h);
-                      return <div key={h} className={`flex-1 text-center py-2 text-xs font-black ${score === 0 ? 'text-zinc-900' : 'text-zinc-400'}`}>{score || '-'}</div>
-                    })}
-                  </div>
+                <div className="text-3xl text-emerald-400 flex items-center gap-2">
+                  <DollarSign /> {score > 0 ? `${m.sideB} OWES $${m.stake * (presses + 1)}` : score < 0 ? `${m.sideA} OWES $${m.stake * (presses + 1)}` : 'MATCH TIED'}
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+          )
+        })}
       </div>
     </div>
-  );
+  )
 }

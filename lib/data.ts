@@ -14,7 +14,6 @@ export const BLITZ_TEAMS = [
   { id: 't2', name: 'TEAM 2', playerIds: ['5', '6', '7', '8'] },
 ];
 
-export const PLAYERS = golfers;
 export const tournamentSettings = { 
   name: "Blitz Board", 
   date: "04/28/26" 

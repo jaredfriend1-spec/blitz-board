@@ -1,50 +1,53 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, onValue } from 'firebase/database'
+import { ref, set, onValue, push } from 'firebase/database'
 import { golfers } from '@/lib/data'
-import { ArrowLeft, Save, Wallet } from 'lucide-react'
+import { ArrowLeft, User, Users, Sword, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MatchupCenter() {
   const [matches, setMatches] = useState<any[]>([])
-  const [money, setMoney] = useState({ perPoint: 10 })
+  const [teams, setTeams] = useState<any[]>([])
 
   useEffect(() => {
-    onValue(ref(db, 'tournament/matchups'), (snap) => snap.val() && setMatches(Object.values(snap.val())))
-    onValue(ref(db, 'tournament/money'), (snap) => snap.val() && setMoney(snap.val()))
+    onValue(ref(db, 'tournament/matchups'), snap => {
+      const data = snap.val()
+      setMatches(data ? Object.values(data) : [])
+    })
+    onValue(ref(db, 'tournament/teams'), snap => {
+      const data = snap.val()
+      setTeams(data ? Object.values(data) : [])
+    })
   }, [])
+
+  const createMatch = (type: 'PvP' | 'TvT') => {
+    const mRef = push(ref(db, 'tournament/matchups'));
+    set(mRef, { id: mRef.key, type, sideA: "", sideB: "", stake: 17 });
+  }
 
   return (
     <div className="min-h-screen bg-black text-white p-8 font-sans uppercase">
-      <Link href="/setup" className="text-emerald-500 font-black italic mb-12 inline-block flex items-center gap-2"><ArrowLeft size={18} /> BACK</Link>
-      
-      <h1 className="text-5xl font-black italic text-emerald-500 mb-12">Matchup Payouts</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-        <section className="space-y-4">
-          <h2 className="text-zinc-500 font-black text-xs border-b border-zinc-900 pb-2">ACTIVE BETS & OWES</h2>
-          {matches.map(m => (
-            <div key={m.id} className="bg-zinc-900 p-6 rounded-[2rem] border-2 border-zinc-800 flex justify-between items-center">
-              <div>
-                <p className="text-xs text-zinc-500 font-bold mb-1">{m.type} MATCH</p>
-                <h3 className="text-xl font-black italic">{m.sideA} vs {m.sideB}</h3>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">Current Payout</p>
-                <span className="text-2xl font-black text-rose-500 tracking-tighter">
-                  {m.winner ? `${m.loser} owes ${m.winner} $${m.stake}` : "Tied"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </section>
-
-        <section className="bg-zinc-950 p-8 rounded-[2.5rem] border-2 border-emerald-500/20 shadow-2xl">
-          <div className="flex items-center gap-3 mb-6 text-emerald-500"><Wallet /><h2 className="text-2xl font-black italic">Final Payouts</h2></div>
-          {/* Payout Logic Summary would go here */}
-          <p className="text-zinc-600 text-xs font-bold italic">Calculated live based on $ {money.perPoint}/pt Blitz stakes</p>
-        </section>
+      <Link href="/setup" className="text-emerald-500 font-black italic mb-12 inline-block"><ArrowLeft size={18} /> BACK</Link>
+      <div className="flex gap-4 mb-12 max-w-4xl mx-auto">
+        <button onClick={() => createMatch('PvP')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-emerald-500 transition-all uppercase italic"><User size={32} className="text-emerald-500" /> Add Player Bet</button>
+        <button onClick={() => createMatch('TvT')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-blue-500 transition-all uppercase italic"><Users size={32} className="text-blue-500" /> Add Team Bet</button>
+      </div>
+      <div className="max-w-4xl mx-auto space-y-4">
+        {matches.map((m) => (
+          <div key={m.id} className="bg-zinc-900 p-6 rounded-[2.5rem] border-2 border-zinc-800 flex items-center gap-6 shadow-xl">
+            <select value={m.sideA} onChange={e => set(ref(db, `tournament/matchups/${m.id}/sideA`), e.target.value)} className="flex-1 bg-black border border-zinc-800 p-4 rounded-xl font-black text-emerald-400">
+              <option value="">SIDE A</option>
+              {m.type === 'PvP' ? golfers.map(p => <option key={p.id} value={p.name}>{p.name}</option>) : teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
+            <Sword className="text-zinc-700" />
+            <select value={m.sideB} onChange={e => set(ref(db, `tournament/matchups/${m.id}/sideB`), e.target.value)} className="flex-1 bg-black border border-zinc-800 p-4 rounded-xl font-black text-emerald-400">
+              <option value="">SIDE B</option>
+              {m.type === 'PvP' ? golfers.map(p => <option key={p.id} value={p.name}>{p.name}</option>) : teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
+            <button onClick={() => set(ref(db, `tournament/matchups/${m.id}`), null)} className="text-rose-900"><Trash2 /></button>
+          </div>
+        ))}
       </div>
     </div>
   )
