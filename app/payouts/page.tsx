@@ -10,7 +10,10 @@ export default function PayoutsPage() {
   const [matches, setMatches] = useState<any[]>([])
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
-  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4), holes: Array(18).fill({par: 4, hcp: 1}) })
+  
+  // FIXED DEFAULT: Safely map 1-18 so it never defaults to all 1s
+  const defaultHoles = Array.from({length: 18}, (_, i) => ({ par: 4, hcp: i + 1 }));
+  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4), holes: defaultHoles })
 
   useEffect(() => {
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
@@ -18,7 +21,12 @@ export default function PayoutsPage() {
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
     onValue(ref(db, 'tournament/course'), snap => {
-      if(snap.val()) setCourse({ pars: snap.val().pars || Array(18).fill(4), holes: snap.val().holes || Array(18).fill({par: 4, hcp: 1}) })
+      if(snap.val()) {
+        setCourse({ 
+          pars: snap.val().pars || Array(18).fill(4), 
+          holes: snap.val().holes || defaultHoles 
+        })
+      }
     })
   }, [])
 
@@ -34,7 +42,8 @@ export default function PayoutsPage() {
     const baseHcp = Math.min(...allHcps);
 
     const getStrokes = (playerHcp: number, holeIndex: number) => {
-      const holeHcpRating = course.holes[holeIndex]?.hcp || 1;
+      // FIXED MATH: Forces the rating to be a strict number for comparison
+      const holeHcpRating = Number(course.holes[holeIndex]?.hcp) || (holeIndex + 1);
       const diff = Math.max(0, playerHcp - baseHcp);
       let strokes = Math.floor(diff / 18);
       if (holeHcpRating <= (diff % 18)) strokes += 1;
@@ -45,7 +54,6 @@ export default function PayoutsPage() {
     const sB_gross = Array(18).fill(0); const sB_net = Array(18).fill(0); const sB_dots = Array(18).fill(0);
     let birdiePayoutA = 0; let birdiePayoutB = 0;
     
-    // Calculate total strokes given for the UI header
     let totalStrokesA = Math.max(...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
     let totalStrokesB = Math.max(...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
 
@@ -114,7 +122,6 @@ export default function PayoutsPage() {
     return { sA_net, sB_net, sA_dots, sB_dots, totalStrokesA, totalStrokesB, f9, b9, birdiePayoutA, birdiePayoutB, net };
   }
 
-  // Helper to render the golf stroke dots
   const renderDots = (count: number) => {
     if (!count || count <= 0) return null;
     return (
@@ -150,7 +157,6 @@ export default function PayoutsPage() {
                     <h2 className="text-3xl font-black text-white">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
                   </div>
                   
-                  {/* NEW: Stroke Advantage Callout */}
                   <div className="mt-3 flex gap-2">
                     {results.totalStrokesA > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideA} GETS {results.totalStrokesA} STROKES</span>}
                     {results.totalStrokesB > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideB} GETS {results.totalStrokesB} STROKES</span>}
@@ -174,7 +180,6 @@ export default function PayoutsPage() {
                     </tr>
                   </thead>
                   <tbody className="text-xs font-black">
-                    {/* SIDE A ROW */}
                     <tr className="border-t border-zinc-900">
                       <td className="p-4 text-left text-emerald-500 truncate border-r border-zinc-900">{m.sideA}</td>
                       {results.sA_net.map((s: number, i: number) => (
@@ -185,7 +190,6 @@ export default function PayoutsPage() {
                       ))}
                     </tr>
                     
-                    {/* SIDE B ROW */}
                     <tr className="border-t border-zinc-900">
                       <td className="p-4 text-left text-blue-500 truncate border-r border-zinc-900">{m.sideB}</td>
                       {results.sB_net.map((s: number, i: number) => (
@@ -196,7 +200,6 @@ export default function PayoutsPage() {
                       ))}
                     </tr>
 
-                    {/* WINNER TALLY ROW */}
                     <tr className="border-t-2 border-zinc-800 bg-zinc-900/50">
                       <td className="p-4 text-left text-zinc-500 border-r border-zinc-900">WINNER</td>
                       {[...results.f9.holeResults, ...results.b9.holeResults].map((h, i) => (
@@ -210,7 +213,6 @@ export default function PayoutsPage() {
                 </table>
               </div>
 
-              {/* PAYOUT BREAKDOWNS (UNCHANGED) */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
                   <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2">FRONT 9 (PRESSES: <span className="text-yellow-500">{results.f9.totalPresses}</span>)</div>
