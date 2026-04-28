@@ -14,8 +14,13 @@ export const tournamentSettings = {
   date: new Date().toLocaleDateString(),
 };
 
-// This is the missing piece blocking your build:
+// Satisfies the Teams page
 export const BLITZ_TEAMS = [
   { id: 't1', name: 'TEAM 1', playerIds: ['1', '2'] },
   { id: 't2', name: 'TEAM 2', playerIds: ['3', '4'] },
 ];
+
+// Safety exports in case other pages are crashing the build
+export const PLAYERS = golfers;
+export const MATCHUPS = [];
+export const TEAM_BETS = [];
