@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Cloud } from 'lucide-react';
 import Link from 'next/link';
-import { db } from '../lib/firebase';
+import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 
 export default function Scorer() {
