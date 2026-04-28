@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue } from 'firebase/database'
-import { Save, ArrowLeft, Home } from 'lucide-react'
+import { Save, Home } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ScorerPage() {
@@ -35,9 +35,24 @@ export default function ScorerPage() {
     return "bg-zinc-700"
   }
 
-  if (teams.length === 0) return (
-    <div className="min-h-screen bg-black text-white p-8 text-center pt-32 font-sans uppercase italic"><h1 className="text-4xl font-black text-rose-500 mb-6">NO TEAMS BUILT</h1><Link href="/setup/roster" className="text-emerald-500 underline">GO TO ROSTER MANAGER</Link></div>
-  );
+  // UPDATED EMPTY STATE: Now includes the Top Nav Bar
+  if (teams.length === 0) {
+    return (
+      <div className="min-h-screen bg-black text-white p-2 pb-32 font-sans uppercase italic">
+        <div className="max-w-7xl mx-auto flex justify-between p-4 mb-4 border-b border-zinc-900">
+          <Link href="/" className="text-emerald-500 font-black flex items-center gap-2"><Home size={20} /> HUB</Link>
+          <h1 className="text-2xl font-black text-emerald-400">Live Scorer</h1>
+        </div>
+        <div className="text-center pt-32 max-w-lg mx-auto">
+          <h1 className="text-4xl font-black text-rose-500 mb-6">NO TEAMS BUILT</h1>
+          <p className="text-zinc-500 mb-10 font-black">The scoreboard is offline. You must add players to the Master Roster and assign them to teams first.</p>
+          <Link href="/setup/roster" className="bg-emerald-500 text-black px-8 py-5 rounded-full font-black text-xl hover:bg-emerald-400 transition-colors shadow-xl">
+            GO TO ROSTER MANAGER
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white p-2 pb-32 font-sans uppercase italic">

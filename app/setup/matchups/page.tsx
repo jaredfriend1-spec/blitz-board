@@ -2,13 +2,19 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue, push } from 'firebase/database'
-import { ArrowLeft, User, Users, Sword, Trash2 } from 'lucide-react'
+import { ArrowLeft, User, Users, Sword, Trash2, Save, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MatchupCenter() {
   const [matches, setMatches] = useState<any[]>([])
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
+  
+  // Builder State
+  const [isBuilding, setIsBuilding] = useState<'PvP' | 'TvT' | null>(null)
+  const [newMatch, setNewMatch] = useState({
+    sideA: "", sideB: "", nassau: 5, press: 5, birdie: 2, handicap: 0
+  })
 
   useEffect(() => {
     onValue(ref(db, 'tournament/matchups'), snap => setMatches(snap.val() ? Object.values(snap.val()) : []))
@@ -16,33 +22,119 @@ export default function MatchupCenter() {
     onValue(ref(db, 'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
   }, [])
 
-  const createMatch = (type: 'PvP' | 'TvT') => {
+  const saveMatch = () => {
+    if (!newMatch.sideA || !newMatch.sideB || newMatch.sideA === newMatch.sideB) {
+      return alert("PLEASE SELECT TWO DISTINCT SIDES");
+    }
     const mRef = push(ref(db, 'tournament/matchups'));
-    set(mRef, { id: mRef.key, type, sideA: "", sideB: "" }); // Uses sideBetAmount on payouts page
+    set(mRef, { 
+      id: mRef.key, 
+      type: isBuilding, 
+      ...newMatch 
+    });
+    setIsBuilding(null);
+    setNewMatch({ sideA: "", sideB: "", nassau: 5, press: 5, birdie: 2, handicap: 0 });
   }
 
+  const deleteMatch = (id: string) => {
+    if (confirm("DELETE THIS MATCHUP?")) set(ref(db, `tournament/matchups/${id}`), null);
+  }
+
+  const options = isBuilding === 'PvP' ? players : teams;
+
   return (
-    <div className="min-h-screen bg-black text-white p-8 font-sans uppercase italic">
-      <Link href="/setup" className="text-emerald-500 font-black mb-12 inline-block"><ArrowLeft size={18} className="inline mr-2"/> BACK</Link>
-      <div className="flex gap-4 mb-12 max-w-4xl mx-auto">
-        <button onClick={() => createMatch('PvP')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-emerald-500 transition-all"><User size={32} className="text-emerald-500" /> Add Player Bet</button>
-        <button onClick={() => createMatch('TvT')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-blue-500 transition-all"><Users size={32} className="text-blue-500" /> Add Team Bet</button>
-      </div>
-      <div className="max-w-4xl mx-auto space-y-4">
-        {matches.map((m) => (
-          <div key={m.id} className="bg-zinc-900 p-6 rounded-[2.5rem] border-2 border-zinc-800 flex items-center gap-6 shadow-xl">
-            <select value={m.sideA} onChange={e => set(ref(db, `tournament/matchups/${m.id}/sideA`), e.target.value)} className="flex-1 bg-black border border-zinc-800 p-4 rounded-xl font-black text-emerald-400 outline-none">
-              <option value="">SIDE A</option>
-              {m.type === 'PvP' ? players.map(p => <option key={p.id} value={p.name}>{p.name}</option>) : teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-            </select>
-            <Sword className="text-zinc-700" />
-            <select value={m.sideB} onChange={e => set(ref(db, `tournament/matchups/${m.id}/sideB`), e.target.value)} className="flex-1 bg-black border border-zinc-800 p-4 rounded-xl font-black text-emerald-400 outline-none">
-              <option value="">SIDE B</option>
-              {m.type === 'PvP' ? players.map(p => <option key={p.id} value={p.name}>{p.name}</option>) : teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-            </select>
-            <button onClick={() => set(ref(db, `tournament/matchups/${m.id}`), null)} className="text-rose-900 hover:text-rose-500"><Trash2 /></button>
+    <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
+      <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2"/> HUB</Link>
+      
+      <div className="max-w-5xl mx-auto space-y-12">
+        {/* TOP LEVEL BUTTONS */}
+        {!isBuilding && (
+          <div className="flex gap-4">
+            <button onClick={() => setIsBuilding('PvP')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-emerald-500 transition-all text-xl">
+              <User size={40} className="text-emerald-500" /> CREATE 1v1 MATCH
+            </button>
+            <button onClick={() => setIsBuilding('TvT')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-blue-500 transition-all text-xl">
+              <Users size={40} className="text-blue-500" /> CREATE TEAM MATCH
+            </button>
           </div>
-        ))}
+        )}
+
+        {/* INLINE BUILDER */}
+        {isBuilding && (
+          <div className="bg-zinc-900 p-8 rounded-[3rem] border-2 border-emerald-500 shadow-2xl animate-in slide-in-from-top-4">
+            <div className="flex justify-between items-center mb-8 border-b-2 border-zinc-800 pb-4">
+              <h2 className="text-3xl font-black text-emerald-500">NEW {isBuilding} MATCHUP</h2>
+              <button onClick={() => setIsBuilding(null)} className="text-zinc-500 hover:text-rose-500 font-black">CANCEL</button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="space-y-4">
+                <label className="text-zinc-500 font-black text-xs">SIDE A</label>
+                <select value={newMatch.sideA} onChange={e => setNewMatch({...newMatch, sideA: e.target.value})} className="w-full bg-black border border-zinc-700 p-4 rounded-xl font-black text-white outline-none">
+                  <option value="">SELECT...</option>
+                  {options.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-4">
+                <label className="text-zinc-500 font-black text-xs">SIDE B</label>
+                <select value={newMatch.sideB} onChange={e => setNewMatch({...newMatch, sideB: e.target.value})} className="w-full bg-black border border-zinc-700 p-4 rounded-xl font-black text-white outline-none">
+                  <option value="">SELECT...</option>
+                  {options.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 mb-8 bg-black p-6 rounded-2xl border border-zinc-800">
+              <div>
+                <label className="text-zinc-500 font-black text-[10px] block mb-2">NASSAU BASE ($)</label>
+                <input type="number" value={newMatch.nassau} onChange={e => setNewMatch({...newMatch, nassau: Number(e.target.value)})} className="w-full bg-zinc-900 p-3 rounded-xl font-black text-white outline-none border border-zinc-700" />
+              </div>
+              <div>
+                <label className="text-zinc-500 font-black text-[10px] block mb-2">PRESS AMT ($)</label>
+                <input type="number" value={newMatch.press} onChange={e => setNewMatch({...newMatch, press: Number(e.target.value)})} className="w-full bg-zinc-900 p-3 rounded-xl font-black text-yellow-500 outline-none border border-zinc-700" />
+              </div>
+              <div>
+                <label className="text-zinc-500 font-black text-[10px] block mb-2">BIRDIE UNIT ($)</label>
+                <input type="number" value={newMatch.birdie} onChange={e => setNewMatch({...newMatch, birdie: Number(e.target.value)})} className="w-full bg-zinc-900 p-3 rounded-xl font-black text-blue-400 outline-none border border-zinc-700" />
+              </div>
+            </div>
+
+            {isBuilding === 'PvP' && (
+              <div className="mb-8 bg-black p-6 rounded-2xl border border-zinc-800">
+                <label className="text-zinc-500 font-black text-[10px] block mb-2">HANDICAP STROKES GIVEN (APPLIED TO SIDE B)</label>
+                <input type="number" value={newMatch.handicap} onChange={e => setNewMatch({...newMatch, handicap: Number(e.target.value)})} placeholder="e.g. -1" className="w-full bg-zinc-900 p-3 rounded-xl font-black text-rose-400 outline-none border border-zinc-700" />
+              </div>
+            )}
+
+            <button onClick={saveMatch} className="w-full bg-emerald-500 text-black py-5 rounded-2xl font-black text-2xl flex justify-center items-center gap-2 hover:bg-emerald-400">
+              <Save size={24} /> SAVE MATCHUP
+            </button>
+          </div>
+        )}
+
+        {/* ACTIVE MATCHES LIST */}
+        <div className="space-y-4">
+          <h3 className="text-xl font-black text-zinc-500 mb-6">ACTIVE SIDE BETS ({matches.length})</h3>
+          {matches.length === 0 && <p className="text-zinc-600 font-black text-sm">NO MATCHUPS CONFIGURED.</p>}
+          {matches.map((m) => (
+            <div key={m.id} className="bg-zinc-900 p-6 rounded-[2rem] border-2 border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl group">
+              <div className="flex-1 w-full flex items-center justify-between bg-black p-4 rounded-xl border border-zinc-800">
+                <span className={`font-black truncate ${m.type === 'PvP' ? 'text-emerald-500' : 'text-blue-500'}`}>{m.sideA}</span>
+                <Sword size={20} className="text-zinc-600 mx-4 flex-shrink-0" />
+                <span className={`font-black truncate text-right ${m.type === 'PvP' ? 'text-emerald-500' : 'text-blue-500'}`}>{m.sideB}</span>
+              </div>
+              
+              <div className="flex items-center gap-4 text-[10px] font-black text-zinc-400 tracking-widest bg-black px-4 py-3 rounded-xl border border-zinc-800">
+                <span title="Nassau Base">N: <span className="text-white">${m.nassau}</span></span> | 
+                <span title="Press Amount">P: <span className="text-yellow-500">${m.press}</span></span> | 
+                <span title="Birdie Unit">B: <span className="text-blue-400">${m.birdie}</span></span>
+                {m.type === 'PvP' && m.handicap !== 0 && <span> | HC: <span className="text-rose-400">{m.handicap}</span></span>}
+              </div>
+              
+              <button onClick={() => deleteMatch(m.id)} className="text-zinc-700 hover:text-rose-500 transition-colors p-2"><Trash2 size={24}/></button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
