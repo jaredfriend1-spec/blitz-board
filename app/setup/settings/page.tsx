@@ -36,7 +36,7 @@ export default function CourseSetup() {
       .then(() => alert("COURSE SAVED"));
   }
 
-  // --- NEW: HTML5 IMAGE COMPRESSOR ---
+  // --- HTML5 IMAGE COMPRESSOR ---
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -44,8 +44,7 @@ export default function CourseSetup() {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          // Max width of 800px is plenty for AI to read text
-          const maxWidth = 800;
+          const maxWidth = 800; // AI only needs 800px to read text
           const scale = Math.min(maxWidth / img.width, 1);
           canvas.width = img.width * scale;
           canvas.height = img.height * scale;
@@ -53,8 +52,7 @@ export default function CourseSetup() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
           
-          // Output as JPEG at 70% quality (massively reduces file size)
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
+          resolve(canvas.toDataURL('image/jpeg', 0.7)); // Shrink payload
         };
         img.src = event.target?.result as string;
       };
@@ -71,33 +69,29 @@ export default function CourseSetup() {
     setError("");
 
     try {
-      // Compress the image before doing anything else
       const compressedBase64 = await compressImage(file);
 
-      // Send the tiny payload to our API
       const res = await fetch('/api/scan-scorecard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: compressedBase64 })
       });
 
-      if (!res.ok) {
-        throw new Error("Server rejected the request.");
-      }
-
       const data = await res.json();
       
-      if (data.success && data.holes && data.holes.length === 18) {
+      // UPGRADED ERROR HANDLING
+      if (res.ok && data.success && data.holes && data.holes.length === 18) {
         setHoles(data.holes);
+        setError(""); // Clear errors on success
       } else {
-        setError("COULD NOT READ SCORECARD. PLEASE ENTER MANUALLY.");
+        // Show exact error from Google/Vercel
+        setError(`SCAN FAILED: ${data.error || "Bad data returned by AI."}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("SCAN FAILED. Check API key or try a clearer photo.");
+      setError(`NETWORK ERROR: Could not reach the API.`);
     } finally {
       setIsScanning(false);
-      // Reset the input so you can scan again if needed
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }

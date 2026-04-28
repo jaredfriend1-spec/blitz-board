@@ -4,19 +4,18 @@ export async function POST(req: Request) {
   try {
     const { imageBase64 } = await req.json();
 
-    // The browser sends a prefix like "data:image/jpeg;base64,...". 
-    // Gemini just wants the raw base64 string, so we split it off.
+    if (!imageBase64) {
+      return NextResponse.json({ success: false, error: "No image was received by the server." }, { status: 400 });
+    }
+
     const base64Data = imageBase64.split(',')[1];
-    
-    // Extract the mime type dynamically (e.g., image/jpeg or image/png)
     const mimeType = imageBase64.substring(imageBase64.indexOf(':') + 1, imageBase64.indexOf(';')) || 'image/jpeg';
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ success: false, error: "API key missing." }, { status: 500 });
+      return NextResponse.json({ success: false, error: "API Key is missing from the server environment." }, { status: 500 });
     }
 
-    // Ping the free Gemini 1.5 Flash model
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
@@ -35,16 +34,17 @@ export async function POST(req: Request) {
           ]
         }],
         generationConfig: {
-          responseMimeType: "application/json" // Forces Gemini to return strict JSON
+          responseMimeType: "application/json" 
         }
       })
     });
 
     const data = await response.json();
     
+    // If Google rejects the request, send their exact error back to the frontend
     if (!response.ok) {
-       console.error("Gemini API Error:", data);
-       throw new Error("API responded with an error");
+       console.error("Gemini API Error Response:", data);
+       return NextResponse.json({ success: false, error: `Google API Error: ${data.error?.message || 'Unknown'}` }, { status: response.status });
     }
 
     const rawContent = data.candidates[0].content.parts[0].text;
@@ -52,8 +52,8 @@ export async function POST(req: Request) {
     
     return NextResponse.json({ success: true, holes: parsedHoles });
 
-  } catch (error) {
-    console.error("Vision API Error:", error);
-    return NextResponse.json({ success: false, error: "Failed to read scorecard." }, { status: 500 });
+  } catch (error: any) {
+    console.error("Vision API Crash:", error);
+    return NextResponse.json({ success: false, error: `Server crashed: ${error.message}` }, { status: 500 });
   }
 }
