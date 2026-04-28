@@ -1,8 +1,8 @@
 export const golfers = [
-  { id: '1', name: 'JARED', handicap: 0 },
-  { id: '2', name: 'FRED', handicap: 0 },
-  { id: '3', name: 'MIKE', handicap: 0 },
-  { id: '4', name: 'TODD', handicap: 0 },
+  { id: '1', name: 'JEFF PERKINS', handicap: 0 },
+  { id: '2', name: 'RICK SOVERO', handicap: 0 },
+  { id: '3', name: 'SAM OSHRINE', handicap: 0 },
+  { id: '4', name: 'TONY ZAMOSTNY', handicap: 0 },
 ];
 
 export const BLITZ_TEAMS = [
@@ -11,5 +11,7 @@ export const BLITZ_TEAMS = [
 ];
 
 export const PLAYERS = golfers;
-export const courses = [{ id: 'mcc', name: 'Montgomery Country Club', par: 72 }];
-export const tournamentSettings = { name: "Blitz Board", date: new Date().toLocaleDateString() };
+export const tournamentSettings = { 
+  name: "Clark Group Blitz Board", 
+  date: "04/28/26" 
+};

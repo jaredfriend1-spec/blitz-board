@@ -1,54 +1,65 @@
-"use client";
+"use client"
 
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Trophy, Target } from 'lucide-react';
-import Link from 'next/link';
-import { db } from '../../lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { golfers, tournamentSettings } from '@/lib/data'
+import { Trophy, ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
-export default function CloudResults() {
-  const [data, setData] = useState<any>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    const tournamentRef = ref(db, 'active-tournament');
-    const unsubscribe = onValue(tournamentRef, (snapshot) => {
-      setData(snapshot.val());
-      setIsLoaded(true);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (!isLoaded) return <div className="bg-black min-h-screen p-10 text-zinc-700 font-black italic">CONNECTING TO MCC CLOUD...</div>;
-  if (!data) return <div className="bg-black min-h-screen p-10 text-zinc-700 font-black italic">NO LIVE DATA FOUND. HIT 'PUBLISH' IN SETUP.</div>;
-
-  const teams = data.teams || [];
-  const scores = data.scores || {};
-
+export default function ResultsPage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-6 font-sans uppercase">
-      <div className="max-w-7xl mx-auto">
-        <header className="border-b-4 border-emerald-500 pb-6 mb-12 flex justify-between items-end">
-          <div>
-            <h1 className="text-5xl font-black italic text-emerald-500">LIVE RESULTS</h1>
-            <p className="text-[10px] text-zinc-600 font-black tracking-widest mt-2">REAL-TIME DATA SYNC</p>
-          </div>
-          <Link href="/" className="bg-zinc-900 px-6 py-3 rounded-xl border border-zinc-800 text-[10px] font-black hover:bg-emerald-500 transition-all">BACK</Link>
-        </header>
+    <div className="min-h-screen bg-zinc-950 text-white p-4 font-sans">
+      <div className="max-w-6xl mx-auto">
+        {/* Spreadsheet Header */}
+        <div className="bg-emerald-500 text-black text-center p-4 rounded-t-xl mb-4 border-2 border-black">
+          <h1 className="text-2xl font-black italic uppercase tracking-widest">
+            RESULTS FROM BETS & SKINS {tournamentSettings.date}
+          </h1>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {teams.map((t: any, i: number) => (
-            <div key={i} className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
-              <h2 className="text-xl font-black italic mb-4">{t.name}</h2>
-              <div className="grid grid-cols-4 gap-2">
-                {t.members.map((m: string) => (
-                  <div key={m} className="text-[8px] font-bold text-zinc-500 truncate">{m || "EMPTY"}</div>
-                ))}
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Column 1: Front 9 Leaderboard */}
+          <section className="space-y-4">
+            <div className="bg-blue-400 text-black p-3 font-black text-center uppercase border-2 border-black">1st Place - Front 9</div>
+            <div className="bg-zinc-900 border-2 border-zinc-800 p-4 rounded-xl">
+               {/* Player data would map here */}
+               <div className="flex justify-between font-bold border-b border-zinc-800 py-2">
+                 <span>ANDREW SOVERO</span><span>36</span>
+               </div>
             </div>
-          ))}
+          </section>
+
+          {/* Column 2: Back 9 Leaderboard */}
+          <section className="space-y-4">
+            <div className="bg-blue-400 text-black p-3 font-black text-center uppercase border-2 border-black">1st Place - Back 9</div>
+            <div className="bg-zinc-900 border-2 border-zinc-800 p-4 rounded-xl">
+               <div className="flex justify-between font-bold border-b border-zinc-800 py-2">
+                 <span>RICK SOVERO</span><span>36</span>
+               </div>
+            </div>
+          </section>
+
+          {/* Column 3: Skins Dashboard */}
+          <section className="bg-orange-200 text-black rounded-xl border-2 border-black overflow-hidden">
+            <div className="bg-orange-500 p-3 font-black text-center uppercase text-white border-b-2 border-black italic">Skins Dashboard</div>
+            <table className="w-full text-xs">
+              <thead className="bg-orange-100 border-b-2 border-black">
+                <tr>
+                  <th className="p-3 text-left">PLAYER</th>
+                  <th className="p-3 text-center">SKINS</th>
+                  <th className="p-3 text-right">WINNINGS</th>
+                </tr>
+              </thead>
+              <tbody className="font-bold uppercase">
+                <tr className="border-b border-orange-300">
+                  <td className="p-3 flex items-center"><Trophy size={14} className="mr-2 text-orange-600" /> JEFF PERKINS</td>
+                  <td className="p-3 text-center text-lg">3</td>
+                  <td className="p-3 text-right font-black">$52</td>
+                </tr>
+                {/* Repeat for others */}
+              </tbody>
+            </table>
+          </section>
         </div>
       </div>
     </div>
-  );
+  )
 }
