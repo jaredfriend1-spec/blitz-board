@@ -36,6 +36,32 @@ export default function CourseSetup() {
       .then(() => alert("COURSE SAVED"));
   }
 
+  // --- NEW: HTML5 IMAGE COMPRESSOR ---
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          // Max width of 800px is plenty for AI to read text
+          const maxWidth = 800;
+          const scale = Math.min(maxWidth / img.width, 1);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          // Output as JPEG at 70% quality (massively reduces file size)
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   // --- AI VISION SCANNER ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -45,30 +71,34 @@ export default function CourseSetup() {
     setError("");
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onloadend = async () => {
-        const base64data = reader.result;
+      // Compress the image before doing anything else
+      const compressedBase64 = await compressImage(file);
 
-        const res = await fetch('/api/scan-scorecard', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64data })
-        });
+      // Send the tiny payload to our API
+      const res = await fetch('/api/scan-scorecard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: compressedBase64 })
+      });
 
-        const data = await res.json();
-        
-        if (data.success && data.holes && data.holes.length === 18) {
-          setHoles(data.holes);
-        } else {
-          setError("COULD NOT READ SCORECARD. PLEASE ENTER MANUALLY.");
-        }
-        setIsScanning(false);
-      };
+      if (!res.ok) {
+        throw new Error("Server rejected the request.");
+      }
+
+      const data = await res.json();
+      
+      if (data.success && data.holes && data.holes.length === 18) {
+        setHoles(data.holes);
+      } else {
+        setError("COULD NOT READ SCORECARD. PLEASE ENTER MANUALLY.");
+      }
     } catch (err) {
       console.error(err);
-      setError("SCAN FAILED. PLEASE TRY AGAIN.");
+      setError("SCAN FAILED. Check API key or try a clearer photo.");
+    } finally {
       setIsScanning(false);
+      // Reset the input so you can scan again if needed
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
@@ -82,7 +112,6 @@ export default function CourseSetup() {
             <Flag size={32}/><h1 className="text-4xl font-black">Course Specs</h1>
           </div>
           
-          {/* THE CAMERA BUTTON */}
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
           <button 
             onClick={() => fileInputRef.current?.click()} 
