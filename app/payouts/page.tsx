@@ -10,55 +10,69 @@ export default function PayoutsPage() {
   const [matches, setMatches] = useState<any[]>([])
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
-  const [course, setCourse] = useState({ pars: Array(18).fill(4) })
+  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4), holes: Array(18).fill({par: 4, hcp: 1}) })
 
   useEffect(() => {
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
     onValue(ref(db, 'tournament/matchups'), snap => snap.val() && setMatches(Object.values(snap.val())))
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
-    onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
+    onValue(ref(db, 'tournament/course'), snap => {
+      if(snap.val()) setCourse({ pars: snap.val().pars || Array(18).fill(4), holes: snap.val().holes || Array(18).fill({par: 4, hcp: 1}) })
+    })
   }, [])
 
-  // --- THE MATHEMATICAL ENGINE ---
   const calculateMatch = (m: any) => {
-    // 1. Resolve Entities (Players or Teams)
-    const pA_Ids = m.type === 'PvP' ? [players.find(p => p.name === m.sideA)?.id] : teams.find(t => t.name === m.sideA)?.playerIds;
-    const pB_Ids = m.type === 'PvP' ? [players.find(p => p.name === m.sideB)?.id] : teams.find(t => t.name === m.sideB)?.playerIds;
+    // 1. Resolve Players
+    const pA = m.type === 'PvP' ? players.filter(p => p.name === m.sideA) : players.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id));
+    const pB = m.type === 'PvP' ? players.filter(p => p.name === m.sideB) : players.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id));
     
-    if (!pA_Ids || !pB_Ids || pA_Ids.length === 0 || pB_Ids.length === 0) return null;
+    if (pA.length === 0 || pB.length === 0) return null;
 
-    // 2. Resolve Best-Ball Gross Scores
-    const sA_gross = Array(18).fill(0);
-    const sB_gross = Array(18).fill(0);
+    // 2. Stroke Allocation
+    const allHcps = [...pA, ...pB].map(p => Number(p.handicap) || 0);
+    const baseHcp = Math.min(...allHcps);
+
+    const getStrokes = (playerHcp: number, holeIndex: number) => {
+      const holeHcpRating = course.holes[holeIndex]?.hcp || 1;
+      const diff = Math.max(0, playerHcp - baseHcp);
+      let strokes = Math.floor(diff / 18);
+      if (holeHcpRating <= (diff % 18)) strokes += 1;
+      return strokes;
+    };
+
+    const sA_gross = Array(18).fill(0); const sA_net = Array(18).fill(0); const sA_dots = Array(18).fill(0);
+    const sB_gross = Array(18).fill(0); const sB_net = Array(18).fill(0); const sB_dots = Array(18).fill(0);
+    let birdiePayoutA = 0; let birdiePayoutB = 0;
+    
+    // Calculate total strokes given for the UI header
+    let totalStrokesA = Math.max(...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
+    let totalStrokesB = Math.max(...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
+
     for (let i = 0; i < 18; i++) {
-      const holeScoresA = pA_Ids.map((id: string) => scores[id]?.[i] || 0).filter((s: number) => s > 0);
-      const holeScoresB = pB_Ids.map((id: string) => scores[id]?.[i] || 0).filter((s: number) => s > 0);
-      sA_gross[i] = holeScoresA.length > 0 ? Math.min(...holeScoresA) : 0;
-      sB_gross[i] = holeScoresB.length > 0 ? Math.min(...holeScoresB) : 0;
+      // Team A
+      sA_dots[i] = Math.max(...pA.map(p => getStrokes(Number(p.handicap)||0, i)));
+      const scoresA = pA.map(p => ({ gross: scores[p.id]?.[i] || 0, net: (scores[p.id]?.[i] || 0) - getStrokes(Number(p.handicap)||0, i) })).filter(x => x.gross > 0);
+      sA_gross[i] = scoresA.length > 0 ? Math.min(...scoresA.map(x => x.gross)) : 0;
+      sA_net[i] = scoresA.length > 0 ? Math.min(...scoresA.map(x => x.net)) : 0;
+
+      // Team B
+      sB_dots[i] = Math.max(...pB.map(p => getStrokes(Number(p.handicap)||0, i)));
+      const scoresB = pB.map(p => ({ gross: scores[p.id]?.[i] || 0, net: (scores[p.id]?.[i] || 0) - getStrokes(Number(p.handicap)||0, i) })).filter(x => x.gross > 0);
+      sB_gross[i] = scoresB.length > 0 ? Math.min(...scoresB.map(x => x.gross)) : 0;
+      sB_net[i] = scoresB.length > 0 ? Math.min(...scoresB.map(x => x.net)) : 0;
+
+      // Birdie / Eagle Units (Gross)
+      const par = course.pars[i];
+      const eagleVal = m.eagle || (m.birdie * 2) || 0;
+      if (sA_gross[i] > 0 && sA_gross[i] < par) birdiePayoutA += sA_gross[i] <= par - 2 ? eagleVal : (m.birdie || 0);
+      if (sB_gross[i] > 0 && sB_gross[i] < par) birdiePayoutB += sB_gross[i] <= par - 2 ? eagleVal : (m.birdie || 0);
     }
 
-    // 3. Apply 1v1 Handicaps (Adjust Side B's net score for comparison)
-    const sA_net = [...sA_gross];
-    const sB_net = [...sB_gross];
-    if (m.type === 'PvP' && m.handicap) {
-      for (let i = 0; i < 18; i++) {
-        if (sB_net[i] > 0) sB_net[i] += Number(m.handicap);
-      }
-    }
-
-    // 4. Calculate Gross Birdie Units (1 per Birdie, 2 per Eagle)
-    let birdieUnitsA = 0; let birdieUnitsB = 0;
-    for (let i = 0; i < 18; i++) {
-      if (sA_gross[i] > 0 && sA_gross[i] < course.pars[i]) birdieUnitsA += (course.pars[i] - sA_gross[i]);
-      if (sB_gross[i] > 0 && sB_gross[i] < course.pars[i]) birdieUnitsB += (course.pars[i] - sB_gross[i]);
-    }
-
-    // 5. Recursive Match Play Engine (Nassau + Independent Auto-Presses)
+    // 3. Match Play Engine
     const runNine = (start: number, end: number) => {
       let activeBets = [{ score: 0, pressed: false, isBase: true }];
-      let holeResults = [];
-      let totalPresses = 0;
+      let holeResults = []; let totalPresses = 0;
 
       for (let i = start; i <= end; i++) {
         let winner = null;
@@ -74,17 +88,11 @@ export default function PayoutsPage() {
         if (delta !== 0) {
           activeBets.forEach(bet => {
             bet.score += delta;
-            // Standard Auto-Press Logic: Triggered when tally hits ±2
             if (Math.abs(bet.score) >= 2 && !bet.pressed) {
-              bet.pressed = true;
-              newPresses++;
-              totalPresses++;
+              bet.pressed = true; newPresses++; totalPresses++;
             }
           });
-          // Spin up new independent bets starting at 0
-          for (let p = 0; p < newPresses; p++) {
-            activeBets.push({ score: 0, pressed: false, isBase: false });
-          }
+          for (let p = 0; p < newPresses; p++) activeBets.push({ score: 0, pressed: false, isBase: false });
         }
         holeResults.push({ winner, newPresses });
       }
@@ -101,23 +109,21 @@ export default function PayoutsPage() {
 
     const f9 = runNine(0, 8);
     const b9 = runNine(9, 17);
+    const net = (f9.payoutA + b9.payoutA + birdiePayoutA) - (f9.payoutB + b9.payoutB + birdiePayoutB);
 
-    // 6. Final Financial Aggregation
-    const birdiePayoutA = birdieUnitsA * (m.birdie || 0);
-    const birdiePayoutB = birdieUnitsB * (m.birdie || 0);
-    
-    const totalA = f9.payoutA + b9.payoutA + birdiePayoutA;
-    const totalB = f9.payoutB + b9.payoutB + birdiePayoutB;
-    const net = totalA - totalB; // Positive = A wins, Negative = B wins
-
-    return { sA_net, sB_net, f9, b9, birdieUnitsA, birdieUnitsB, birdiePayoutA, birdiePayoutB, net };
+    return { sA_net, sB_net, sA_dots, sB_dots, totalStrokesA, totalStrokesB, f9, b9, birdiePayoutA, birdiePayoutB, net };
   }
 
-  const getStyle = (s: number, p: number) => {
-    if (!s) return "text-zinc-800"
-    if (s < p) return "bg-emerald-500 text-black rounded-full"
-    if (s > p) return "bg-zinc-800 text-zinc-500"
-    return "text-emerald-400"
+  // Helper to render the golf stroke dots
+  const renderDots = (count: number) => {
+    if (!count || count <= 0) return null;
+    return (
+      <div className="flex justify-center -mt-1 gap-[2px]">
+        {Array.from({length: Math.min(count, 3)}).map((_, idx) => (
+          <div key={idx} className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -129,7 +135,7 @@ export default function PayoutsPage() {
         <h1 className="text-5xl font-black tracking-tighter">Side Bets & Payouts</h1>
       </div>
 
-      <div className="max-w-6xl mx-auto space-y-16">
+      <div className="max-w-7xl mx-auto space-y-16">
         {matches.length === 0 && <div className="text-zinc-500 font-black bg-zinc-900 p-8 rounded-3xl border border-zinc-800 text-center">NO MATCHES CONFIGURED</div>}
         
         {matches.map(m => {
@@ -138,41 +144,63 @@ export default function PayoutsPage() {
 
           return (
             <div key={m.id} className="bg-zinc-950 p-6 sm:p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl relative overflow-hidden">
-              {/* STAKES HEADER */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 border-b-2 border-zinc-900 pb-8 gap-4">
                 <div>
-                  <h2 className="text-3xl font-black">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
-                  <div className="text-zinc-500 font-black text-xs mt-2 tracking-widest flex items-center gap-3">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-3xl font-black text-white">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
+                  </div>
+                  
+                  {/* NEW: Stroke Advantage Callout */}
+                  <div className="mt-3 flex gap-2">
+                    {results.totalStrokesA > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideA} GETS {results.totalStrokesA} STROKES</span>}
+                    {results.totalStrokesB > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideB} GETS {results.totalStrokesB} STROKES</span>}
+                    {results.totalStrokesA === 0 && results.totalStrokesB === 0 && <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-lg text-xs font-black">PLAYING SCRATCH (EVEN)</span>}
+                  </div>
+
+                  <div className="text-zinc-500 font-black text-xs mt-3 tracking-widest flex items-center gap-3">
                     <span className="bg-zinc-900 px-3 py-1 rounded-lg">NASSAU: ${m.nassau || 0}</span>
                     <span className="bg-zinc-900 px-3 py-1 rounded-lg">PRESS: ${m.press || 0}</span>
-                    <span className="bg-zinc-900 px-3 py-1 rounded-lg">BIRDIE: ${m.birdie || 0}</span>
-                    {m.type === 'PvP' && m.handicap !== 0 && <span className="bg-rose-900/20 text-rose-500 px-3 py-1 rounded-lg">HC: {m.handicap}</span>}
+                    <span className="bg-zinc-900 px-3 py-1 rounded-lg">BIRDIE/EAGLE: ${m.birdie||0}/${m.eagle||(m.birdie*2)||0}</span>
                   </div>
                 </div>
               </div>
 
-              {/* 18 HOLE COMPARATIVE SCORECARD */}
               <div className="overflow-x-auto mb-8 bg-black rounded-2xl border border-zinc-900">
-                <table className="w-full text-center border-collapse min-w-[600px]">
+                <table className="w-full text-center border-collapse min-w-[700px]">
                   <thead className="text-[10px] text-zinc-600 font-black bg-zinc-950">
                     <tr>
-                      <th className="p-4 text-left border-r border-zinc-900 sticky left-0 bg-zinc-950 z-10">HOLE</th>
+                      <th className="p-4 text-left border-r border-zinc-900">HOLE (NET)</th>
                       {Array.from({length:18}).map((_,i) => <th key={i} className={`p-2 w-8 ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}>{i+1}</th>)}
                     </tr>
                   </thead>
                   <tbody className="text-xs font-black">
+                    {/* SIDE A ROW */}
                     <tr className="border-t border-zinc-900">
-                      <td className="p-4 text-left text-emerald-500 truncate border-r border-zinc-900 sticky left-0 bg-black z-10">{m.sideA}</td>
-                      {results.sA_net.map((s: number, i: number) => <td key={i} className={`p-2 ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${getStyle(s, course.pars[i])}`}>{s || '-'}</td>)}
+                      <td className="p-4 text-left text-emerald-500 truncate border-r border-zinc-900">{m.sideA}</td>
+                      {results.sA_net.map((s: number, i: number) => (
+                        <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${!s ? 'text-zinc-800' : s < course.pars[i] ? 'text-rose-500' : 'text-zinc-300'}`}>
+                          <div>{s || '-'}</div>
+                          {renderDots(results.sA_dots[i])}
+                        </td>
+                      ))}
                     </tr>
+                    
+                    {/* SIDE B ROW */}
                     <tr className="border-t border-zinc-900">
-                      <td className="p-4 text-left text-emerald-500 truncate border-r border-zinc-900 sticky left-0 bg-black z-10">{m.sideB}</td>
-                      {results.sB_net.map((s: number, i: number) => <td key={i} className={`p-2 ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${getStyle(s, course.pars[i])}`}>{s || '-'}</td>)}
+                      <td className="p-4 text-left text-blue-500 truncate border-r border-zinc-900">{m.sideB}</td>
+                      {results.sB_net.map((s: number, i: number) => (
+                        <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${!s ? 'text-zinc-800' : s < course.pars[i] ? 'text-rose-500' : 'text-zinc-300'}`}>
+                          <div>{s || '-'}</div>
+                          {renderDots(results.sB_dots[i])}
+                        </td>
+                      ))}
                     </tr>
+
+                    {/* WINNER TALLY ROW */}
                     <tr className="border-t-2 border-zinc-800 bg-zinc-900/50">
-                      <td className="p-4 text-left text-zinc-500 border-r border-zinc-900 sticky left-0 bg-zinc-900/90 z-10">WINNER</td>
+                      <td className="p-4 text-left text-zinc-500 border-r border-zinc-900">WINNER</td>
                       {[...results.f9.holeResults, ...results.b9.holeResults].map((h, i) => (
-                        <td key={i} className={`p-2 ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${h.winner === 'A' ? 'text-emerald-500' : h.winner === 'B' ? 'text-amber-500' : 'text-zinc-600'}`}>
+                        <td key={i} className={`p-2 ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${h.winner === 'A' ? 'text-emerald-500' : h.winner === 'B' ? 'text-blue-500' : 'text-zinc-600'}`}>
                           {h.winner || '-'}
                           {h.newPresses > 0 && <div className="absolute -mt-6 -ml-1 flex"><Zap size={10} className="text-yellow-500 animate-pulse"/></div>}
                         </td>
@@ -182,30 +210,26 @@ export default function PayoutsPage() {
                 </table>
               </div>
 
-              {/* FINANCIAL BREAKDOWN */}
+              {/* PAYOUT BREAKDOWNS (UNCHANGED) */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2">FRONT 9</div>
-                  <div className="text-sm font-black text-zinc-300">PRESSES: <span className="text-yellow-500">{results.f9.totalPresses}</span></div>
-                  <div className="text-emerald-400 font-black mt-1">${results.f9.payoutA} <span className="text-zinc-600">to</span> ${results.f9.payoutB}</div>
+                  <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2">FRONT 9 (PRESSES: <span className="text-yellow-500">{results.f9.totalPresses}</span>)</div>
+                  <div className="text-white font-black mt-1"><span className="text-emerald-500">${results.f9.payoutA}</span> <span className="text-zinc-600">to</span> <span className="text-blue-500">${results.f9.payoutB}</span></div>
                 </div>
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2">BACK 9</div>
-                  <div className="text-sm font-black text-zinc-300">PRESSES: <span className="text-yellow-500">{results.b9.totalPresses}</span></div>
-                  <div className="text-emerald-400 font-black mt-1">${results.b9.payoutA} <span className="text-zinc-600">to</span> ${results.b9.payoutB}</div>
+                  <div className="text-zinc-500 text-[10px] font-black tracking-widest mb-2">BACK 9 (PRESSES: <span className="text-yellow-500">{results.b9.totalPresses}</span>)</div>
+                  <div className="text-white font-black mt-1"><span className="text-emerald-500">${results.b9.payoutA}</span> <span className="text-zinc-600">to</span> <span className="text-blue-500">${results.b9.payoutB}</span></div>
                 </div>
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black tracking-widest mb-2"><Target size={12}/> BIRDIES</div>
-                  <div className="text-sm font-black text-zinc-300">UNITS: {results.birdieUnitsA} <span className="text-zinc-600">to</span> {results.birdieUnitsB}</div>
-                  <div className="text-blue-400 font-black mt-1">${results.birdiePayoutA} <span className="text-zinc-600">to</span> ${results.birdiePayoutB}</div>
+                  <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black tracking-widest mb-2"><Target size={12}/> BIRDIE & EAGLE MONEY</div>
+                  <div className="text-white font-black mt-1"><span className="text-emerald-500">${results.birdiePayoutA}</span> <span className="text-zinc-600">to</span> <span className="text-blue-500">${results.birdiePayoutB}</span></div>
                 </div>
               </div>
 
-              {/* FINAL PAYOUT BAR */}
               <div className="flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-8 rounded-3xl">
                 <div className="text-zinc-500 font-black mb-4 sm:mb-0">TOTAL MATCH NET</div>
-                <div className="text-4xl font-black text-emerald-400">
-                  {results.net > 0 ? `${m.sideB} OWES $${results.net}` : results.net < 0 ? `${m.sideA} OWES $${Math.abs(results.net)}` : 'MATCH TIED ($0)'}
+                <div className="text-4xl font-black">
+                  {results.net > 0 ? <span className="text-emerald-400">{m.sideB} OWES ${results.net}</span> : results.net < 0 ? <span className="text-blue-400">{m.sideA} OWES ${Math.abs(results.net)}</span> : <span className="text-zinc-500">MATCH TIED ($0)</span>}
                 </div>
               </div>
             </div>
