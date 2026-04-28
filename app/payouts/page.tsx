@@ -10,7 +10,10 @@ export default function PayoutsPage() {
   const [matches, setMatches] = useState<any[]>([])
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
-  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4), holes: Array.from({length: 18}, (_, i) => ({ par: 4, hcp: i + 1 })) })
+  const [course, setCourse] = useState<any>({ 
+    pars: Array(18).fill(4), 
+    holes: Array.from({length: 18}, (_, i) => ({ par: 4, hcp: i + 1 })) 
+  })
 
   useEffect(() => {
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
@@ -21,13 +24,11 @@ export default function PayoutsPage() {
   }, [])
 
   const calculateMatch = (m: any) => {
-    // 1. Resolve Players
     const pA = m.type === 'PvP' ? players.filter(p => p.name === m.sideA) : players.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id));
     const pB = m.type === 'PvP' ? players.filter(p => p.name === m.sideB) : players.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id));
     
     if (pA.length === 0 || pB.length === 0) return null;
 
-    // 2. Stroke Allocation (Net vs Gross)
     const isGross = m.scoringType === 'GROSS';
     const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Number(p.handicap) || 0);
     const baseHcp = Math.min(...allHcps);
@@ -51,26 +52,20 @@ export default function PayoutsPage() {
       const netsB = pB.map(p => ({ gross: scores[p.id]?.[i] || 0, net: (scores[p.id]?.[i] || 0) - getStrokes(Number(p.handicap)||0, i) })).filter(x => x.gross > 0).sort((a,b) => a.net - b.net);
 
       if (m.type === 'PvP') {
-        // PvP LOGIC: Single Best Ball
         if (netsA.length > 0) sA_final[i] = Math.min(...netsA.map(x => x.net));
         if (netsB.length > 0) sB_final[i] = Math.min(...netsB.map(x => x.net));
-        
-        // PvP Birdies (Full Eagle Support)
         const bgA = netsA.length > 0 ? Math.min(...netsA.map(x => x.gross)) : 0;
         const bgB = netsB.length > 0 ? Math.min(...netsB.map(x => x.gross)) : 0;
-        if (bgA > 0 && bgA < par) birdieA += bgA <= par - 2 ? (m.eagle || (m.birdie * 2)) : (m.birdie || 0);
-        if (bgB > 0 && bgB < par) birdieB += bgB <= par - 2 ? (m.eagle || (m.birdie * 2)) : (m.birdie || 0);
+        if (bgA > 0 && bgA < par) birdieA += bgA <= par - 2 ? (Number(m.eagle) || (Number(m.birdie) * 2)) : Number(m.birdie || 0);
+        if (bgB > 0 && bgB < par) birdieB += bgB <= par - 2 ? (Number(m.eagle) || (Number(m.birdie) * 2)) : Number(m.birdie || 0);
       } else {
-        // TvT LOGIC: Aggregate (Best 2 on Par 4/5, Best 3 on Par 3)
         const count = par === 3 ? 3 : 2;
         if (netsA.length >= count) sA_final[i] = netsA.slice(0, count).reduce((acc, curr) => acc + curr.net, 0);
         if (netsB.length >= count) sB_final[i] = netsB.slice(0, count).reduce((acc, curr) => acc + curr.net, 0);
-        
-        // TvT Birdies (Flat Birdie Pay)
         const bgA = netsA.length > 0 ? Math.min(...netsA.map(x => x.gross)) : 0;
         const bgB = netsB.length > 0 ? Math.min(...netsB.map(x => x.gross)) : 0;
-        if (bgA > 0 && bgA < par) birdieA += (m.birdie || 0);
-        if (bgB > 0 && bgB < par) birdieB += (m.birdie || 0);
+        if (bgA > 0 && bgA < par) birdieA += Number(m.birdie || 0);
+        if (bgB > 0 && bgB < par) birdieB += Number(m.birdie || 0);
       }
       sA_dots[i] = Math.max(...pA.map(p => getStrokes(Number(p.handicap)||0, i)));
       sB_dots[i] = Math.max(...pB.map(p => getStrokes(Number(p.handicap)||0, i)));
@@ -90,7 +85,6 @@ export default function PayoutsPage() {
         if (delta !== 0) {
           bets.forEach(b => {
             b.score += delta;
-            // PRESS LOGIC: Only trigger for PvP types
             if (m.type === 'PvP' && Math.abs(b.score) >= 2 && !b.pressed) { b.pressed = true; newP++; totalP++; }
           });
           if (m.type === 'PvP') {
@@ -101,16 +95,21 @@ export default function PayoutsPage() {
       }
       let payA = 0; let payB = 0;
       bets.forEach(b => {
-        const amt = b.isBase ? (m.nassau || 0) : (m.press || 0);
+        const amt = b.isBase ? Number(m.nassau || 0) : Number(m.press || 0);
         if (b.score > 0) payA += amt; else if (b.score < 0) payB += amt;
       });
-      return { holeResults, payoutA: payA, payoutB: pB, totalPresses: totalP };
+      return { holeResults, payoutA: payA, payoutB: payB, totalPresses: totalP };
     }
 
     const f9 = runNine(0, 8); const b9 = runNine(9, 17);
     const strokesA = Math.max(...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
     const strokesB = Math.max(...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
-    const net = (f9.payoutA + b9.payoutA + birdieA) - (f9.payoutB + b9.payoutB + birdieB);
+    
+    // TYPE SAFE MATH
+    const totalA = Number(f9.payoutA) + Number(b9.payoutA) + Number(birdieA);
+    const totalB = Number(f9.payoutB) + Number(b9.payoutB) + Number(birdieB);
+    const net = totalA - totalB;
+
     return { sA_net: sA_final, sB_net: sB_final, sA_dots, sB_dots, strokesA, strokesB, f9, b9, birdieA, birdieB, net };
   }
 
@@ -138,31 +137,30 @@ export default function PayoutsPage() {
                     {res.strokesB > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideB} GETS {res.strokesB}</span>}
                   </div>
                   <div className="text-zinc-500 font-black text-xs mt-3 tracking-widest flex items-center gap-3">
-                    <span className="bg-zinc-900 px-3 py-1 rounded-lg">NASSAU: ${m.nassau || 0}</span>
-                    {m.type === 'PvP' && <span className="bg-zinc-900 px-3 py-1 rounded-lg">PRESS: ${m.press || 0}</span>}
-                    <span className="bg-zinc-900 px-3 py-1 rounded-lg">BIRDIE/EAGLE: ${m.birdie||0}/${m.eagle||(m.birdie*2)||0}</span>
+                    <span className="bg-zinc-900 px-3 py-1 rounded-lg uppercase tracking-tighter">Nassau: ${m.nassau || 0}</span>
+                    {m.type === 'PvP' && <span className="bg-zinc-900 px-3 py-1 rounded-lg uppercase tracking-tighter">Press: ${m.press || 0}</span>}
+                    <span className="bg-zinc-900 px-3 py-1 rounded-lg uppercase tracking-tighter">Bird/Eagle: ${m.birdie||0}/${m.eagle||(m.birdie*2)||0}</span>
                   </div>
                 </div>
               </div>
-
               <div className="overflow-x-auto mb-8 bg-black rounded-2xl border border-zinc-900 shadow-inner">
-                <table className="w-full text-center border-collapse min-w-[700px]">
-                  <thead className="text-[10px] text-zinc-600 font-black bg-zinc-950">
-                    <tr><th className="p-4 text-left border-r border-zinc-900 uppercase tracking-tighter">Hole ({m.type === 'PvP' ? 'Best' : 'Agg'})</th>{Array.from({length:18}).map((_,i) => <th key={i} className={`p-2 w-8 ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}>{i+1}</th>)}</tr>
+                <table className="w-full text-center min-w-[700px]">
+                  <thead className="text-[10px] text-zinc-600 font-black bg-zinc-950 uppercase italic">
+                    <tr><th className="p-4 text-left border-r border-zinc-900 tracking-tighter">Hole ({m.type === 'PvP' ? 'Best' : 'Agg'})</th>{Array.from({length:18}).map((_,i) => <th key={i} className={`p-2 w-8 ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}>{i+1}</th>)}</tr>
                   </thead>
                   <tbody className="text-xs font-black">
                     <tr className="border-t border-zinc-900">
                       <td className="p-4 text-left text-emerald-500 truncate border-r border-zinc-900">{m.sideA}</td>
                       {res.sA_net.map((s: number, i: number) => <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}><div>{s || '-'}</div>{renderDots(res.sA_dots[i])}</td>)}
                     </tr>
-                    <tr className="border-t border-zinc-900">
+                    <tr className="border-t border-zinc-900 bg-white/5">
                       <td className="p-4 text-left text-blue-500 truncate border-r border-zinc-900">{m.sideB}</td>
                       {res.sB_net.map((s: number, i: number) => <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}><div>{s || '-'}</div>{renderDots(res.sB_dots[i])}</td>)}
                     </tr>
-                    <tr className="border-t-2 border-zinc-800 bg-zinc-900/50">
-                      <td className="p-4 text-left text-zinc-500 border-r border-zinc-900">WINNER</td>
+                    <tr className="border-t-2 border-zinc-800 bg-zinc-900">
+                      <td className="p-4 text-left text-zinc-500 border-r border-zinc-900 uppercase italic">Winner</td>
                       {[...res.f9.holeResults, ...res.b9.holeResults].map((h, i) => (
-                        <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${h.winner === 'A' ? 'text-emerald-500' : h.winner === 'B' ? 'text-blue-500' : 'text-zinc-600'}`}>
+                        <td key={i} className={`p-2 relative border-r border-zinc-800 last:border-0 ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${h.winner === 'A' ? 'text-emerald-500' : h.winner === 'B' ? 'text-blue-500' : 'text-zinc-700'}`}>
                           {h.winner || '-'}
                           {h.newP > 0 && <div className="absolute top-1 left-1 flex"><Zap size={10} className="text-yellow-500 animate-pulse"/></div>}
                         </td>
@@ -171,7 +169,6 @@ export default function PayoutsPage() {
                   </tbody>
                 </table>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
                   <div className="text-zinc-500 text-[10px] font-black uppercase mb-2">Front 9 {res.f9.totalPresses > 0 ? `(${res.f9.totalPresses} Press)` : ''}</div>
@@ -186,9 +183,8 @@ export default function PayoutsPage() {
                   <div className="text-white font-black mt-1 uppercase italic"><span className="text-emerald-500">${res.birdieA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.birdieB}</span></div>
                 </div>
               </div>
-
               <div className="flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-8 rounded-3xl">
-                <div className="text-zinc-500 font-black mb-4 sm:mb-0 uppercase italic tracking-widest text-xs">Total Match Net</div>
+                <div className="text-zinc-500 font-black mb-4 sm:mb-0 uppercase italic text-xs tracking-widest">Match Net</div>
                 <div className="text-4xl font-black">
                   {res.net > 0 ? <span className="text-emerald-400">{m.sideB} OWES ${res.net}</span> : res.net < 0 ? <span className="text-blue-400">{m.sideA} OWES ${Math.abs(res.net)}</span> : <span className="text-zinc-500 font-black">EVEN</span>}
                 </div>
