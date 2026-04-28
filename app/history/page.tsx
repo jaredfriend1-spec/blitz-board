@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { ArrowLeft, Archive, Calendar, Users, DollarSign } from 'lucide-react'
+import { ArrowLeft, Archive, Calendar, Users, DollarSign, Sword } from 'lucide-react'
 import Link from 'next/link'
 
 export default function HistoryPage() {
@@ -11,7 +11,6 @@ export default function HistoryPage() {
   useEffect(() => {
     onValue(ref(db, 'history'), snap => {
       if (snap.val()) {
-        // Convert Firebase object to array, attach the timestamp key, and sort newest first
         const data = Object.entries(snap.val()).map(([key, value]: [string, any]) => ({
           id: key,
           ...value
@@ -44,7 +43,6 @@ export default function HistoryPage() {
                 weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
               });
               
-              // Safely extract counts from the snapshot
               const playerCount = arch.roster ? Object.keys(arch.roster).length : 0;
               const teamCount = arch.teams ? Object.keys(arch.teams).length : 0;
               const matchCount = arch.matchups ? Object.keys(arch.matchups).length : 0;
