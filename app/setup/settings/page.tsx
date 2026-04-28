@@ -45,13 +45,11 @@ export default function CourseSetup() {
     setError("");
 
     try {
-      // Convert image to Base64
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onloadend = async () => {
         const base64data = reader.result;
 
-        // Send to our Next.js API route
         const res = await fetch('/api/scan-scorecard', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -61,7 +59,6 @@ export default function CourseSetup() {
         const data = await res.json();
         
         if (data.success && data.holes && data.holes.length === 18) {
-          // Auto-fill the grid!
           setHoles(data.holes);
         } else {
           setError("COULD NOT READ SCORECARD. PLEASE ENTER MANUALLY.");
@@ -85,7 +82,7 @@ export default function CourseSetup() {
             <Flag size={32}/><h1 className="text-4xl font-black">Course Specs</h1>
           </div>
           
-          {/* THE MAGIC BUTTON */}
+          {/* THE CAMERA BUTTON */}
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
           <button 
             onClick={() => fileInputRef.current?.click()} 
