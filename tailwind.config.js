@@ -2,9 +2,18 @@
 module.exports = {
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}", // This line brings the style back!
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        emerald: {
+          400: '#34d399',
+          500: '#10b981',
+          600: '#059669',
+        },
+      },
+    },
   },
   plugins: [],
 }
