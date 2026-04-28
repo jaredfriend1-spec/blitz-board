@@ -5,21 +5,17 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const { imageBase64 } = await req.json();
+    const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!imageBase64) {
-      return NextResponse.json({ success: false, error: "No image received." }, { status: 400 });
+    if (!imageBase64 || !apiKey) {
+      return NextResponse.json({ success: false, error: "Missing Image or API Key" }, { status: 400 });
     }
 
     const base64Data = imageBase64.split(',')[1];
     const mimeType = imageBase64.substring(imageBase64.indexOf(':') + 1, imageBase64.indexOf(';')) || 'image/jpeg';
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ success: false, error: "GEMINI_API_KEY is missing in Vercel." }, { status: 500 });
-    }
-
-    // STABLE v1 URL with the 'latest' alias for Flash
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    // PATH: Stable V1 endpoint / Model: Gemini 2.0 Flash
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -27,7 +23,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Read this scorecard. Extract Par and Handicap for holes 1-18. Output ONLY a raw JSON array of 18 objects: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. No markdown, no backticks, no extra text." },
+            { text: "Extract the Par and Handicap for holes 1-18 from this scorecard. IMPORTANT: Return ONLY a raw JSON array of 18 objects like this: [{\"hole\": 1, \"par\": 4, \"hcp\": 5}]. Do not include markdown, code blocks, or any other text." },
             {
               inline_data: {
                 mime_type: mimeType,
@@ -36,7 +32,6 @@ export async function POST(req: Request) {
             }
           ]
         }]
-        // We omit generationConfig here to ensure the v1 endpoint accepts the request without field errors.
       })
     });
 
@@ -45,20 +40,25 @@ export async function POST(req: Request) {
     if (!response.ok) {
        return NextResponse.json({ 
          success: false, 
-         error: `Google API Error: ${data.error?.message || "Check your API key or model access."}` 
+         error: `Google API: ${data.error?.message || "Check API connection."}` 
        }, { status: response.status });
     }
 
-    // Get the text and strip any markdown backticks the AI might have added
     let rawContent = data.candidates[0].content.parts[0].text;
-    const sanitizedJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    const parsedHoles = JSON.parse(sanitizedJson);
+    // --- JSON REPAIR LOGIC ---
+    // This strips out any ```json ... ``` blocks if the AI accidentally adds them
+    const sanitizedJson = rawContent.replace(/```json/g, '').replace(/```/g, '').replace(/[\n\r]/g, '').trim();
     
-    return NextResponse.json({ success: true, holes: parsedHoles });
+    try {
+      const parsedHoles = JSON.parse(sanitizedJson);
+      return NextResponse.json({ success: true, holes: parsedHoles });
+    } catch (parseError) {
+      console.error("JSON Parse Error:", sanitizedJson);
+      return NextResponse.json({ success: false, error: "AI returned invalid format. Try a clearer photo." });
+    }
 
   } catch (error: any) {
-    console.error("Vision Error:", error);
-    return NextResponse.json({ success: false, error: `Server Error: ${error.message}` }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
