@@ -1,26 +1,11 @@
-export const golfers = [
-  { id: '1', name: 'JARED', handicap: 0 },
-  { id: '2', name: 'FRED', handicap: 0 },
-  { id: '3', name: 'MIKE', handicap: 0 },
-  { id: '4', name: 'TODD', handicap: 0 },
-];
-
-export const courses = [
-  { id: 'mcc', name: 'Montgomery Country Club', par: 72 }
-];
-
-export const tournamentSettings = {
-  name: "Blitz Board Tournament",
-  date: new Date().toLocaleDateString(),
-};
-
-// Satisfies the Teams page
+// lib/data.ts
 export const BLITZ_TEAMS = [
-  { id: 't1', name: 'TEAM 1', playerIds: ['1', '2'] },
-  { id: 't2', name: 'TEAM 2', playerIds: ['3', '4'] },
+  { id: "t1", name: "Team 1", players: ["Andrew Sovero", "Sam Oshrine", "Ira Cohen", "Josh Bumgarner"] },
+  { id: "t2", name: "Team 2", players: ["Rick Sovero", "Jeff Perkins", "Tony Zamostny", "George Blyth IV"] }
 ];
 
-// Safety exports in case other pages are crashing the build
-export const PLAYERS = golfers;
-export const MATCHUPS = [];
-export const TEAM_BETS = [];
+export const COURSE = [
+  { hole: 1, par: 4 }, { hole: 2, par: 4 }, { hole: 3, par: 3 },
+  { hole: 4, par: 3 }, { hole: 5, par: 4 }, { hole: 6, par: 4 },
+  { hole: 7, par: 5 }, { hole: 8, par: 4 }, { hole: 9, par: 4 }
+];
