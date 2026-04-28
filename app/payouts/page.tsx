@@ -33,12 +33,15 @@ export default function PayoutsPage() {
           const sA = scores[pA.id] || Array(18).fill(0);
           const sB = scores[pB.id] || Array(18).fill(0);
           let score = 0, presses = 0;
+          
+          // SAFETY FALLBACK: Prevents $NAN errors
+          const betAmount = money?.sideBetAmount || 0;
 
           return (
             <div key={m.id} className="bg-zinc-950 p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl">
               <div className="flex justify-between items-center mb-10 border-b-2 border-zinc-900 pb-8">
                 <h2 className="text-3xl font-black">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
-                <div className="bg-blue-600 text-black px-6 py-2 rounded-full font-black">BASE: ${money.sideBetAmount}</div>
+                <div className="bg-blue-600 text-black px-6 py-2 rounded-full font-black">BASE: ${betAmount}</div>
               </div>
 
               {/* Comparative Scorecard */}
@@ -75,7 +78,7 @@ export default function PayoutsPage() {
               <div className="flex justify-between items-center bg-zinc-900 p-8 rounded-2xl">
                 <div className="text-zinc-500 text-xs font-black">⚡ AUTO-PRESSES: <span className="text-yellow-500 text-xl">{presses}</span></div>
                 <div className="text-3xl font-black text-emerald-400">
-                  {score > 0 ? `${m.sideB} OWES $${money.sideBetAmount * (presses + 1)}` : score < 0 ? `${m.sideA} OWES $${money.sideBetAmount * (presses + 1)}` : 'MATCH TIED'}
+                  {score > 0 ? `${m.sideB} OWES $${betAmount * (presses + 1)}` : score < 0 ? `${m.sideA} OWES $${betAmount * (presses + 1)}` : 'MATCH TIED'}
                 </div>
               </div>
             </div>

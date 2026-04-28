@@ -38,7 +38,7 @@ export default function TournamentHub() {
       color: "border-blue-400/20 hover:border-blue-400"
     },
     {
-      title: "Skins & Side Bets",
+      title: "Side Bets",
       desc: "Scorecard evidence & matchplay tracking",
       path: "/payouts",
       icon: <DollarSign className="text-amber-400" size={32} />,
