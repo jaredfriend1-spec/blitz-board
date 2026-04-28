@@ -2,64 +2,81 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { golfers } from '@/lib/data'
-import { ArrowLeft, Zap, DollarSign } from 'lucide-react'
+import { ArrowLeft, Zap, Sword, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 
 export default function PayoutsPage() {
   const [scores, setScores] = useState<Record<string, number[]>>({})
   const [matches, setMatches] = useState<any[]>([])
+  const [players, setPlayers] = useState<any[]>([])
+  const [course, setCourse] = useState({ pars: Array(18).fill(4) })
 
   useEffect(() => {
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
     onValue(ref(db, 'tournament/matchups'), snap => snap.val() && setMatches(Object.values(snap.val())))
+    onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
+    onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
   }, [])
 
-  const getHoleWinner = (h: number, a: string, b: string) => {
-    const pA = golfers.find(g => g.name === a), pB = golfers.find(g => g.name === b);
-    if (!pA || !pB) return null;
-    const sA = scores[pA.id]?.[h] || 0, sB = scores[pB.id]?.[h] || 0;
-    if (sA === 0 || sB === 0) return null;
-    return sA < sB ? 'A' : sB < sA ? 'B' : 'T';
+  const getStyle = (s: number, p: number) => {
+    if (!s) return "text-zinc-800"
+    if (s < p) return "bg-emerald-500 text-black rounded-full"
+    if (s > p) return "bg-zinc-800 text-zinc-500"
+    return "text-emerald-400"
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans uppercase italic">
-      <Link href="/" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2"/> HUB</Link>
-      <h1 className="text-4xl font-black text-emerald-400 mb-12 uppercase tracking-tighter">Match Payouts & Timeline</h1>
-      <div className="max-w-6xl mx-auto space-y-12">
-        {matches.map((m) => {
+    <div className="min-h-screen bg-black text-white p-8 font-sans uppercase italic">
+      <Link href="/" className="text-emerald-500 font-black mb-12 inline-block"><ArrowLeft size={18} /> HUB</Link>
+      
+      <div className="max-w-6xl mx-auto space-y-16">
+        {matches.map(m => {
+          const pA = players.find(x => x.name === m.sideA);
+          const pB = players.find(x => x.name === m.sideB);
+          const sA = scores[pA?.id] || Array(18).fill(0);
+          const sB = scores[pB?.id] || Array(18).fill(0);
           let score = 0, presses = 0;
+
           return (
-            <div key={m.id} className="bg-zinc-900 p-8 rounded-[3rem] border-2 border-zinc-800 shadow-2xl">
-              <div className="flex justify-between items-center mb-8 pb-6 border-b border-zinc-900 font-black">
-                <h2 className="text-2xl uppercase tracking-widest">{m.sideA} <span className="text-zinc-600 px-2 text-sm">VS</span> {m.sideB}</h2>
-                <div className="bg-emerald-500 text-black px-6 py-2 rounded-full italic">STAKE: ${m.stake}</div>
+            <div key={m.id} className="bg-zinc-950 p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl">
+              <div className="flex justify-between items-center mb-10 border-b-2 border-zinc-900 pb-8">
+                <h2 className="text-3xl font-black tracking-tighter uppercase">{m.sideA} <span className="text-zinc-700">VS</span> {m.sideB}</h2>
+                <div className="bg-blue-600 text-black px-6 py-2 rounded-full font-black">MATCH PLAY</div>
               </div>
-              <div className="grid grid-cols-9 gap-4 mb-10">
-                {Array.from({ length: 18 }).map((_, i) => {
-                  const res = getHoleWinner(i, m.sideA, m.sideB);
-                  if (res === 'A') score++; else if (res === 'B') score--;
-                  const isPress = Math.abs(score) >= 2;
-                  if (isPress) presses++;
-                  return (
-                    <div key={i} className="flex flex-col items-center">
-                      <span className="text-[8px] text-zinc-600 font-bold mb-1">H{i+1}</span>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 ${res === 'A' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : res === 'B' ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-zinc-800 text-zinc-700'}`}>
-                        <span className="font-black italic">{res || '-'}</span>
-                      </div>
-                      {isPress && <Zap size={14} className="text-yellow-500 mt-1" />}
-                    </div>
-                  )
-                })}
+
+              {/* Comparative Scorecard */}
+              <div className="overflow-x-auto mb-10 bg-black rounded-2xl border border-zinc-900">
+                <table className="w-full text-center border-collapse">
+                  <thead className="text-[8px] text-zinc-700 font-black bg-zinc-950">
+                    <tr><th className="p-4 text-left">HOLE</th>{Array.from({length:18}).map((_,i)=><th key={i} className="p-2 w-8">{i+1}</th>)}</tr>
+                  </thead>
+                  <tbody className="text-[10px] font-black">
+                    <tr className="border-t border-zinc-900">
+                      <td className="p-4 text-left text-emerald-500">{m.sideA}</td>
+                      {sA.map((s, i) => <td key={i} className={`p-2 ${getStyle(s, course.pars[i])}`}>{s || '-'}</td>)}
+                    </tr>
+                    <tr className="border-t border-zinc-900">
+                      <td className="p-4 text-left text-emerald-500">{m.sideB}</td>
+                      {sB.map((s, i) => <td key={i} className={`p-2 ${getStyle(s, course.pars[i])}`}>{s || '-'}</td>)}
+                    </tr>
+                    <tr className="border-t-2 border-zinc-800 bg-zinc-900/50">
+                      <td className="p-4 text-left text-zinc-600 italic">WINNER</td>
+                      {Array.from({length:18}).map((_, i) => {
+                        const winner = sA[i] > 0 && sB[i] > 0 ? (sA[i] < sB[i] ? 'A' : sB[i] < sA[i] ? 'B' : 'T') : '-';
+                        if (winner === 'A') score++; else if (winner === 'B') score--;
+                        const isPress = Math.abs(score) >= 2;
+                        if (isPress) presses++;
+                        return <td key={i} className="p-2">{winner} {isPress && <Zap size={8} className="text-yellow-500 inline"/>}</td>
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <div className="bg-black/50 p-8 rounded-[2rem] flex justify-between items-center font-black italic">
-                <div className="flex items-center gap-6">
-                   <div className="text-zinc-500 text-xs">AUTO-PRESSES: <span className="text-yellow-500 text-lg">{presses} ⚡</span></div>
-                   <div className="text-zinc-500 text-xs">STATE: <span className="text-white text-lg">{score > 0 ? `${score} UP` : score < 0 ? `${Math.abs(score)} DN` : 'ALL SQ'}</span></div>
-                </div>
-                <div className="text-3xl text-emerald-400 flex items-center gap-2">
-                  <DollarSign /> {score > 0 ? `${m.sideB} OWES $${m.stake * (presses + 1)}` : score < 0 ? `${m.sideA} OWES $${m.stake * (presses + 1)}` : 'MATCH TIED'}
+
+              <div className="flex justify-between items-center bg-zinc-900 p-8 rounded-2xl">
+                <div className="text-zinc-500 text-xs font-black italic">⚡ PRESSES TRIGGERED: <span className="text-yellow-500 text-xl">{presses}</span></div>
+                <div className="text-3xl font-black text-emerald-400">
+                  {score > 0 ? `${m.sideB} OWES $${m.stake * (presses + 1)}` : score < 0 ? `${m.sideA} OWES $${m.stake * (presses + 1)}` : 'MATCH TIED'}
                 </div>
               </div>
             </div>

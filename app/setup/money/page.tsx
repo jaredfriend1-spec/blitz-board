@@ -6,23 +6,31 @@ import { ArrowLeft, DollarSign, Save } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MoneySetup() {
-  const [stakes, setStakes] = useState({ pointValue: 10, skinsEntry: 20, teamBet: 50 })
+  const [money, setMoney] = useState({ stakeAmount: 20, sideBetAmount: 17 })
 
   useEffect(() => {
-    onValue(ref(db, 'tournament/money'), (snap) => snap.val() && setStakes(snap.val()))
+    onValue(ref(db, 'tournament/money'), snap => snap.val() && setMoney(snap.val()))
   }, [])
 
   return (
-    <div className="min-h-screen bg-black text-white p-8 font-sans uppercase">
-      <Link href="/setup" className="text-emerald-500 font-black italic mb-12 inline-block"><ArrowLeft size={18} /> BACK</Link>
-      <div className="max-w-xl mx-auto bg-zinc-900 p-8 rounded-[2.5rem] border-2 border-zinc-800 shadow-2xl">
-        <div className="flex items-center gap-3 mb-8 text-emerald-500"><DollarSign /><h1 className="text-3xl font-black italic">Blitz Stakes</h1></div>
-        <div className="space-y-8">
-          <div><label className="text-zinc-600 font-black text-[10px] block mb-2">STAKE PER POINT ($)</label>
-            <input type="number" value={stakes.pointValue} onChange={e => setStakes({...stakes, pointValue: Number(e.target.value)})} className="w-full bg-black border-2 border-zinc-800 p-5 rounded-2xl font-black text-emerald-400 text-2xl italic" />
+    <div className="min-h-screen bg-black text-white p-8 font-sans uppercase italic">
+      <Link href="/setup" className="text-emerald-500 font-black mb-12 inline-block flex items-center gap-2"><ArrowLeft size={18} /> BACK</Link>
+      <div className="max-w-xl mx-auto bg-zinc-900 p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl">
+        <div className="flex items-center gap-3 mb-10 text-emerald-500"><DollarSign size={32} /><h1 className="text-4xl font-black">Financial Config</h1></div>
+        
+        <div className="space-y-10">
+          <div>
+            <label className="text-zinc-600 font-black text-[10px] block mb-3 tracking-widest">MAIN STAKE / SKINS ($)</label>
+            <input type="number" value={money.stakeAmount} onChange={e => setMoney({...money, stakeAmount: Number(e.target.value)})} className="w-full bg-black border-2 border-zinc-800 p-5 rounded-2xl font-black text-emerald-400 text-3xl" />
           </div>
-          <button onClick={() => set(ref(db, 'tournament/money'), stakes)} className="w-full bg-emerald-500 text-black p-6 rounded-2xl font-black italic text-xl flex items-center justify-center gap-3 hover:bg-emerald-400 transition-all shadow-xl">
-            <Save size={24} /> Update Financials
+          
+          <div>
+            <label className="text-zinc-600 font-black text-[10px] block mb-3 tracking-widest">SIDE BET BASE STAKE ($)</label>
+            <input type="number" value={money.sideBetAmount} onChange={e => setMoney({...money, sideBetAmount: Number(e.target.value)})} className="w-full bg-black border-2 border-zinc-800 p-5 rounded-2xl font-black text-blue-400 text-3xl" />
+          </div>
+
+          <button onClick={() => set(ref(db, 'tournament/money'), money).then(() => alert("💰 STAKES UPDATED"))} className="w-full bg-emerald-500 text-black py-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-3 shadow-xl">
+            <Save size={24} /> SAVE FINANCIALS
           </button>
         </div>
       </div>
