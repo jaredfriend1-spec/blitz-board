@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue, push } from 'firebase/database'
-import { ArrowLeft, Save, Flag, AlertTriangle, Camera, Loader2, BookOpen, Trash2, CheckCircle2, X } from 'lucide-react'
+import { ArrowLeft, Save, Flag, AlertTriangle, Camera, Loader2, BookOpen, Trash2, CheckCircle2, X, RefreshCw, Check } from 'lucide-react'
 import Link from 'next/link'
 
 const DEFAULT_HOLES = Array.from({ length: 18 }, (_, i) => ({ par: 4, hcp: i + 1 }))
@@ -15,21 +15,22 @@ export default function CourseSetup() {
   const [savedCourses, setSavedCourses] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // Scan review state
+  const [scanPreview, setScanPreview] = useState<{ par: number; hcp: number }[] | null>(null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Load active course
     onValue(ref(db, 'tournament/course'), snap => {
       if (snap.val()) {
         setCourseName(snap.val().name || "")
         if (snap.val().holes) setHoles(snap.val().holes)
       }
     })
-    // Load course history
     onValue(ref(db, 'courseHistory'), snap => {
       if (snap.val()) {
         const list = Object.values(snap.val()) as any[]
-        // Sort newest first
         setSavedCourses(list.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)))
       } else {
         setSavedCourses([])
@@ -43,11 +44,19 @@ export default function CourseSetup() {
     setHoles(newHoles)
   }
 
+  const updatePreviewHole = (index: number, field: 'par' | 'hcp', value: number) => {
+    if (!scanPreview) return
+    const updated = [...scanPreview]
+    updated[index] = { ...updated[index], [field]: value }
+    setScanPreview(updated)
+  }
+
   const clearCourse = () => {
     if (!confirm("CLEAR ALL HOLE DATA?")) return
     setCourseName("")
     setHoles(DEFAULT_HOLES)
     setError("")
+    setScanPreview(null)
   }
 
   const compressImage = (file: File): Promise<string> => {
@@ -76,6 +85,7 @@ export default function CourseSetup() {
     if (!file) return
     setIsScanning(true)
     setError("")
+    setScanPreview(null)
     try {
       const compressedBase64 = await compressImage(file)
       const res = await fetch('/api/scan-scorecard', {
@@ -85,7 +95,8 @@ export default function CourseSetup() {
       })
       const data = await res.json()
       if (res.ok && data.success && data.holes?.length === 18) {
-        setHoles(data.holes)
+        // Show preview instead of immediately applying
+        setScanPreview(data.holes)
       } else {
         setError(`SCAN FAILED: ${data.error || "Could not parse scorecard."}`)
       }
@@ -95,6 +106,18 @@ export default function CourseSetup() {
       setIsScanning(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  // Accept scan results — apply to main holes
+  const acceptScan = () => {
+    if (!scanPreview) return
+    setHoles(scanPreview)
+    setScanPreview(null)
+  }
+
+  // Discard scan results
+  const discardScan = () => {
+    setScanPreview(null)
   }
 
   const saveCourse = async () => {
@@ -109,16 +132,13 @@ export default function CourseSetup() {
       pars: holes.map(h => h.par)
     }
 
-    // Save as active tournament course
     await set(ref(db, 'tournament/course'), courseData)
 
-    // Save to course history (only if not already there by exact name)
     const alreadySaved = savedCourses.find(c => c.name.toLowerCase() === courseName.trim().toLowerCase())
     if (!alreadySaved) {
       const hRef = push(ref(db, 'courseHistory'))
       await set(hRef, { id: hRef.key, savedAt: Date.now(), ...courseData })
     } else {
-      // Update existing entry
       await set(ref(db, `courseHistory/${alreadySaved.id}`), {
         ...alreadySaved,
         holes,
@@ -136,6 +156,7 @@ export default function CourseSetup() {
     setHoles(course.holes)
     setError("")
     setShowHistory(false)
+    setScanPreview(null)
   }
 
   const deleteSavedCourse = async (courseId: string, e: React.MouseEvent) => {
@@ -148,6 +169,78 @@ export default function CourseSetup() {
   const back9 = holes.slice(9, 18)
   const frontPar = front9.reduce((sum, h) => sum + h.par, 0)
   const backPar = back9.reduce((sum, h) => sum + h.par, 0)
+
+  const previewFront = scanPreview?.slice(0, 9) || []
+  const previewBack = scanPreview?.slice(9, 18) || []
+  const previewFrontPar = previewFront.reduce((sum, h) => sum + h.par, 0)
+  const previewBackPar = previewBack.reduce((sum, h) => sum + h.par, 0)
+
+  // Reusable scorecard table renderer
+  const renderScorecardTable = (
+    nineHoles: { par: number; hcp: number }[],
+    startHole: number,
+    totalPar: number,
+    label: string,
+    onUpdate: (index: number, field: 'par' | 'hcp', value: number) => void,
+    baseIndex: number,
+    highlight = false
+  ) => (
+    <div>
+      <div className={`text-[10px] font-black tracking-widest mb-3 ${highlight ? 'text-amber-400' : 'text-zinc-600'}`}>
+        {label}
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-zinc-800">
+        <table className="w-full text-center">
+          <thead>
+            <tr className="bg-zinc-950">
+              <th className="py-3 px-4 text-left text-xs text-zinc-500 font-black w-20">HOLE</th>
+              {nineHoles.map((_, i) => (
+                <th key={i} className="py-3 px-2 text-sm font-black text-zinc-400 w-12">{startHole + i}</th>
+              ))}
+              <th className="py-3 px-4 text-sm font-black text-zinc-500">{startHole === 1 ? 'OUT' : 'IN'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-zinc-800">
+              <td className="py-3 px-4 text-left text-xs font-black text-emerald-500">PAR</td>
+              {nineHoles.map((hole, i) => (
+                <td key={i} className="py-2 px-1">
+                  <select
+                    value={hole.par}
+                    onChange={e => onUpdate(baseIndex + i, 'par', Number(e.target.value))}
+                    className={`w-10 text-white text-sm font-black text-center rounded-lg py-2 outline-none border transition-colors cursor-pointer
+                      ${highlight ? 'bg-amber-500/20 border-amber-500/50 focus:border-amber-400' : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 focus:border-emerald-500'}`}
+                  >
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                    <option value={5}>5</option>
+                  </select>
+                </td>
+              ))}
+              <td className="py-3 px-4 font-black text-emerald-400 text-base">{totalPar}</td>
+            </tr>
+            <tr className="border-t border-zinc-800 bg-black/40">
+              <td className="py-3 px-4 text-left text-xs font-black text-blue-400">HCP</td>
+              {nineHoles.map((hole, i) => (
+                <td key={i} className="py-2 px-1">
+                  <input
+                    type="number"
+                    value={hole.hcp}
+                    onChange={e => onUpdate(baseIndex + i, 'hcp', Number(e.target.value))}
+                    className={`w-10 text-sm font-black text-center rounded-lg py-2 outline-none border transition-colors
+                      ${highlight ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 focus:border-amber-400' : 'bg-zinc-800 hover:bg-zinc-700 text-blue-300 border-zinc-700 focus:border-blue-500'}`}
+                    min={1}
+                    max={18}
+                  />
+                </td>
+              ))}
+              <td className="py-3 px-4 text-zinc-600 font-black text-xs">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
@@ -164,7 +257,6 @@ export default function CourseSetup() {
             <h1 className="text-4xl font-black">Course Setup</h1>
           </div>
           <div className="flex gap-3 w-full sm:w-auto">
-            {/* History button */}
             <button
               onClick={() => setShowHistory(!showHistory)}
               className="flex-1 sm:flex-none bg-zinc-900 border-2 border-zinc-700 hover:border-blue-500 text-zinc-300 px-5 py-3 rounded-2xl font-black flex items-center justify-center gap-2 transition-colors text-sm"
@@ -172,19 +264,21 @@ export default function CourseSetup() {
               <BookOpen size={18} className="text-blue-400"/>
               SAVED ({savedCourses.length})
             </button>
-            {/* Scan button */}
             <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden"/>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isScanning}
               className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-2xl font-black flex items-center justify-center gap-2 transition-colors text-sm disabled:bg-zinc-800 disabled:text-zinc-500"
             >
-              {isScanning ? <><Loader2 size={18} className="animate-spin"/> SCANNING...</> : <><Camera size={18}/> SCAN CARD</>}
+              {isScanning
+                ? <><Loader2 size={18} className="animate-spin"/> SCANNING...</>
+                : <><Camera size={18}/> SCAN CARD</>
+              }
             </button>
           </div>
         </div>
 
-        {/* COURSE HISTORY PANEL */}
+        {/* COURSE HISTORY */}
         {showHistory && (
           <div className="bg-zinc-900 rounded-3xl border-2 border-blue-500/30 p-6 space-y-3">
             <div className="flex justify-between items-center mb-2">
@@ -208,10 +302,7 @@ export default function CourseSetup() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] font-black text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">LOAD</span>
-                  <button
-                    onClick={(e) => deleteSavedCourse(course.id, e)}
-                    className="text-zinc-700 hover:text-rose-500 transition-colors p-1"
-                  >
+                  <button onClick={(e) => deleteSavedCourse(course.id, e)} className="text-zinc-700 hover:text-rose-500 transition-colors p-1">
                     <Trash2 size={16}/>
                   </button>
                 </div>
@@ -234,8 +325,56 @@ export default function CourseSetup() {
           </div>
         )}
 
-        {/* MAIN CARD */}
-        <div className="bg-zinc-900 rounded-[2.5rem] border-2 border-zinc-800 overflow-hidden">
+        {/* ── SCAN REVIEW PANEL ── */}
+        {scanPreview && (
+          <div className="bg-zinc-900 rounded-[2.5rem] border-2 border-amber-500/50 overflow-hidden shadow-2xl shadow-amber-500/10">
+            
+            {/* Review header */}
+            <div className="p-6 border-b-2 border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"/>
+                  <h2 className="text-xl font-black text-amber-400">REVIEW SCAN RESULTS</h2>
+                </div>
+                <p className="text-zinc-500 text-xs font-black mt-1 tracking-wider">
+                  CHECK ALL VALUES BEFORE ACCEPTING · EDIT ANY THAT LOOK WRONG
+                </p>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button
+                  onClick={discardScan}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 px-5 py-3 rounded-2xl font-black text-sm transition-colors"
+                >
+                  <RefreshCw size={16}/> RESCAN
+                </button>
+                <button
+                  onClick={acceptScan}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-black px-6 py-3 rounded-2xl font-black text-sm transition-colors shadow-lg"
+                >
+                  <Check size={16}/> LOOKS GOOD · ACCEPT
+                </button>
+              </div>
+            </div>
+
+            {/* Preview scorecard — editable */}
+            <div className="p-4 sm:p-6 space-y-6">
+              {renderScorecardTable(previewFront, 1, previewFrontPar, 'FRONT 9 — VERIFY BELOW', updatePreviewHole, 0, true)}
+              {renderScorecardTable(previewBack, 10, previewBackPar, 'BACK 9 — VERIFY BELOW', updatePreviewHole, 9, true)}
+              <div className="flex justify-end">
+                <div className="bg-black border border-amber-500/30 rounded-2xl px-6 py-3 flex items-center gap-4">
+                  <span className="text-zinc-600 text-xs font-black">SCANNED TOTAL PAR</span>
+                  <span className={`text-2xl font-black ${previewFrontPar + previewBackPar === 72 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {previewFrontPar + previewBackPar}
+                    {previewFrontPar + previewBackPar !== 72 && <span className="text-xs ml-2 text-amber-500">≠ 72</span>}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MAIN COURSE EDITOR ── */}
+        <div className={`bg-zinc-900 rounded-[2.5rem] border-2 overflow-hidden transition-all ${scanPreview ? 'border-zinc-800 opacity-50 pointer-events-none' : 'border-zinc-800'}`}>
 
           {/* Course name + actions */}
           <div className="p-6 border-b-2 border-zinc-800 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
@@ -261,115 +400,10 @@ export default function CourseSetup() {
             </div>
           </div>
 
-          {/* SCORECARD TABLE — Front 9 */}
-          <div className="p-4 sm:p-6">
-            <div className="text-[10px] font-black text-zinc-600 tracking-widest mb-3">FRONT 9</div>
-            <div className="overflow-x-auto rounded-2xl border border-zinc-800">
-              <table className="w-full text-center">
-                <thead>
-                  <tr className="bg-zinc-950">
-                    <th className="py-3 px-4 text-left text-xs text-zinc-500 font-black w-20">HOLE</th>
-                    {front9.map((_, i) => (
-                      <th key={i} className="py-3 px-2 text-sm font-black text-zinc-400 w-12">{i + 1}</th>
-                    ))}
-                    <th className="py-3 px-4 text-sm font-black text-zinc-500">OUT</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* PAR ROW */}
-                  <tr className="border-t border-zinc-800">
-                    <td className="py-3 px-4 text-left text-xs font-black text-emerald-500">PAR</td>
-                    {front9.map((hole, i) => (
-                      <td key={i} className="py-2 px-1">
-                        <select
-                          value={hole.par}
-                          onChange={e => updateHole(i, 'par', Number(e.target.value))}
-                          className="w-10 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-black text-center rounded-lg py-2 outline-none border border-zinc-700 focus:border-emerald-500 transition-colors cursor-pointer"
-                        >
-                          <option value={3}>3</option>
-                          <option value={4}>4</option>
-                          <option value={5}>5</option>
-                        </select>
-                      </td>
-                    ))}
-                    <td className="py-3 px-4 font-black text-emerald-400 text-base">{frontPar}</td>
-                  </tr>
-                  {/* HCP ROW */}
-                  <tr className="border-t border-zinc-800 bg-black/40">
-                    <td className="py-3 px-4 text-left text-xs font-black text-blue-400">HCP</td>
-                    {front9.map((hole, i) => (
-                      <td key={i} className="py-2 px-1">
-                        <input
-                          type="number"
-                          value={hole.hcp}
-                          onChange={e => updateHole(i, 'hcp', Number(e.target.value))}
-                          className="w-10 bg-zinc-800 hover:bg-zinc-700 text-blue-300 text-sm font-black text-center rounded-lg py-2 outline-none border border-zinc-700 focus:border-blue-500 transition-colors"
-                          min={1}
-                          max={18}
-                        />
-                      </td>
-                    ))}
-                    <td className="py-3 px-4 text-zinc-600 font-black text-xs">—</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* SCORECARD TABLE — Back 9 */}
-            <div className="text-[10px] font-black text-zinc-600 tracking-widest mb-3 mt-6">BACK 9</div>
-            <div className="overflow-x-auto rounded-2xl border border-zinc-800">
-              <table className="w-full text-center">
-                <thead>
-                  <tr className="bg-zinc-950">
-                    <th className="py-3 px-4 text-left text-xs text-zinc-500 font-black w-20">HOLE</th>
-                    {back9.map((_, i) => (
-                      <th key={i} className="py-3 px-2 text-sm font-black text-zinc-400 w-12">{i + 10}</th>
-                    ))}
-                    <th className="py-3 px-4 text-sm font-black text-zinc-500">IN</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* PAR ROW */}
-                  <tr className="border-t border-zinc-800">
-                    <td className="py-3 px-4 text-left text-xs font-black text-emerald-500">PAR</td>
-                    {back9.map((hole, i) => (
-                      <td key={i} className="py-2 px-1">
-                        <select
-                          value={hole.par}
-                          onChange={e => updateHole(i + 9, 'par', Number(e.target.value))}
-                          className="w-10 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-black text-center rounded-lg py-2 outline-none border border-zinc-700 focus:border-emerald-500 transition-colors cursor-pointer"
-                        >
-                          <option value={3}>3</option>
-                          <option value={4}>4</option>
-                          <option value={5}>5</option>
-                        </select>
-                      </td>
-                    ))}
-                    <td className="py-3 px-4 font-black text-emerald-400 text-base">{backPar}</td>
-                  </tr>
-                  {/* HCP ROW */}
-                  <tr className="border-t border-zinc-800 bg-black/40">
-                    <td className="py-3 px-4 text-left text-xs font-black text-blue-400">HCP</td>
-                    {back9.map((hole, i) => (
-                      <td key={i} className="py-2 px-1">
-                        <input
-                          type="number"
-                          value={hole.hcp}
-                          onChange={e => updateHole(i + 9, 'hcp', Number(e.target.value))}
-                          className="w-10 bg-zinc-800 hover:bg-zinc-700 text-blue-300 text-sm font-black text-center rounded-lg py-2 outline-none border border-zinc-700 focus:border-blue-500 transition-colors"
-                          min={1}
-                          max={18}
-                        />
-                      </td>
-                    ))}
-                    <td className="py-3 px-4 text-zinc-600 font-black text-xs">—</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* TOTALS FOOTER */}
-            <div className="mt-4 flex justify-end">
+          <div className="p-4 sm:p-6 space-y-6">
+            {renderScorecardTable(front9, 1, frontPar, 'FRONT 9', updateHole, 0)}
+            {renderScorecardTable(back9, 10, backPar, 'BACK 9', updateHole, 9)}
+            <div className="flex justify-end">
               <div className="bg-black border border-zinc-800 rounded-2xl px-6 py-3 flex items-center gap-4">
                 <span className="text-zinc-600 text-xs font-black">TOTAL PAR</span>
                 <span className="text-emerald-400 text-2xl font-black">{frontPar + backPar}</span>
@@ -378,6 +412,13 @@ export default function CourseSetup() {
           </div>
 
         </div>
+
+        {scanPreview && (
+          <p className="text-center text-amber-500/60 text-xs font-black tracking-widest">
+            ↑ ACCEPT OR RESCAN ABOVE TO EDIT THE COURSE
+          </p>
+        )}
+
       </div>
     </div>
   )
