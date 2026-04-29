@@ -6,7 +6,7 @@ import { ref, set, get, onValue } from 'firebase/database'
 import {
   Trophy, Settings, Target, DollarSign, Flag,
   ChevronRight, X, Archive, Loader2, CheckCircle2,
-  BookOpen, AlertTriangle
+  BookOpen, AlertTriangle, ShieldAlert
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -158,13 +158,16 @@ export default function TournamentHub() {
             <div className="flex items-center gap-2 text-zinc-500 font-bold text-[10px] tracking-[.4em]">
               <Flag size={12} className="text-emerald-500"/>
               <span>{courseName}</span>
-              {tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-600">{tripName}</span></>}
-              {currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-500">{currentDay}</span></>}
+              {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-600">{tripName}</span></>}
+              {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-500">{currentDay}</span></>}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/guide" className="hidden md:flex items-center gap-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 px-4 py-2 rounded-xl text-[10px] font-black text-zinc-500 hover:text-white transition-all">
               <BookOpen size={14}/> HOW TO
+            </Link>
+            <Link href="/setup/admin" className="hidden md:flex items-center gap-2 bg-zinc-900 border border-zinc-800 hover:border-rose-500/50 px-4 py-2 rounded-xl text-[10px] font-black text-zinc-500 hover:text-rose-400 transition-all">
+              <ShieldAlert size={14}/> ADMIN
             </Link>
             <div className="text-right hidden md:block">
               <p className="text-[10px] font-black text-zinc-600 mb-1">STATUS</p>
@@ -198,8 +201,8 @@ export default function TournamentHub() {
           ))}
         </div>
 
-        {/* CLOSE DAY BUTTON — only when there's live data */}
-        {hasData && (
+        {/* CLOSE DAY BUTTON — only for real (non-mock) tournaments */}
+        {hasData && !isMock && (
           <button onClick={openCloseModal}
             className="w-full flex items-center justify-between bg-zinc-900/60 border-2 border-zinc-800 hover:border-blue-500/50 p-5 rounded-[2rem] font-black text-zinc-500 hover:text-blue-400 transition-all group shadow-xl">
             <span className="flex items-center gap-3 text-sm">
