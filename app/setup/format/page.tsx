@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue } from 'firebase/database'
-import { ArrowLeft, Save, CheckCircle2, Info, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react'
 import Link from 'next/link'
 
 type BallType = 'net' | 'gross'
@@ -81,6 +81,42 @@ function ParSection({ label, balls, onChange, warning }: {
           ))}
         </div>
       </div>
+        {/* ── CONFIRMATION MODAL ── */}
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-zinc-900 rounded-[2rem] border-2 border-amber-500/50 shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={20} className="text-amber-400"/>
+                  <h2 className="font-black text-base uppercase italic text-amber-400">Scores In Play</h2>
+                </div>
+                <button onClick={() => setShowConfirm(false)}><X size={18} className="text-zinc-500 hover:text-white transition-colors"/></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-zinc-300 text-sm font-black normal-case leading-relaxed">
+                  You're changing the team scoring format from <span className="text-white font-black">"{currentFormatName}"</span> to <span className="text-white font-black">"{newFormatName}"</span> while scores are already in play.
+                </p>
+                <p className="text-amber-400 text-xs font-black normal-case leading-relaxed">
+                  ⚠ All team match payouts will immediately recalculate using the new format. This cannot be undone.
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={doSave}
+                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-black py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
+                  >
+                    Yes, Change Format
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   )
 }
@@ -90,15 +126,24 @@ export default function FormatPage() {
   const [customFormat, setCustomFormat] = useState<FormatSpec>({ ...JEFFS_BLITZ, name:'Custom Format' })
   const [saved, setSaved] = useState(false)
   const [minTeamSize, setMinTeamSize] = useState<number|null>(null)
+  const [scoresExist, setScoresExist] = useState(false)
+  const [currentFormatName, setCurrentFormatName] = useState("Jeff's Blitz")
+  const [showConfirm, setShowConfirm] = useState(false)
 
   // Load current format and team sizes
   useEffect(() => {
     onValue(ref(db,'tournament/format'), snap => {
       if (snap.val()) {
         const f = snap.val()
+        setCurrentFormatName(f.name || "Jeff's Blitz")
         if (f.name === "Jeff's Blitz") setMode('blitz')
         else { setMode('custom'); setCustomFormat(f) }
       }
+    })
+    onValue(ref(db,'tournament/scores'), snap => {
+      if (!snap.val()) { setScoresExist(false); return }
+      const allScores = Object.values(snap.val()) as number[][]
+      setScoresExist(allScores.some(s => Array.isArray(s) && s.some(v => v > 0)))
     })
     // Get min team size for validation
     onValue(ref(db,'tournament/teams'), snap => {
@@ -114,9 +159,22 @@ export default function FormatPage() {
     setCustomFormat({ ...sp.format, name: sp.label === "Jeff's Blitz" ? 'Custom Format' : sp.label })
   }
 
-  const saveFormat = async () => {
+  const newFormatName = mode === 'blitz' ? "Jeff's Blitz" : customFormat.name
+  const isChanging = newFormatName !== currentFormatName
+
+  const handleSave = () => {
+    // If scores exist and format is actually changing, show confirmation
+    if (scoresExist && isChanging) {
+      setShowConfirm(true)
+    } else {
+      doSave()
+    }
+  }
+
+  const doSave = async () => {
     const toSave = mode === 'blitz' ? JEFFS_BLITZ : customFormat
     await set(ref(db,'tournament/format'), toSave)
+    setShowConfirm(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
@@ -259,7 +317,7 @@ export default function FormatPage() {
           </div>
         )}
 
-        <button onClick={saveFormat}
+        <button onClick={handleSave}
           className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-2 transition-colors shadow-lg">
           <Save size={20}/> SAVE FORMAT
         </button>
@@ -269,6 +327,42 @@ export default function FormatPage() {
           ← BACK WITHOUT SAVING
         </Link>
       </div>
+        {/* ── CONFIRMATION MODAL ── */}
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-zinc-900 rounded-[2rem] border-2 border-amber-500/50 shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={20} className="text-amber-400"/>
+                  <h2 className="font-black text-base uppercase italic text-amber-400">Scores In Play</h2>
+                </div>
+                <button onClick={() => setShowConfirm(false)}><X size={18} className="text-zinc-500 hover:text-white transition-colors"/></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-zinc-300 text-sm font-black normal-case leading-relaxed">
+                  You're changing the team scoring format from <span className="text-white font-black">"{currentFormatName}"</span> to <span className="text-white font-black">"{newFormatName}"</span> while scores are already in play.
+                </p>
+                <p className="text-amber-400 text-xs font-black normal-case leading-relaxed">
+                  ⚠ All team match payouts will immediately recalculate using the new format. This cannot be undone.
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={doSave}
+                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-black py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
+                  >
+                    Yes, Change Format
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   )
 }
