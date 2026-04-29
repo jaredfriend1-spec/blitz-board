@@ -74,8 +74,8 @@ export default function RosterManager() {
         </div>
       )}
 
-      <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block">
-        <ArrowLeft size={18} className="inline mr-2"/> HUB
+      <Link href="/setup/admin" className="text-emerald-500 font-black mb-8 inline-block">
+        <ArrowLeft size={18} className="inline mr-2"/> CHECKLIST
       </Link>
 
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12">

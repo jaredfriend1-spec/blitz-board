@@ -1,37 +1,131 @@
 "use client"
+import { useState, useEffect } from 'react'
+import { db } from '@/lib/firebase'
+import { ref, onValue } from 'firebase/database'
 import Link from 'next/link'
-import { ArrowLeft, Users, Trophy, Swords, DollarSign, ShieldAlert, Archive } from 'lucide-react'
+import { ArrowLeft, Users, Flag, Swords, DollarSign, ShieldAlert, Archive, ChevronRight, CheckCircle2, Circle, Play } from 'lucide-react'
 
 export default function SetupCenter() {
-  const menuItems = [
-    { title: "Manage Roster", icon: <Users />, href: "/setup/roster", desc: "Add or delete teams and players" },
-    { title: "Matchup Manager", icon: <Swords />, href: "/setup/matchups", desc: "Set Nassau and Side Bets" },
-    { title: "Tournament Settings", icon: <Trophy />, href: "/setup/settings", desc: "Set Course Name and Pars" },
-    { title: "Money Setup", icon: <DollarSign />, href: "/setup/money", desc: "Set Stakes and Allocations" },
-    { title: "Admin Tools", icon: <ShieldAlert />, href: "/setup/admin", desc: "Wipe Board or Archive Play" },
-    { title: "View History", icon: <Archive />, href: "/history", desc: "Access Past Tournament Ledgers" }, // <-- Added this
+  const [stepsComplete, setStepsComplete] = useState(0)
+  const [courseReady, setCourseReady] = useState(false)
+  const [rosterReady, setRosterReady] = useState(false)
+  const [moneyReady, setMoneyReady] = useState(false)
+  const [matchupsReady, setMatchupsReady] = useState(false)
+
+  useEffect(() => {
+    onValue(ref(db, 'tournament/course'), snap => setCourseReady(!!(snap.val()?.holes?.length === 18)))
+    onValue(ref(db, 'tournament/teams'), snap => {
+      const t = snap.val()
+      setRosterReady(!!(t && Object.values(t).some((tm: any) => (tm.playerIds || []).length > 0)))
+    })
+    onValue(ref(db, 'tournament/money'), snap => setMoneyReady(!!(snap.val()?.entryFee > 0)))
+    onValue(ref(db, 'tournament/matchups'), snap => setMatchupsReady(!!(snap.val() && Object.keys(snap.val()).length > 0)))
+  }, [])
+
+  useEffect(() => {
+    setStepsComplete([courseReady, rosterReady, moneyReady, matchupsReady].filter(Boolean).length)
+  }, [courseReady, rosterReady, moneyReady, matchupsReady])
+
+  const allDone = stepsComplete === 4
+
+  const quickLinks = [
+    { title: "Course Setup", icon: <Flag size={20}/>, href: "/setup/settings", done: courseReady, color: "text-emerald-500" },
+    { title: "Roster & Teams", icon: <Users size={20}/>, href: "/setup/roster", done: rosterReady, color: "text-blue-400" },
+    { title: "Money & Pots", icon: <DollarSign size={20}/>, href: "/setup/money", done: moneyReady, color: "text-yellow-400" },
+    { title: "Side Bets", icon: <Swords size={20}/>, href: "/setup/matchups", done: matchupsReady, color: "text-amber-400" },
   ]
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans uppercase italic">
-      <div className="max-w-4xl mx-auto">
-        <Link href="/" className="flex items-center text-emerald-400 mb-12 font-black">
-          <ArrowLeft size={20} className="mr-2" /> BACK TO HUB
+    <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans uppercase italic">
+      <div className="max-w-2xl mx-auto">
+        <Link href="/" className="flex items-center text-emerald-400 mb-8 font-black text-sm hover:text-emerald-300 transition-colors">
+          <ArrowLeft size={18} className="mr-2" /> HUB
         </Link>
-        <h1 className="text-5xl font-black text-emerald-500 mb-12 tracking-tighter uppercase">Setup Center</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-          {menuItems.map((item) => (
-            <Link key={item.title} href={item.href}>
-              <div className="bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] hover:border-emerald-500 transition-all group shadow-xl h-full flex flex-col justify-between">
-                <div className="text-emerald-500 mb-6 group-hover:scale-110 transition-transform">{item.icon}</div>
+
+        <h1 className="text-4xl font-black text-white mb-8 tracking-tighter">Setup Center</h1>
+
+        {/* ── WIZARD HERO CARD ── */}
+        <Link href="/setup/admin" className="block mb-6">
+          <div className={`rounded-[2.5rem] border-2 p-6 sm:p-8 transition-all shadow-2xl group ${
+            allDone ? 'border-emerald-500/60 bg-emerald-950/20 hover:border-emerald-400' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-500'
+          }`}>
+            <div className="flex items-start justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${allDone ? 'bg-emerald-500' : 'bg-zinc-800'}`}>
+                  <ShieldAlert size={24} className={allDone ? 'text-black' : 'text-zinc-400'}/>
+                </div>
                 <div>
-                  <h2 className="text-2xl font-black mb-2 uppercase">{item.title}</h2>
-                  <p className="text-zinc-500 font-bold text-[10px] uppercase tracking-widest">{item.desc}</p>
+                  <h2 className="text-2xl font-black tracking-tight">Tournament Wizard</h2>
+                  <p className="text-[10px] font-black text-zinc-500 tracking-widest mt-0.5">
+                    {allDone ? 'ALL STEPS COMPLETE · READY TO PLAY' : 'STEP-BY-STEP SETUP CHECKLIST'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight size={24} className={`mt-1 transition-transform group-hover:translate-x-1 ${allDone ? 'text-emerald-400' : 'text-zinc-600'}`}/>
+            </div>
+
+            {/* Progress bar */}
+            <div className="bg-zinc-800 rounded-full h-2 mb-3 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${allDone ? 'bg-emerald-400' : 'bg-zinc-500'}`}
+                style={{ width: `${(stepsComplete / 4) * 100}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              {/* Step dots */}
+              <div className="flex items-center gap-2">
+                {[courseReady, rosterReady, moneyReady, matchupsReady].map((done, i) => (
+                  <div key={i} className={`flex items-center justify-center ${done ? 'text-emerald-400' : 'text-zinc-700'}`}>
+                    {done ? <CheckCircle2 size={16}/> : <Circle size={16}/>}
+                  </div>
+                ))}
+                <span className="text-xs font-black text-zinc-500 ml-1">{stepsComplete}/4 DONE</span>
+              </div>
+
+              {allDone && (
+                <span className="text-[10px] font-black text-emerald-400 tracking-widest flex items-center gap-1">
+                  <Play size={10}/> START TOURNAMENT
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
+
+        {/* ── QUICK ACCESS GRID ── */}
+        <p className="text-[9px] font-black text-zinc-600 tracking-[0.3em] mb-3 px-1">QUICK ACCESS</p>
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {quickLinks.map(item => (
+            <Link key={item.title} href={item.href}>
+              <div className={`bg-zinc-900 border-2 p-5 rounded-[1.5rem] hover:border-zinc-600 transition-all group h-full flex flex-col justify-between ${
+                item.done ? 'border-zinc-700' : 'border-zinc-800'
+              }`}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className={item.color}>{item.icon}</span>
+                  {item.done
+                    ? <CheckCircle2 size={14} className="text-emerald-500"/>
+                    : <Circle size={14} className="text-zinc-700"/>
+                  }
+                </div>
+                <div>
+                  <p className="font-black text-sm text-white leading-tight">{item.title}</p>
+                  <p className={`text-[9px] font-black mt-1 tracking-wider ${item.done ? 'text-emerald-600' : 'text-zinc-600'}`}>
+                    {item.done ? 'CONFIGURED ✓' : 'NOT SET'}
+                  </p>
                 </div>
               </div>
             </Link>
           ))}
         </div>
+
+        {/* ── SECONDARY LINKS ── */}
+        <div className="space-y-2">
+          <Link href="/history" className="flex items-center justify-between bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-4 rounded-2xl font-black text-sm text-zinc-400 hover:text-white transition-all">
+            <span className="flex items-center gap-3"><Archive size={16} className="text-blue-400"/> View Tournament History</span>
+            <ChevronRight size={16} className="text-zinc-700"/>
+          </Link>
+        </div>
+
       </div>
     </div>
   )

@@ -244,8 +244,8 @@ export default function CourseSetup() {
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
-      <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block">
-        <ArrowLeft size={18} className="inline mr-2"/> HUB
+      <Link href="/setup/admin" className="text-emerald-500 font-black mb-8 inline-block">
+        <ArrowLeft size={18} className="inline mr-2"/> CHECKLIST
       </Link>
 
       <div className="max-w-5xl mx-auto space-y-6">
