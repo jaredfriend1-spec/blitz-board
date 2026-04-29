@@ -341,6 +341,15 @@ export default function PayoutsPage() {
       <Link href="/" className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
         <ArrowLeft size={18}/> HUB
       </Link>
+<<<<<<< HEAD
+
+      <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
+        <div className="flex items-center gap-4">
+          <DollarSign size={36} className="text-emerald-500"/>
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tighter">Match Payouts</h1>
+        </div>
+
+=======
 
       <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
         <div className="flex items-center gap-4">
@@ -353,6 +362,7 @@ export default function PayoutsPage() {
         >
           <Settings size={14}/> FORMAT
         </Link>
+>>>>>>> 53af54a1adce0e299d776e83d6cb7dadec2e145f
       </div>
 
       {/* Active format banner */}
