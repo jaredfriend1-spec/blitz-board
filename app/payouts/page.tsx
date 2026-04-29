@@ -73,7 +73,7 @@ export default function PayoutsPage() {
 
     const runNine = (start: number, end: number) => {
       let bets = [{ score: 0, pressed: false, isBase: true }];
-      let holeResults = []; let totalP = 0;
+      let holeResults: any[] = []; let totalP = 0;
       for (let i = start; i <= end; i++) {
         let winner = null; let newP = 0;
         if (sA_final[i] > 0 && sB_final[i] > 0) {
@@ -105,7 +105,6 @@ export default function PayoutsPage() {
     const strokesA = Math.max(...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
     const strokesB = Math.max(...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)));
     
-    // TYPE SAFE MATH
     const totalA = Number(f9.payoutA) + Number(b9.payoutA) + Number(birdieA);
     const totalB = Number(f9.payoutB) + Number(b9.payoutB) + Number(birdieB);
     const net = totalA - totalB;
@@ -115,83 +114,192 @@ export default function PayoutsPage() {
 
   const renderDots = (count: number) => {
     if (!count || count <= 0) return null;
-    return <div className="flex justify-center -mt-1 gap-[2px]">{Array.from({length: Math.min(count, 3)}).map((_, idx) => <div key={idx} className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>)}</div>;
+    return (
+      <div className="flex justify-center mt-1 gap-[3px]">
+        {Array.from({length: Math.min(count, 3)}).map((_, idx) => (
+          <div key={idx} className="w-2 h-2 bg-yellow-400 rounded-full"/>
+        ))}
+      </div>
+    );
+  }
+
+  // Split holes into front 9 and back 9 for two-row display
+  const renderScorecardNine = (res: any, m: any, start: number, label: string) => {
+    const holes = Array.from({length: 9}, (_, i) => start + i);
+    const holeResults = start === 0 ? res.f9.holeResults : res.b9.holeResults;
+    return (
+      <div className="mb-4">
+        <div className="text-[10px] font-black text-zinc-600 tracking-widest mb-2 px-1">{label}</div>
+        <div className="bg-black rounded-2xl border border-zinc-900 overflow-hidden">
+          <table className="w-full text-center">
+            <thead>
+              <tr className="bg-zinc-950">
+                <th className="py-3 px-4 text-left text-xs text-zinc-600 font-black w-28">PLAYER</th>
+                {holes.map(i => (
+                  <th key={i} className="py-3 px-1 text-sm text-zinc-500 font-black w-10">{i + 1}</th>
+                ))}
+                <th className="py-3 px-3 text-sm text-zinc-500 font-black">TOT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Side A scores */}
+              <tr className="border-t border-zinc-900">
+                <td className="py-4 px-4 text-left text-emerald-400 font-black text-sm truncate max-w-[7rem]">{m.sideA}</td>
+                {holes.map(i => (
+                  <td key={i} className="py-3 px-1">
+                    <div className="text-base font-black text-white">{res.sA_net[i] || <span className="text-zinc-700">—</span>}</div>
+                    {renderDots(res.sA_dots[i])}
+                  </td>
+                ))}
+                <td className="py-3 px-3 font-black text-emerald-400 text-base">
+                  {holes.reduce((acc, i) => acc + (res.sA_net[i] || 0), 0) || '—'}
+                </td>
+              </tr>
+              {/* Side B scores */}
+              <tr className="border-t border-zinc-900 bg-white/[0.02]">
+                <td className="py-4 px-4 text-left text-blue-400 font-black text-sm truncate max-w-[7rem]">{m.sideB}</td>
+                {holes.map(i => (
+                  <td key={i} className="py-3 px-1">
+                    <div className="text-base font-black text-white">{res.sB_net[i] || <span className="text-zinc-700">—</span>}</div>
+                    {renderDots(res.sB_dots[i])}
+                  </td>
+                ))}
+                <td className="py-3 px-3 font-black text-blue-400 text-base">
+                  {holes.reduce((acc, i) => acc + (res.sB_net[i] || 0), 0) || '—'}
+                </td>
+              </tr>
+              {/* Winner row */}
+              <tr className="border-t-2 border-zinc-800 bg-zinc-900/60">
+                <td className="py-3 px-4 text-left text-zinc-600 font-black text-xs">HOLE WIN</td>
+                {holeResults.map((h: any, idx: number) => (
+                  <td key={idx} className="py-3 px-1 relative">
+                    <span className={`text-sm font-black ${
+                      h.winner === 'A' ? 'text-emerald-400' : 
+                      h.winner === 'B' ? 'text-blue-400' : 
+                      h.winner === 'T' ? 'text-zinc-500' : 'text-zinc-800'
+                    }`}>
+                      {h.winner === 'T' ? '½' : h.winner || '·'}
+                    </span>
+                    {h.newP > 0 && (
+                      <div className="absolute -top-0.5 -right-0.5">
+                        <Zap size={10} className="text-yellow-400"/>
+                      </div>
+                    )}
+                  </td>
+                ))}
+                <td/>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
-      <Link href="/" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2" /> HUB</Link>
-      <div className="flex items-center gap-4 mb-12"><DollarSign size={40} className="text-emerald-500"/><h1 className="text-5xl font-black tracking-tighter">Match Payouts</h1></div>
-      <div className="max-w-7xl mx-auto space-y-16">
+      <Link href="/" className="text-emerald-500 font-black mb-8 inline-block">
+        <ArrowLeft size={18} className="inline mr-2" /> HUB
+      </Link>
+      <div className="flex items-center gap-4 mb-12">
+        <DollarSign size={40} className="text-emerald-500"/>
+        <h1 className="text-5xl font-black tracking-tighter">Match Payouts</h1>
+      </div>
+
+      <div className="max-w-4xl mx-auto space-y-16">
         {matches.map(m => {
           const res = calculateMatch(m);
           if (!res) return null;
           return (
-            <div key={m.id} className="bg-zinc-950 p-6 sm:p-10 rounded-[3rem] border-2 border-zinc-800 shadow-2xl overflow-hidden">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 border-b-2 border-zinc-900 pb-8 gap-4">
-                <div>
-                  <h2 className="text-3xl font-black">{m.sideA} <span className="text-zinc-700 mx-2">VS</span> {m.sideB}</h2>
-                  <div className="mt-3 flex gap-2">
-                    <span className={`px-3 py-1 rounded-lg text-xs font-black ${m.scoringType === 'GROSS' ? 'bg-rose-500/20 text-rose-500' : 'bg-emerald-500/20 text-emerald-500'}`}>{m.scoringType || 'NET'}</span>
-                    {res.strokesA > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideA} GETS {res.strokesA}</span>}
-                    {res.strokesB > 0 && <span className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-xs font-black">{m.sideB} GETS {res.strokesB}</span>}
+            <div key={m.id} className="bg-zinc-950 rounded-[3rem] border-2 border-zinc-800 shadow-2xl overflow-hidden">
+              
+              {/* Match header */}
+              <div className="p-6 sm:p-8 border-b-2 border-zinc-900">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-2xl sm:text-3xl font-black">
+                      <span className="text-emerald-400">{m.sideA}</span>
+                      <span className="text-zinc-600 mx-3 text-xl">VS</span>
+                      <span className="text-blue-400">{m.sideB}</span>
+                    </h2>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className={`px-3 py-1.5 rounded-lg text-xs font-black ${
+                        m.scoringType === 'GROSS' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'
+                      }`}>{m.scoringType || 'NET'}</span>
+                      {res.strokesA > 0 && <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1.5 rounded-lg text-xs font-black">{m.sideA} +{res.strokesA}</span>}
+                      {res.strokesB > 0 && <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1.5 rounded-lg text-xs font-black">{m.sideB} +{res.strokesB}</span>}
+                      <span className="bg-zinc-900 px-3 py-1.5 rounded-lg text-xs font-black text-zinc-400">Nassau ${m.nassau}</span>
+                      {m.type === 'PvP' && <span className="bg-zinc-900 px-3 py-1.5 rounded-lg text-xs font-black text-yellow-500">Press ${m.press}</span>}
+                      <span className="bg-zinc-900 px-3 py-1.5 rounded-lg text-xs font-black text-blue-400">Bird/Eagle ${m.birdie}/${m.eagle||(m.birdie*2)||0}</span>
+                    </div>
                   </div>
-                  <div className="text-zinc-500 font-black text-xs mt-3 tracking-widest flex items-center gap-3">
-                    <span className="bg-zinc-900 px-3 py-1 rounded-lg uppercase tracking-tighter">Nassau: ${m.nassau || 0}</span>
-                    {m.type === 'PvP' && <span className="bg-zinc-900 px-3 py-1 rounded-lg uppercase tracking-tighter">Press: ${m.press || 0}</span>}
-                    <span className="bg-zinc-900 px-3 py-1 rounded-lg uppercase tracking-tighter">Bird/Eagle: ${m.birdie||0}/${m.eagle||(m.birdie*2)||0}</span>
+                </div>
+              </div>
+
+              {/* Scorecards — front 9 and back 9 separately */}
+              <div className="p-4 sm:p-8">
+                {renderScorecardNine(res, m, 0, 'FRONT 9')}
+                {renderScorecardNine(res, m, 9, 'BACK 9')}
+              </div>
+
+              {/* Payout summary */}
+              <div className="px-4 sm:px-8 pb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-black border border-zinc-800 p-5 rounded-2xl">
+                  <div className="text-zinc-500 text-xs font-black uppercase tracking-widest mb-3">
+                    Front 9 {res.f9.totalPresses > 0 ? `(${res.f9.totalPresses}×Press)` : ''}
+                  </div>
+                  <div className="text-lg font-black">
+                    <span className="text-emerald-400">${res.f9.payoutA}</span>
+                    <span className="text-zinc-700 mx-2">to</span>
+                    <span className="text-blue-400">${res.f9.payoutB}</span>
+                  </div>
+                </div>
+                <div className="bg-black border border-zinc-800 p-5 rounded-2xl">
+                  <div className="text-zinc-500 text-xs font-black uppercase tracking-widest mb-3">
+                    Back 9 {res.b9.totalPresses > 0 ? `(${res.b9.totalPresses}×Press)` : ''}
+                  </div>
+                  <div className="text-lg font-black">
+                    <span className="text-emerald-400">${res.b9.payoutA}</span>
+                    <span className="text-zinc-700 mx-2">to</span>
+                    <span className="text-blue-400">${res.b9.payoutB}</span>
+                  </div>
+                </div>
+                <div className="bg-black border border-zinc-800 p-5 rounded-2xl">
+                  <div className="flex items-center gap-2 text-zinc-500 text-xs font-black uppercase tracking-widest mb-3">
+                    <Target size={12}/> Birdie Pool
+                  </div>
+                  <div className="text-lg font-black">
+                    <span className="text-emerald-400">${res.birdieA}</span>
+                    <span className="text-zinc-700 mx-2">to</span>
+                    <span className="text-blue-400">${res.birdieB}</span>
                   </div>
                 </div>
               </div>
-              <div className="overflow-x-auto mb-8 bg-black rounded-2xl border border-zinc-900 shadow-inner">
-                <table className="w-full text-center min-w-[700px]">
-                  <thead className="text-[10px] text-zinc-600 font-black bg-zinc-950 uppercase italic">
-                    <tr><th className="p-4 text-left border-r border-zinc-900 tracking-tighter">Hole ({m.type === 'PvP' ? 'Best' : 'Agg'})</th>{Array.from({length:18}).map((_,i) => <th key={i} className={`p-2 w-8 ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}>{i+1}</th>)}</tr>
-                  </thead>
-                  <tbody className="text-xs font-black">
-                    <tr className="border-t border-zinc-900">
-                      <td className="p-4 text-left text-emerald-500 truncate border-r border-zinc-900">{m.sideA}</td>
-                      {res.sA_net.map((s: number, i: number) => <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}><div>{s || '-'}</div>{renderDots(res.sA_dots[i])}</td>)}
-                    </tr>
-                    <tr className="border-t border-zinc-900 bg-white/5">
-                      <td className="p-4 text-left text-blue-500 truncate border-r border-zinc-900">{m.sideB}</td>
-                      {res.sB_net.map((s: number, i: number) => <td key={i} className={`p-2 relative ${i===8 ? 'border-r-2 border-zinc-800' : ''}`}><div>{s || '-'}</div>{renderDots(res.sB_dots[i])}</td>)}
-                    </tr>
-                    <tr className="border-t-2 border-zinc-800 bg-zinc-900">
-                      <td className="p-4 text-left text-zinc-500 border-r border-zinc-900 uppercase italic">Winner</td>
-                      {[...res.f9.holeResults, ...res.b9.holeResults].map((h, i) => (
-                        <td key={i} className={`p-2 relative border-r border-zinc-800 last:border-0 ${i===8 ? 'border-r-2 border-zinc-800' : ''} ${h.winner === 'A' ? 'text-emerald-500' : h.winner === 'B' ? 'text-blue-500' : 'text-zinc-700'}`}>
-                          {h.winner || '-'}
-                          {h.newP > 0 && <div className="absolute top-1 left-1 flex"><Zap size={10} className="text-yellow-500 animate-pulse"/></div>}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="text-zinc-500 text-[10px] font-black uppercase mb-2">Front 9 {res.f9.totalPresses > 0 ? `(${res.f9.totalPresses} Press)` : ''}</div>
-                  <div className="text-white font-black mt-1 uppercase italic"><span className="text-emerald-500">${res.f9.payoutA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.f9.payoutB}</span></div>
-                </div>
-                <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="text-zinc-500 text-[10px] font-black uppercase mb-2">Back 9 {res.b9.totalPresses > 0 ? `(${res.b9.totalPresses} Press)` : ''}</div>
-                  <div className="text-white font-black mt-1 uppercase italic"><span className="text-emerald-500">${res.b9.payoutA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.b9.payoutB}</span></div>
-                </div>
-                <div className="bg-black border border-zinc-800 p-6 rounded-2xl">
-                  <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase mb-2"><Target size={12}/> Birdie Pool</div>
-                  <div className="text-white font-black mt-1 uppercase italic"><span className="text-emerald-500">${res.birdieA}</span> <span className="text-zinc-600 mx-1">to</span> <span className="text-blue-500">${res.birdieB}</span></div>
+
+              {/* Net result */}
+              <div className="mx-4 sm:mx-8 mb-8 flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-6 sm:p-8 rounded-3xl gap-4">
+                <div className="text-zinc-500 font-black text-xs tracking-widest">MATCH NET</div>
+                <div className="text-4xl sm:text-5xl font-black">
+                  {res.net > 0 
+                    ? <span className="text-emerald-400">{m.sideB} OWES ${res.net}</span> 
+                    : res.net < 0 
+                    ? <span className="text-blue-400">{m.sideA} OWES ${Math.abs(res.net)}</span> 
+                    : <span className="text-zinc-500">EVEN</span>
+                  }
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-8 rounded-3xl">
-                <div className="text-zinc-500 font-black mb-4 sm:mb-0 uppercase italic text-xs tracking-widest">Match Net</div>
-                <div className="text-4xl font-black">
-                  {res.net > 0 ? <span className="text-emerald-400">{m.sideB} OWES ${res.net}</span> : res.net < 0 ? <span className="text-blue-400">{m.sideA} OWES ${Math.abs(res.net)}</span> : <span className="text-zinc-500 font-black">EVEN</span>}
-                </div>
-              </div>
+
             </div>
           );
         })}
+
+        {matches.length === 0 && (
+          <div className="text-center py-24 text-zinc-700 font-black">
+            <DollarSign size={48} className="mx-auto mb-4 opacity-20"/>
+            <p>NO MATCHES CONFIGURED</p>
+            <p className="text-xs mt-2 tracking-widest">SET UP MATCHUPS IN SETUP CENTER</p>
+          </div>
+        )}
       </div>
     </div>
   )

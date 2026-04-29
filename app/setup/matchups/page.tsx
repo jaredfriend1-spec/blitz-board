@@ -10,7 +10,6 @@ export default function MatchupCenter() {
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
   
-  // Builder State
   const [isBuilding, setIsBuilding] = useState<'PvP' | 'TvT' | null>(null)
   const [newMatch, setNewMatch] = useState({
     sideA: "", 
@@ -18,8 +17,8 @@ export default function MatchupCenter() {
     nassau: 5, 
     press: 5, 
     birdie: 2, 
-    eagle: 5, // NEW: Eagle Bet Unit
-    handicap: 0
+    eagle: 5,
+    scoringType: 'NET' as 'NET' | 'GROSS',
   })
 
   useEffect(() => {
@@ -39,7 +38,7 @@ export default function MatchupCenter() {
       ...newMatch 
     });
     setIsBuilding(null);
-    setNewMatch({ sideA: "", sideB: "", nassau: 5, press: 5, birdie: 2, eagle: 5, handicap: 0 });
+    setNewMatch({ sideA: "", sideB: "", nassau: 5, press: 5, birdie: 2, eagle: 5, scoringType: 'NET' });
   }
 
   const deleteMatch = (id: string) => {
@@ -50,29 +49,35 @@ export default function MatchupCenter() {
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
-      <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2"/> HUB</Link>
+      <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block">
+        <ArrowLeft size={18} className="inline mr-2"/> HUB
+      </Link>
       
       <div className="max-w-5xl mx-auto space-y-12">
-        {/* ACTION SELECTORS */}
+
+        {/* MATCH TYPE SELECTOR */}
         {!isBuilding && (
           <div className="flex gap-4">
             <button onClick={() => setIsBuilding('PvP')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-emerald-500 transition-all text-xl group">
-              <User size={40} className="text-emerald-500 group-hover:scale-110 transition-transform" /> CREATE 1v1 MATCH
+              <User size={40} className="text-emerald-500 group-hover:scale-110 transition-transform" />
+              CREATE 1v1 MATCH
             </button>
             <button onClick={() => setIsBuilding('TvT')} className="flex-1 bg-zinc-900 border-2 border-zinc-800 p-8 rounded-[2rem] font-black flex flex-col items-center gap-4 hover:border-blue-500 transition-all text-xl group">
-              <Users size={40} className="text-blue-500 group-hover:scale-110 transition-transform" /> CREATE TEAM MATCH
+              <Users size={40} className="text-blue-500 group-hover:scale-110 transition-transform" />
+              CREATE TEAM MATCH
             </button>
           </div>
         )}
 
         {/* BUILDER FORM */}
         {isBuilding && (
-          <div className="bg-zinc-900 p-8 rounded-[3rem] border-2 border-emerald-500 shadow-2xl animate-in slide-in-from-top-4">
+          <div className="bg-zinc-900 p-8 rounded-[3rem] border-2 border-emerald-500 shadow-2xl">
             <div className="flex justify-between items-center mb-8 border-b-2 border-zinc-800 pb-4">
               <h2 className="text-3xl font-black text-emerald-500">NEW {isBuilding} MATCHUP</h2>
               <button onClick={() => setIsBuilding(null)} className="text-zinc-500 hover:text-rose-500 font-black">CANCEL</button>
             </div>
             
+            {/* SIDE A / SIDE B */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
               <div className="space-y-4">
                 <label className="text-zinc-500 font-black text-xs">SIDE A</label>
@@ -90,7 +95,36 @@ export default function MatchupCenter() {
               </div>
             </div>
 
-            {/* STAKES CONFIGURATION (4 COLUMNS) */}
+            {/* GROSS / NET TOGGLE — the new piece */}
+            <div className="mb-8 bg-black p-6 rounded-2xl border border-zinc-800">
+              <label className="text-zinc-500 font-black text-[10px] block mb-3 tracking-widest">SCORING TYPE</label>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setNewMatch({...newMatch, scoringType: 'NET'})}
+                  className={`flex-1 py-4 rounded-xl font-black text-lg transition-all border-2 ${
+                    newMatch.scoringType === 'NET'
+                      ? 'bg-emerald-500 border-emerald-400 text-black shadow-lg shadow-emerald-500/20'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                  }`}
+                >
+                  NET
+                  <div className="text-[9px] font-black mt-1 opacity-70 tracking-widest">USES HANDICAPS</div>
+                </button>
+                <button
+                  onClick={() => setNewMatch({...newMatch, scoringType: 'GROSS'})}
+                  className={`flex-1 py-4 rounded-xl font-black text-lg transition-all border-2 ${
+                    newMatch.scoringType === 'GROSS'
+                      ? 'bg-rose-500 border-rose-400 text-white shadow-lg shadow-rose-500/20'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                  }`}
+                >
+                  GROSS
+                  <div className="text-[9px] font-black mt-1 opacity-70 tracking-widest">SCRATCH · NO STROKES</div>
+                </button>
+              </div>
+            </div>
+
+            {/* STAKES */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 bg-black p-6 rounded-2xl border border-zinc-800">
               <div>
                 <label className="text-zinc-500 font-black text-[10px] block mb-2">NASSAU BASE ($)</label>
@@ -106,7 +140,7 @@ export default function MatchupCenter() {
               </div>
               <div>
                 <label className="text-emerald-600 font-black text-[10px] block mb-2 tracking-widest">EAGLE UNIT ($)</label>
-                <input type="number" value={newMatch.eagle} onChange={e => setNewMatch({...newMatch, eagle: Number(e.target.value)})} className="w-full bg-zinc-900 p-3 rounded-xl font-black text-emerald-400 outline-none border border-zinc-700" placeholder="e.g. 5" />
+                <input type="number" value={newMatch.eagle} onChange={e => setNewMatch({...newMatch, eagle: Number(e.target.value)})} className="w-full bg-zinc-900 p-3 rounded-xl font-black text-emerald-400 outline-none border border-zinc-700" />
               </div>
             </div>
 
@@ -116,7 +150,7 @@ export default function MatchupCenter() {
           </div>
         )}
 
-        {/* ACTIVE SIDE BETS LIST */}
+        {/* ACTIVE MATCHES LIST */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-6">
             <Target size={20} className="text-zinc-600" />
@@ -130,19 +164,31 @@ export default function MatchupCenter() {
           )}
 
           {matches.map((m) => (
-            <div key={m.id} className="bg-zinc-900 p-6 rounded-[2rem] border-2 border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl group">
+            <div key={m.id} className="bg-zinc-900 p-6 rounded-[2rem] border-2 border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
               <div className="flex-1 w-full flex items-center justify-between bg-black p-4 rounded-xl border border-zinc-800">
                 <span className={`font-black truncate ${m.type === 'PvP' ? 'text-emerald-500' : 'text-blue-500'}`}>{m.sideA}</span>
                 <Sword size={20} className="text-zinc-600 mx-4 flex-shrink-0" />
                 <span className={`font-black truncate text-right ${m.type === 'PvP' ? 'text-emerald-500' : 'text-blue-500'}`}>{m.sideB}</span>
               </div>
               
-              {/* DISPLAYING ALL 4 STAKES */}
-              <div className="flex items-center gap-4 text-[10px] font-black text-zinc-400 tracking-widest bg-black px-4 py-3 rounded-xl border border-zinc-800">
-                <span title="Nassau">N: <span className="text-white">${m.nassau}</span></span> | 
-                <span title="Press">P: <span className="text-yellow-500">${m.press}</span></span> | 
-                <span title="Birdie">B: <span className="text-blue-400">${m.birdie}</span></span> | 
-                <span title="Eagle" className="text-emerald-500">E: <span className="text-emerald-400">${m.eagle}</span></span>
+              <div className="flex items-center gap-3 flex-wrap justify-center">
+                {/* Scoring type badge */}
+                <span className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider ${
+                  m.scoringType === 'GROSS' 
+                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                }`}>
+                  {m.scoringType || 'NET'}
+                </span>
+                <div className="flex items-center gap-2 text-[10px] font-black text-zinc-400 tracking-widest bg-black px-4 py-2 rounded-xl border border-zinc-800">
+                  <span>N:<span className="text-white ml-1">${m.nassau}</span></span>
+                  <span className="text-zinc-700">|</span>
+                  <span>P:<span className="text-yellow-500 ml-1">${m.press}</span></span>
+                  <span className="text-zinc-700">|</span>
+                  <span>B:<span className="text-blue-400 ml-1">${m.birdie}</span></span>
+                  <span className="text-zinc-700">|</span>
+                  <span>E:<span className="text-emerald-400 ml-1">${m.eagle}</span></span>
+                </div>
               </div>
               
               <button onClick={() => deleteMatch(m.id)} className="text-zinc-700 hover:text-rose-500 transition-colors p-2">
