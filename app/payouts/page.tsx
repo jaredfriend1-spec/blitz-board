@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { ArrowLeft, Zap, ZapOff, DollarSign, Target, Settings } from 'lucide-react'
+import { ArrowLeft, Zap, ZapOff, DollarSign, Target } from 'lucide-react'
 import Link from 'next/link'
 
 // ── TYPES ──────────────────────────────────────────────────────────
@@ -341,7 +341,6 @@ export default function PayoutsPage() {
       <Link href="/" className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
         <ArrowLeft size={18}/> HUB
       </Link>
-<<<<<<< HEAD
 
       <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
         <div className="flex items-center gap-4">
@@ -349,20 +348,6 @@ export default function PayoutsPage() {
           <h1 className="text-4xl sm:text-5xl font-black tracking-tighter">Match Payouts</h1>
         </div>
 
-=======
-
-      <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
-        <div className="flex items-center gap-4">
-          <DollarSign size={36} className="text-emerald-500"/>
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tighter">Match Payouts</h1>
-        </div>
-        <Link
-          href="/setup/format"
-          className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 px-4 py-2 rounded-xl text-xs font-black text-zinc-400 hover:text-white transition-all"
-        >
-          <Settings size={14}/> FORMAT
-        </Link>
->>>>>>> 53af54a1adce0e299d776e83d6cb7dadec2e145f
       </div>
 
       {/* Active format banner */}
