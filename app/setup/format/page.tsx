@@ -81,42 +81,6 @@ function ParSection({ label, balls, onChange, warning }: {
           ))}
         </div>
       </div>
-        {/* ── CONFIRMATION MODAL ── */}
-        {showConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-zinc-900 rounded-[2rem] border-2 border-amber-500/50 shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle size={20} className="text-amber-400"/>
-                  <h2 className="font-black text-base uppercase italic text-amber-400">Scores In Play</h2>
-                </div>
-                <button onClick={() => setShowConfirm(false)}><X size={18} className="text-zinc-500 hover:text-white transition-colors"/></button>
-              </div>
-              <div className="p-6 space-y-4">
-                <p className="text-zinc-300 text-sm font-black normal-case leading-relaxed">
-                  You're changing the team scoring format from <span className="text-white font-black">"{currentFormatName}"</span> to <span className="text-white font-black">"{newFormatName}"</span> while scores are already in play.
-                </p>
-                <p className="text-amber-400 text-xs font-black normal-case leading-relaxed">
-                  ⚠ All team match payouts will immediately recalculate using the new format. This cannot be undone.
-                </p>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={doSave}
-                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-black py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
-                  >
-                    Yes, Change Format
-                  </button>
-                  <button
-                    onClick={() => setShowConfirm(false)}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
     </div>
   )
 }
@@ -130,7 +94,6 @@ export default function FormatPage() {
   const [currentFormatName, setCurrentFormatName] = useState("Jeff's Blitz")
   const [showConfirm, setShowConfirm] = useState(false)
 
-  // Load current format and team sizes
   useEffect(() => {
     onValue(ref(db,'tournament/format'), snap => {
       if (snap.val()) {
@@ -140,18 +103,17 @@ export default function FormatPage() {
         else { setMode('custom'); setCustomFormat(f) }
       }
     })
-    onValue(ref(db,'tournament/scores'), snap => {
-      if (!snap.val()) { setScoresExist(false); return }
-      const allScores = Object.values(snap.val()) as number[][]
-      setScoresExist(allScores.some(s => Array.isArray(s) && s.some(v => v > 0)))
-    })
-    // Get min team size for validation
     onValue(ref(db,'tournament/teams'), snap => {
       if (!snap.val()) { setMinTeamSize(null); return }
       const teams = Object.values(snap.val()) as any[]
       const sizes = teams.map(t => (t.playerIds||[]).length).filter(s => s > 0)
       if (sizes.length > 0) setMinTeamSize(Math.min(...sizes))
       else setMinTeamSize(null)
+    })
+    onValue(ref(db,'tournament/scores'), snap => {
+      if (!snap.val()) { setScoresExist(false); return }
+      const allScores = Object.values(snap.val()) as number[][]
+      setScoresExist(allScores.some(s => Array.isArray(s) && s.some(v => v > 0)))
     })
   }, [])
 
@@ -163,7 +125,6 @@ export default function FormatPage() {
   const isChanging = newFormatName !== currentFormatName
 
   const handleSave = () => {
-    // If scores exist and format is actually changing, show confirmation
     if (scoresExist && isChanging) {
       setShowConfirm(true)
     } else {
@@ -179,17 +140,10 @@ export default function FormatPage() {
     setTimeout(() => setSaved(false), 3000)
   }
 
-  // ── VALIDATION ────────────────────────────────────────────────────
-  // Warn if any par type requires more balls than the smallest team has players
+  // Validation
   const activeFormat = mode === 'blitz' ? JEFFS_BLITZ : customFormat
-  const maxBallsNeeded = Math.max(
-    activeFormat.par3.length,
-    activeFormat.par4.length,
-    activeFormat.par5.length,
-  )
+  const maxBallsNeeded = Math.max(activeFormat.par3.length, activeFormat.par4.length, activeFormat.par5.length)
   const hasTeamSizeWarning = minTeamSize !== null && maxBallsNeeded > minTeamSize
-
-  // Per-par warnings
   const warnPar3 = minTeamSize !== null && activeFormat.par3.length > minTeamSize
   const warnPar4 = minTeamSize !== null && activeFormat.par4.length > minTeamSize
   const warnPar5 = minTeamSize !== null && activeFormat.par5.length > minTeamSize
@@ -209,7 +163,7 @@ export default function FormatPage() {
           </p>
         </div>
 
-        {/* Team size context */}
+        {/* Team size info */}
         {minTeamSize !== null && (
           <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
             <Info size={14} className="text-zinc-500 flex-shrink-0"/>
@@ -219,14 +173,24 @@ export default function FormatPage() {
           </div>
         )}
 
-        {/* Team size warning banner */}
+        {/* Scores in play notice */}
+        {scoresExist && (
+          <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
+            <Info size={14} className="text-blue-400 flex-shrink-0"/>
+            <p className="text-blue-300 text-xs font-black normal-case">
+              Scores are in play — you'll be asked to confirm before changing the format.
+            </p>
+          </div>
+        )}
+
+        {/* Team size warning */}
         {hasTeamSizeWarning && (
           <div className="flex items-start gap-3 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4">
             <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5"/>
             <div>
               <p className="text-amber-400 font-black text-sm">FORMAT MISMATCH</p>
               <p className="text-amber-300/70 text-xs font-black normal-case mt-1 leading-relaxed">
-                Your format needs <strong>{maxBallsNeeded} balls</strong> but your smallest team only has <strong>{minTeamSize} players</strong>. The scoring engine will use fewer balls on holes where not enough players have scored — this may affect payout calculations. Consider reducing balls to {minTeamSize} or adding more players to your teams.
+                Your format needs <strong>{maxBallsNeeded} balls</strong> but your smallest team only has <strong>{minTeamSize} players</strong>. Consider reducing balls to {minTeamSize} or adding more players.
               </p>
             </div>
           </div>
@@ -300,14 +264,12 @@ export default function FormatPage() {
                 ))}
               </div>
             </div>
-
             <ParSection label="PAR 3" balls={customFormat.par3} warning={warnPar3}
               onChange={balls => setCustomFormat(prev => ({...prev, par3: balls}))}/>
             <ParSection label="PAR 4" balls={customFormat.par4} warning={warnPar4}
               onChange={balls => setCustomFormat(prev => ({...prev, par4: balls}))}/>
             <ParSection label="PAR 5" balls={customFormat.par5} warning={warnPar5}
               onChange={balls => setCustomFormat(prev => ({...prev, par5: balls}))}/>
-
             <div className="flex gap-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
               <Info size={14} className="text-blue-400 flex-shrink-0 mt-0.5"/>
               <p className="text-blue-300 text-xs font-black normal-case leading-relaxed">
@@ -327,42 +289,43 @@ export default function FormatPage() {
           ← BACK WITHOUT SAVING
         </Link>
       </div>
-        {/* ── CONFIRMATION MODAL ── */}
-        {showConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-zinc-900 rounded-[2rem] border-2 border-amber-500/50 shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle size={20} className="text-amber-400"/>
-                  <h2 className="font-black text-base uppercase italic text-amber-400">Scores In Play</h2>
-                </div>
-                <button onClick={() => setShowConfirm(false)}><X size={18} className="text-zinc-500 hover:text-white transition-colors"/></button>
+
+      {/* ── CONFIRMATION MODAL ── */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-zinc-900 rounded-[2rem] border-2 border-amber-500/50 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <AlertTriangle size={20} className="text-amber-400"/>
+                <h2 className="font-black text-base uppercase italic text-amber-400">Scores In Play</h2>
               </div>
-              <div className="p-6 space-y-4">
-                <p className="text-zinc-300 text-sm font-black normal-case leading-relaxed">
-                  You're changing the team scoring format from <span className="text-white font-black">"{currentFormatName}"</span> to <span className="text-white font-black">"{newFormatName}"</span> while scores are already in play.
-                </p>
-                <p className="text-amber-400 text-xs font-black normal-case leading-relaxed">
-                  ⚠ All team match payouts will immediately recalculate using the new format. This cannot be undone.
-                </p>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={doSave}
-                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-black py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
-                  >
-                    Yes, Change Format
-                  </button>
-                  <button
-                    onClick={() => setShowConfirm(false)}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm uppercase italic transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <button onClick={() => setShowConfirm(false)}>
+                <X size={18} className="text-zinc-500 hover:text-white transition-colors"/>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-zinc-300 text-sm font-black normal-case leading-relaxed">
+                You're changing the team scoring format from{' '}
+                <span className="text-white">"{currentFormatName}"</span> to{' '}
+                <span className="text-white">"{newFormatName}"</span> while scores are already in play.
+              </p>
+              <p className="text-amber-400 text-xs font-black normal-case leading-relaxed">
+                ⚠ All team match payouts will immediately recalculate using the new format. This cannot be undone.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button onClick={doSave}
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 text-black py-4 rounded-2xl font-black text-sm uppercase italic transition-colors">
+                  Yes, Change Format
+                </button>
+                <button onClick={() => setShowConfirm(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm uppercase italic transition-colors">
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   )
 }
