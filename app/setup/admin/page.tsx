@@ -1,107 +1,17 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, get, push, onValue } from 'firebase/database'
+import { ref, set, get, onValue } from 'firebase/database'
 import {
   ArrowLeft, CheckCircle2, Circle, ChevronRight, Flag, Users,
-  DollarSign, Sword, FlaskConical, Loader2, Archive,
-  Trash2, Play, ShieldAlert, Eraser, Calendar, Save, Layers,
-  RotateCcw, Settings2
+  DollarSign, Sword, Loader2, Archive, Trash2, Play, ShieldAlert,
+  Eraser, Calendar, Save, Layers, RotateCcw
 } from 'lucide-react'
 import Link from 'next/link'
-
-// ── MCC COURSE (from scorecard) ───────────────────────────────────
-const MCC_COURSE = {
-  name: "MCC",
-  holes: [
-    {par:5,hcp:15},{par:4,hcp:3},{par:3,hcp:17},{par:4,hcp:7},{par:4,hcp:1},
-    {par:3,hcp:9},{par:4,hcp:11},{par:4,hcp:5},{par:5,hcp:13},
-    {par:4,hcp:4},{par:3,hcp:8},{par:4,hcp:10},{par:5,hcp:18},{par:3,hcp:14},
-    {par:4,hcp:2},{par:4,hcp:16},{par:4,hcp:6},{par:5,hcp:12},
-  ],
-  pars: [5,4,3,4,4,3,4,4,5, 4,3,4,5,3,4,4,4,5]
-}
-
-// ── 12 PLAYERS ────────────────────────────────────────────────────
-const ALL_PLAYERS = [
-  {name:"JEREMIAS",    handicap:18},
-  {name:"DVP",         handicap:22},
-  {name:"CRIBBY",      handicap:20},
-  {name:"TRANQUILINO", handicap:24},
-  {name:"AL",          handicap:8},
-  {name:"FREDDY",      handicap:16},
-  {name:"SKIP",        handicap:14},
-  {name:"STONEY",      handicap:19},
-  {name:"MIKE",        handicap:12},
-  {name:"CARLOS",      handicap:10},
-  {name:"TONY",        handicap:25},
-  {name:"DAVE",        handicap:15},
-]
-
-// ── REALISTIC SCORES (MCC Par 72) ─────────────────────────────────
-// Pars: [5,4,3,4,4,3,4,4,5, 4,3,4,5,3,4,4,4,5]
-const ALL_SCORES: Record<string,number[]> = {
-  // Team 1 — higher handicappers
-  JEREMIAS:    [6,5,4,4,5,4,5,5,5, 5,3,4,5,5,4,3,5,7], // 84
-  DVP:         [6,4,6,5,5,4,5,4,6, 6,4,6,6,6,4,3,5,5], // 90
-  CRIBBY:      [4,6,5,5,6,4,6,4,5, 5,3,6,4,5,4,4,5,7], // 88
-  TRANQUILINO: [6,6,4,4,6,4,5,5,6, 6,4,5,5,5,5,4,4,6], // 90
-  // Team 2 — mid-low handicappers
-  AL:          [4,6,4,3,6,4,4,4,4, 5,3,4,6,4,5,2,6,6], // 80 (eagle hole 16!)
-  FREDDY:      [6,6,4,5,4,4,5,4,5, 4,3,5,6,4,4,3,5,7], // 84
-  SKIP:        [5,7,5,4,5,3,5,5,5, 4,3,5,4,5,5,3,6,5], // 84
-  STONEY:      [6,6,6,4,4,4,4,5,6, 5,4,4,6,5,4,3,4,5], // 85
-  // Team 3 — mixed
-  MIKE:        [5,4,4,4,5,3,5,4,5, 4,3,5,5,4,4,4,4,5], // 77
-  CARLOS:      [5,4,3,4,5,4,4,4,5, 4,3,4,6,3,4,4,4,5], // 75 (low man)
-  TONY:        [7,5,4,6,5,4,6,5,7, 5,4,6,6,5,5,5,5,7], // 97
-  DAVE:        [6,5,4,4,5,3,5,5,6, 5,3,5,5,4,5,4,5,6], // 85
-}
-
-// ── TEAMS ─────────────────────────────────────────────────────────
-const TEAMS_8 = [
-  {name:"Team 1", players:["JEREMIAS","DVP","CRIBBY","TRANQUILINO"]},
-  {name:"Team 2", players:["AL","FREDDY","SKIP","STONEY"]},
-]
-const TEAMS_12 = [
-  {name:"Team 1", players:["JEREMIAS","DVP","CRIBBY","TRANQUILINO"]},
-  {name:"Team 2", players:["AL","FREDDY","SKIP","STONEY"]},
-  {name:"Team 3", players:["MIKE","CARLOS","TONY","DAVE"]},
-]
-
-// ── MATCHES ───────────────────────────────────────────────────────
-const MATCHES_8 = [
-  {type:'PvP',sideA:'AL',sideB:'JEREMIAS',nassau:5,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true},
-  {type:'PvP',sideA:'DVP',sideB:'STONEY',nassau:10,press:10,birdie:3,eagle:6,scoringType:'NET',autoPress:false},
-  {type:'TvT',sideA:'Team 1',sideB:'Team 2',nassau:10,press:10,birdie:2,eagle:5,scoringType:'NET',autoPress:false},
-]
-const MATCHES_12 = [
-  {type:'PvP',sideA:'AL',sideB:'MIKE',nassau:5,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true},
-  {type:'PvP',sideA:'CARLOS',sideB:'FREDDY',nassau:10,press:5,birdie:3,eagle:6,scoringType:'GROSS',autoPress:false},
-  {type:'PvP',sideA:'JEREMIAS',sideB:'STONEY',nassau:10,press:10,birdie:2,eagle:5,scoringType:'NET',autoPress:true},
-  {type:'TvT',sideA:'Team 1',sideB:'Team 2',nassau:10,press:10,birdie:2,eagle:5,scoringType:'NET',autoPress:false},
-  {type:'TvT',sideA:'Team 2',sideB:'Team 3',nassau:10,press:10,birdie:2,eagle:5,scoringType:'NET',autoPress:false},
-  {type:'TvT',sideA:'Team 1',sideB:'Team 3',nassau:10,press:10,birdie:2,eagle:5,scoringType:'NET',autoPress:false},
-]
-
-// ── FORMATS ───────────────────────────────────────────────────────
-const FORMAT_JEFFS_BLITZ = {
-  name:"Jeff's Blitz",
-  par3:[{type:'net'},{type:'net'},{type:'net'}],
-  par4:[{type:'net'},{type:'net'}],
-  par5:[{type:'net'},{type:'net'}],
-}
-const FORMAT_1G_2N = {
-  name:"1 Gross + 2 Net",
-  par3:[{type:'gross'},{type:'net'},{type:'net'}],
-  par4:[{type:'gross'},{type:'net'},{type:'net'}],
-  par5:[{type:'gross'},{type:'net'},{type:'net'}],
-}
 
 const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5']
 
 export default function AdminWizard() {
-  // Firebase state
   const [meta, setMeta] = useState<any>({})
   const [course, setCourse] = useState<any>(null)
   const [playerCount, setPlayerCount] = useState(0)
@@ -114,19 +24,10 @@ export default function AdminWizard() {
   const [hasAnyData, setHasAnyData] = useState(false)
   const [archivedDays, setArchivedDays] = useState<string[]>([])
 
-  // Trip editing
   const [editingTrip, setEditingTrip] = useState(false)
   const [tripNameInput, setTripNameInput] = useState('')
   const [totalDaysInput, setTotalDaysInput] = useState(1)
-
-  // Mock config
-  const [showMockConfig, setShowMockConfig] = useState(false)
-  const [mockDays, setMockDays] = useState(1)
-  const [mockPlayers, setMockPlayers] = useState<8|12>(12)
-  const [mockFormat, setMockFormat] = useState<'blitz'|'1g2n'>('blitz')
-
-  // Actions
-  const [loading, setLoading] = useState<string|null>(null)
+  const [loading, setLoading] = useState(false)
   const [actionMsg, setActionMsg] = useState<string|null>(null)
   const [showDestructive, setShowDestructive] = useState(false)
   const [transitioningDay, setTransitioningDay] = useState(false)
@@ -172,29 +73,22 @@ export default function AdminWizard() {
       tripName: tripNameInput.trim(),
       totalDays: totalDaysInput,
       currentDay: meta.currentDay || 'Day 1',
-      isMock: meta.isMock || false,
+      isMock: false,
     })
     setEditingTrip(false)
     flash('✓ Trip setup saved.')
   }
 
-  const clearData = async (type:'mock'|'archive') => {
-    if (type === 'mock') {
-      if (!confirm("CLEAR ALL MOCK DATA?")) return
-      setLoading('clear')
-      await set(ref(db,'tournament'), null)
-      flash("✓ Mock data cleared.")
-    } else {
-      const pw = prompt("ADMIN PASSWORD:")
-      if (pw !== "jeff") return alert("ACCESS DENIED")
-      if (!confirm("ARCHIVE current tournament, then wipe everything?")) return
-      setLoading('clear')
-      const snap = await get(ref(db,'tournament'))
-      if (snap.exists()) await set(ref(db,`history/${Date.now()}`), snap.val())
-      await set(ref(db,'tournament'), null)
-      flash("✓ Archived to History. Ready for fresh setup.")
-    }
-    setLoading(null)
+  const clearData = async () => {
+    const pw = prompt("ADMIN PASSWORD:")
+    if (pw !== "jeff") return alert("ACCESS DENIED")
+    if (!confirm("ARCHIVE current tournament to History, then wipe everything?")) return
+    setLoading(true)
+    const snap = await get(ref(db,'tournament'))
+    if (snap.exists()) await set(ref(db,`history/${Date.now()}`), snap.val())
+    await set(ref(db,'tournament'), null)
+    flash("✓ Archived to History. Ready for fresh setup.")
+    setLoading(false)
   }
 
   const startNextDay = async () => {
@@ -216,87 +110,6 @@ export default function AdminWizard() {
     setTransitioningDay(false)
   }
 
-  // ── MOCK LOADER ──────────────────────────────────────────────────
-  const loadMock = async () => {
-    const formatLabel = mockFormat === 'blitz' ? "Jeff's Blitz" : "1 Gross + 2 Net"
-    const teamCount = mockPlayers === 8 ? 2 : 3
-    if (!confirm(`LOAD MOCK TOURNAMENT?\n\n• MCC Course\n• ${mockPlayers} players · ${teamCount} teams\n• ${mockDays} day${mockDays>1?'s':''}\n• Format: ${formatLabel}\n\nThis will overwrite all current data.`)) return
-
-    setLoading('mock')
-    setShowMockConfig(false)
-
-    // Wipe and set course + meta
-    await set(ref(db,'tournament'), null)
-    await set(ref(db,'tournament/course'), MCC_COURSE)
-    await set(ref(db,'tournament/meta'), {
-      isMock: true,
-      tripName: `MCC Test · ${formatLabel}`,
-      totalDays: mockDays,
-      currentDay: 'Day 1',
-    })
-    await set(ref(db,'tournament/format'), mockFormat === 'blitz' ? FORMAT_JEFFS_BLITZ : FORMAT_1G_2N)
-
-    // Players
-    const players = ALL_PLAYERS.slice(0, mockPlayers)
-    const teams = mockPlayers === 8 ? TEAMS_8 : TEAMS_12
-    const matches = mockPlayers === 8 ? MATCHES_8 : MATCHES_12
-
-    const playerIdMap: Record<string,string> = {}
-    for (const p of players) {
-      const pRef = push(ref(db,'tournament/roster'))
-      await set(pRef, { id: pRef.key, name: p.name, handicap: p.handicap })
-      playerIdMap[p.name] = pRef.key!
-    }
-
-    // Teams
-    for (const t of teams) {
-      const tRef = push(ref(db,'tournament/teams'))
-      await set(tRef, { id: tRef.key, name: t.name, playerIds: t.players.map(n => playerIdMap[n]) })
-    }
-
-    // Scores
-    const scoresData: Record<string,number[]> = {}
-    for (const p of players) {
-      const pid = playerIdMap[p.name]
-      if (pid && ALL_SCORES[p.name]) scoresData[pid] = ALL_SCORES[p.name]
-    }
-    await set(ref(db,'tournament/scores'), scoresData)
-
-    // Matches
-    for (const m of matches) {
-      const mRef = push(ref(db,'tournament/matchups'))
-      await set(mRef, { id: mRef.key, ...m })
-    }
-
-    // Money
-    await set(ref(db,'tournament/money'), { entryFee: 25, skinsAllocation: 10 })
-
-    // If multi-day, seed Day 1 archive and set to Day 2
-    if (mockDays > 1) {
-      const snap = await get(ref(db,'tournament'))
-      if (snap.exists()) {
-        await set(ref(db,`history/${Date.now()}`), {
-          ...snap.val(),
-          _meta: { tripName: `MCC Test · ${formatLabel}`, dayLabel: 'Day 1', archivedAt: Date.now(), isFinal: false }
-        })
-      }
-      await set(ref(db,'tournament/scores'), null)
-      await set(ref(db,'tournament/matchups'), null)
-      await set(ref(db,'tournament/meta'), {
-        isMock: true,
-        tripName: `MCC Test · ${formatLabel}`,
-        totalDays: mockDays,
-        currentDay: 'Day 2',
-      })
-      flash(`✓ Mock loaded · ${mockPlayers} players · ${formatLabel} · Day 1 archived · Now on Day 2`)
-    } else {
-      flash(`✓ Mock loaded · ${mockPlayers} players · ${formatLabel} · Check scorer, payouts, and results`)
-    }
-
-    setLoading(null)
-  }
-
-  // ── STEP STATUS ──────────────────────────────────────────────────
   const tripReady = !!(meta.tripName && meta.totalDays > 0)
   const courseReady = !!(course?.holes?.length === 18)
   const rosterReady = playerCount > 0 && teamCount > 0 && teamsHavePlayers
@@ -335,26 +148,22 @@ export default function AdminWizard() {
 
         {/* ── ARCHIVE + RESET — TOP ── */}
         {hasAnyData && (
-          <div className={`rounded-2xl border-2 p-5 ${meta.isMock ? 'border-amber-500/40 bg-amber-500/5' : 'border-blue-500/30 bg-blue-500/5'}`}>
+          <div className="rounded-2xl border-2 border-blue-500/30 bg-blue-500/5 p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] font-black tracking-widest text-zinc-500">
-                {meta.isMock ? '⚠ MOCK DATA LOADED' : `${meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS`}
+                {meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS
               </p>
-              {meta.currentDay && !meta.isMock && (
+              {meta.currentDay && (
                 <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">{meta.currentDay}</span>
               )}
             </div>
             <button
-              onClick={() => clearData(meta.isMock ? 'mock' : 'archive')}
-              disabled={loading === 'clear'}
-              className={`w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border ${
-                meta.isMock
-                  ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-400'
-                  : 'bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400'
-              }`}
+              onClick={clearData}
+              disabled={loading}
+              className="w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
             >
-              {loading === 'clear' ? <Loader2 size={12} className="animate-spin"/> : meta.isMock ? <Trash2 size={12}/> : <Archive size={12}/>}
-              {meta.isMock ? 'CLEAR MOCK DATA' : 'ARCHIVE + FULL RESET'}
+              {loading ? <Loader2 size={12} className="animate-spin"/> : <Archive size={12}/>}
+              ARCHIVE + FULL RESET
             </button>
           </div>
         )}
@@ -376,18 +185,25 @@ export default function AdminWizard() {
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">TRIP NAME</label>
-                <input value={tripNameInput} onChange={e=>setTripNameInput(e.target.value)} className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-base transition-colors" placeholder="E.G. CABO 2026"/>
+                <input value={tripNameInput} onChange={e=>setTripNameInput(e.target.value)}
+                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-base transition-colors"
+                  placeholder="E.G. CABO 2026"/>
               </div>
               <div>
                 <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">NUMBER OF DAYS</label>
                 <div className="flex gap-2">
                   {[1,2,3,4,5].map(n => (
-                    <button key={n} onClick={()=>setTotalDaysInput(n)} className={`w-11 h-11 rounded-xl font-black text-lg transition-all border-2 ${totalDaysInput===n?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>{n}</button>
+                    <button key={n} onClick={()=>setTotalDaysInput(n)}
+                      className={`w-11 h-11 rounded-xl font-black text-lg transition-all border-2 ${totalDaysInput===n?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+                      {n}
+                    </button>
                   ))}
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={saveTripMeta} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-colors"><Save size={14}/> SAVE</button>
+                <button onClick={saveTripMeta} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-colors">
+                  <Save size={14}/> SAVE
+                </button>
                 <button onClick={()=>setEditingTrip(false)} className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-sm transition-colors">CANCEL</button>
               </div>
             </div>
@@ -410,11 +226,10 @@ export default function AdminWizard() {
                       const isCurrent = meta.currentDay === dayLabel
                       return (
                         <div key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-xs ${
-                          isArchived ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' :
-                          isCurrent ? 'border-blue-500/50 bg-blue-500/10 text-blue-400' :
-                          'border-zinc-800 bg-black text-zinc-600'
-                        }`}>
-                          {isArchived ? <CheckCircle2 size={12}/> : isCurrent ? <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/> : <Circle size={12}/>}
+                          isArchived?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':
+                          isCurrent?'border-blue-500/50 bg-blue-500/10 text-blue-400':
+                          'border-zinc-800 bg-black text-zinc-600'}`}>
+                          {isArchived?<CheckCircle2 size={12}/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>:<Circle size={12}/>}
                           {dayLabel}
                           {isCurrent && <span className="text-[9px]">← NOW</span>}
                         </div>
@@ -427,7 +242,7 @@ export default function AdminWizard() {
                 <button onClick={startNextDay} disabled={transitioningDay}
                   className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
                   <span className="flex items-center gap-2">
-                    {transitioningDay ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14}/>}
+                    {transitioningDay?<Loader2 size={14} className="animate-spin"/>:<RotateCcw size={14}/>}
                     CLOSE {meta.currentDay?.toUpperCase()} · START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
                   </span>
                   <span className="text-[9px] text-blue-600">ARCHIVES + RESETS SCORES</span>
@@ -521,96 +336,20 @@ export default function AdminWizard() {
           </Link>
         </div>
 
-        {/* ── MOCK GENERATOR ── */}
-        <div className="pt-4 border-t border-zinc-900">
-          <p className="text-[9px] text-zinc-700 font-black tracking-widest text-center mb-3">TESTING & DEVELOPMENT</p>
-
-          {/* Toggle config */}
-          <button
-            onClick={() => setShowMockConfig(!showMockConfig)}
-            className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 py-3 px-5 rounded-2xl font-black text-sm text-zinc-400 hover:text-white flex items-center justify-between transition-all mb-2"
-          >
-            <span className="flex items-center gap-3"><FlaskConical size={16} className="text-zinc-500"/> LOAD MOCK TOURNAMENT</span>
-            <Settings2 size={14} className={`transition-transform ${showMockConfig?'rotate-90':''} text-zinc-600`}/>
-          </button>
-
-          {/* Config panel */}
-          {showMockConfig && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 mb-2">
-              <p className="text-[9px] font-black text-zinc-500 tracking-widest">MCC · CONFIGURE MOCK</p>
-
-              {/* Days */}
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-2">DAYS</label>
-                <div className="flex gap-2">
-                  {[1,2,3].map(d => (
-                    <button key={d} onClick={()=>setMockDays(d)}
-                      className={`flex-1 py-2.5 rounded-xl font-black text-sm border-2 transition-all ${mockDays===d?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
-                      {d} {d===1?'Day':'Days'}
-                    </button>
-                  ))}
-                </div>
-                {mockDays > 1 && <p className="text-[9px] text-zinc-700 font-black mt-1.5 normal-case">Day 1 will be auto-archived. You'll start on Day 2.</p>}
-              </div>
-
-              {/* Players */}
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-2">FIELD SIZE</label>
-                <div className="flex gap-2">
-                  <button onClick={()=>setMockPlayers(8)} className={`flex-1 py-2.5 rounded-xl font-black text-sm border-2 transition-all ${mockPlayers===8?'bg-blue-600 border-blue-500 text-white':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
-                    8 Players · 2 Teams
-                  </button>
-                  <button onClick={()=>setMockPlayers(12)} className={`flex-1 py-2.5 rounded-xl font-black text-sm border-2 transition-all ${mockPlayers===12?'bg-blue-600 border-blue-500 text-white':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
-                    12 Players · 3 Teams
-                  </button>
-                </div>
-              </div>
-
-              {/* Format */}
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-2">TEAM FORMAT</label>
-                <div className="flex gap-2">
-                  <button onClick={()=>setMockFormat('blitz')} className={`flex-1 py-2.5 rounded-xl font-black text-xs border-2 transition-all ${mockFormat==='blitz'?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
-                    ⭐ Jeff's Blitz
-                  </button>
-                  <button onClick={()=>setMockFormat('1g2n')} className={`flex-1 py-2.5 rounded-xl font-black text-xs border-2 transition-all ${mockFormat==='1g2n'?'bg-purple-500 border-purple-400 text-white':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
-                    1 Gross + 2 Net
-                  </button>
-                </div>
-              </div>
-
-              {/* Load button */}
-              <button
-                onClick={loadMock}
-                disabled={loading === 'mock'}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 transition-all shadow-lg"
-              >
-                {loading === 'mock' ? <><Loader2 size={18} className="animate-spin"/> LOADING...</> : <><FlaskConical size={18}/> LOAD MOCK</>}
-              </button>
-
-              {/* What gets loaded */}
-              <div className="grid grid-cols-2 gap-1.5 text-[9px] font-black text-zinc-700 tracking-widest">
-                <div className="bg-black/50 rounded-lg p-2">MCC COURSE</div>
-                <div className="bg-black/50 rounded-lg p-2">{mockPlayers} PLAYERS · {mockPlayers===8?2:3} TEAMS</div>
-                <div className="bg-black/50 rounded-lg p-2">FULL 18-HOLE SCORES</div>
-                <div className="bg-black/50 rounded-lg p-2">{mockPlayers===8?'3':'6'} MATCHES</div>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* ── DESTRUCTIVE ── */}
-        <div>
+        <div className="pt-4 border-t border-zinc-900">
           <button onClick={()=>setShowDestructive(!showDestructive)} className="w-full text-[9px] font-black text-zinc-700 hover:text-zinc-500 tracking-[0.3em] py-3 transition-colors">
             {showDestructive?'▲ HIDE':'▼ SHOW'} DESTRUCTIVE COMMANDS
           </button>
           {showDestructive && (
             <div className="space-y-2 pt-1">
-              <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("WIPE SCORES ONLY?"))return;await set(ref(db,'tournament/scores'),null);flash("✓ Scores wiped.")}} className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
+              <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("WIPE SCORES ONLY?"))return;await set(ref(db,'tournament/scores'),null);flash("✓ Scores wiped.")}}
+                className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
                 <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>
                 <span className="text-amber-800 text-[9px]">KEEPS TEAMS & BETS</span>
               </button>
-              <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("FULL RESET?"))return;await set(ref(db,'tournament/scores'),null);await set(ref(db,'tournament/teams'),null);await set(ref(db,'tournament/matchups'),null);await set(ref(db,'tournament/meta'),null);flash("✓ Full reset.")}} className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
+              <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("FULL RESET?"))return;await set(ref(db,'tournament/scores'),null);await set(ref(db,'tournament/teams'),null);await set(ref(db,'tournament/matchups'),null);await set(ref(db,'tournament/meta'),null);flash("✓ Full reset.")}}
+                className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
                 <span><Trash2 size={12} className="inline mr-2"/>WIPE ALL DATA</span>
                 <span className="text-rose-900 text-[9px]">FULL RESET</span>
               </button>
