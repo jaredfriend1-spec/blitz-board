@@ -1,8 +1,8 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, onValue } from 'firebase/database'
-import { ArrowLeft, Save, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react'
+import { ref, set, push, onValue, remove } from 'firebase/database'
+import { ArrowLeft, Save, CheckCircle2, Info, AlertTriangle, X, BookOpen, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
 
 type BallType = 'net' | 'gross'
@@ -15,13 +15,6 @@ const JEFFS_BLITZ: FormatSpec = {
   par4: [{ type: 'net' }, { type: 'net' }],
   par5: [{ type: 'net' }, { type: 'net' }],
 }
-
-const STARTING_POINTS = [
-  { label: "Jeff's Blitz", format: JEFFS_BLITZ },
-  { label: "1 Gross + 1 Net", format: { name:"1 Gross + 1 Net", par3:[{type:'gross'},{type:'net'}], par4:[{type:'gross'},{type:'net'}], par5:[{type:'gross'},{type:'net'}] } as FormatSpec },
-  { label: "Best 1 Net", format: { name:"Best 1 Net", par3:[{type:'net'}], par4:[{type:'net'}], par5:[{type:'net'}] } as FormatSpec },
-  { label: "Best 3 Net", format: { name:"Best 3 Net", par3:[{type:'net'},{type:'net'},{type:'net'}], par4:[{type:'net'},{type:'net'},{type:'net'}], par5:[{type:'net'},{type:'net'},{type:'net'}] } as FormatSpec },
-]
 
 function formatSummary(balls: Ball[]): string {
   const gross = balls.filter(b => b.type === 'gross').length
@@ -72,8 +65,8 @@ function ParSection({ label, balls, onChange, warning }: {
             <button key={i} onClick={() => toggleBallType(i)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm transition-all border-2 ${
                 ball.type === 'net'
-                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30'
-                  : 'bg-rose-500/20 border-rose-500/50 text-rose-400 hover:bg-rose-500/30'
+                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                  : 'bg-rose-500/20 border-rose-500/50 text-rose-400'
               }`}>
               <span className="text-[10px] text-zinc-500 font-black">#{i+1}</span>
               {ball.type === 'net' ? 'NET' : 'GROSS'}
@@ -87,12 +80,14 @@ function ParSection({ label, balls, onChange, warning }: {
 
 export default function FormatPage() {
   const [mode, setMode] = useState<'blitz'|'custom'>('blitz')
-  const [customFormat, setCustomFormat] = useState<FormatSpec>({ ...JEFFS_BLITZ, name:'Custom Format' })
+  const [customFormat, setCustomFormat] = useState<FormatSpec>({ ...JEFFS_BLITZ, name: 'My Format' })
   const [saved, setSaved] = useState(false)
   const [minTeamSize, setMinTeamSize] = useState<number|null>(null)
   const [scoresExist, setScoresExist] = useState(false)
   const [currentFormatName, setCurrentFormatName] = useState("Jeff's Blitz")
   const [showConfirm, setShowConfirm] = useState(false)
+  const [savedFormats, setSavedFormats] = useState<any[]>([])
+  const [showSavedFormats, setShowSavedFormats] = useState(false)
 
   useEffect(() => {
     onValue(ref(db,'tournament/format'), snap => {
@@ -115,29 +110,56 @@ export default function FormatPage() {
       const allScores = Object.values(snap.val()) as number[][]
       setScoresExist(allScores.some(s => Array.isArray(s) && s.some(v => v > 0)))
     })
+    // Load saved formats library
+    onValue(ref(db,'savedFormats'), snap => {
+      if (snap.val()) {
+        const list = Object.entries(snap.val()).map(([key, val]: [string, any]) => ({ id: key, ...val }))
+        setSavedFormats(list.sort((a,b) => (b.savedAt||0) - (a.savedAt||0)))
+      } else {
+        setSavedFormats([])
+      }
+    })
   }, [])
-
-  const loadStartingPoint = (sp: typeof STARTING_POINTS[0]) => {
-    setCustomFormat({ ...sp.format, name: sp.label === "Jeff's Blitz" ? 'Custom Format' : sp.label })
-  }
 
   const newFormatName = mode === 'blitz' ? "Jeff's Blitz" : customFormat.name
   const isChanging = newFormatName !== currentFormatName
 
   const handleSave = () => {
-    if (scoresExist && isChanging) {
-      setShowConfirm(true)
-    } else {
-      doSave()
-    }
+    if (scoresExist && isChanging) setShowConfirm(true)
+    else doSave()
   }
 
   const doSave = async () => {
     const toSave = mode === 'blitz' ? JEFFS_BLITZ : customFormat
+    // Save as active tournament format
     await set(ref(db,'tournament/format'), toSave)
+    // Save to library (only custom formats, not Jeff's Blitz — that's always there)
+    if (mode === 'custom' && customFormat.name && customFormat.name !== "Jeff's Blitz") {
+      // Check if name already exists — update instead of duplicate
+      const existing = savedFormats.find(f => f.name.toLowerCase() === customFormat.name.toLowerCase())
+      if (existing) {
+        await set(ref(db,`savedFormats/${existing.id}`), { ...customFormat, savedAt: Date.now(), id: existing.id })
+      } else {
+        const fRef = push(ref(db,'savedFormats'))
+        await set(fRef, { ...customFormat, savedAt: Date.now(), id: fRef.key })
+      }
+    }
     setShowConfirm(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
+  }
+
+  const loadSavedFormat = (format: any) => {
+    setMode('custom')
+    setCustomFormat({ name: format.name, par3: format.par3, par4: format.par4, par5: format.par5 })
+    setShowSavedFormats(false)
+  }
+
+  const deleteSavedFormat = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirm("REMOVE THIS FORMAT FROM LIBRARY?")) {
+      await set(ref(db,`savedFormats/${id}`), null)
+    }
   }
 
   // Validation
@@ -155,50 +177,40 @@ export default function FormatPage() {
       </Link>
 
       <div className="max-w-xl mx-auto space-y-6">
-
         <div>
           <h1 className="text-4xl font-black tracking-tight mb-1">Team Scoring Format</h1>
-          <p className="text-zinc-600 text-xs font-black tracking-widest normal-case">
-            How many balls count per hole for Team vs Team matches
-          </p>
+          <p className="text-zinc-600 text-xs font-black tracking-widest normal-case">How many balls count per hole for Team vs Team matches</p>
         </div>
 
-        {/* Team size info */}
+        {/* Info strips */}
         {minTeamSize !== null && (
           <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
             <Info size={14} className="text-zinc-500 flex-shrink-0"/>
             <p className="text-zinc-500 text-xs font-black normal-case">
-              Your smallest team has <span className="text-white">{minTeamSize} players</span> — format can use up to {minTeamSize} balls per hole safely.
+              Smallest team: <span className="text-white">{minTeamSize} players</span> — safe to use up to {minTeamSize} balls per hole.
             </p>
           </div>
         )}
-
-        {/* Scores in play notice */}
         {scoresExist && (
           <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
             <Info size={14} className="text-blue-400 flex-shrink-0"/>
-            <p className="text-blue-300 text-xs font-black normal-case">
-              Scores are in play — you'll be asked to confirm before changing the format.
-            </p>
+            <p className="text-blue-300 text-xs font-black normal-case">Scores are in play — changing format will ask for confirmation.</p>
           </div>
         )}
-
-        {/* Team size warning */}
         {hasTeamSizeWarning && (
           <div className="flex items-start gap-3 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4">
             <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5"/>
             <div>
               <p className="text-amber-400 font-black text-sm">FORMAT MISMATCH</p>
               <p className="text-amber-300/70 text-xs font-black normal-case mt-1 leading-relaxed">
-                Your format needs <strong>{maxBallsNeeded} balls</strong> but your smallest team only has <strong>{minTeamSize} players</strong>. Consider reducing balls to {minTeamSize} or adding more players.
+                Format needs <strong>{maxBallsNeeded} balls</strong> but smallest team has <strong>{minTeamSize} players</strong>. Reduce balls to {minTeamSize} or add more players.
               </p>
             </div>
           </div>
         )}
-
         {saved && (
           <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 p-4 rounded-2xl font-black text-sm flex items-center gap-2">
-            <CheckCircle2 size={16}/> FORMAT SAVED
+            <CheckCircle2 size={16}/> FORMAT SAVED{mode === 'custom' ? ' · ADDED TO LIBRARY' : ''}
           </div>
         )}
 
@@ -211,7 +223,6 @@ export default function FormatPage() {
             <div className="text-[10px] font-black text-zinc-600 mt-1 normal-case leading-relaxed">Best 2 Net per hole<br/>Best 3 Net on par 3s</div>
             {mode==='blitz' && <div className="mt-2"><CheckCircle2 size={14} className="text-emerald-400"/></div>}
           </button>
-
           <button onClick={() => setMode('custom')}
             className={`p-5 rounded-[1.75rem] border-2 text-left transition-all ${mode==='custom'?'border-purple-500/60 bg-purple-950/20':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
             <div className="text-2xl mb-2">⚙️</div>
@@ -235,45 +246,66 @@ export default function FormatPage() {
                   {row.warn && <AlertTriangle size={12} className="text-amber-400"/>}
                   {row.label}
                 </span>
-                <span className={row.warn ? 'text-amber-400' : 'text-white'}>{row.desc}</span>
+                <span className={row.warn?'text-amber-400':'text-white'}>{row.desc}</span>
               </div>
             ))}
-            <p className="text-[10px] text-zinc-700 font-black normal-case pt-2 border-t border-zinc-800">
-              Each player can only count once per hole. Engine picks the optimal combination.
-            </p>
           </div>
         )}
 
         {/* CUSTOM CONFIGURATOR */}
         {mode === 'custom' && (
           <div className="space-y-4">
+            {/* Format name */}
             <div>
               <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-2">FORMAT NAME</label>
               <input value={customFormat.name} onChange={e => setCustomFormat(prev => ({...prev, name: e.target.value}))}
                 className="w-full bg-zinc-900 border-2 border-zinc-700 focus:border-purple-500 p-4 rounded-2xl font-black text-white text-lg outline-none transition-colors"
                 placeholder="MY CUSTOM FORMAT"/>
             </div>
-            <div>
-              <p className="text-[10px] font-black text-zinc-600 tracking-widest mb-2">START FROM A BASE</p>
-              <div className="flex gap-2 flex-wrap">
-                {STARTING_POINTS.map(sp => (
-                  <button key={sp.label} onClick={() => loadStartingPoint(sp)}
-                    className="px-3 py-2 rounded-xl font-black text-xs bg-zinc-900 border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white transition-all">
-                    {sp.label}
-                  </button>
-                ))}
+
+            {/* Saved formats library */}
+            {savedFormats.length > 0 && (
+              <div>
+                <button onClick={() => setShowSavedFormats(!showSavedFormats)}
+                  className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-700 hover:border-zinc-500 px-4 py-3 rounded-2xl font-black text-sm text-zinc-400 hover:text-white transition-all">
+                  <span className="flex items-center gap-2"><BookOpen size={14} className="text-purple-400"/> LOAD FROM LIBRARY ({savedFormats.length})</span>
+                  {showSavedFormats?<ChevronUp size={14}/>:<ChevronDown size={14}/>}
+                </button>
+                {showSavedFormats && (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 space-y-2 mt-1">
+                    {savedFormats.map(f => (
+                      <button key={f.id} onClick={() => loadSavedFormat(f)}
+                        className="w-full flex items-center justify-between bg-black border border-zinc-800 hover:border-purple-500 p-3 rounded-xl transition-all group">
+                        <div className="text-left">
+                          <div className="font-black text-sm text-white group-hover:text-purple-400 transition-colors">{f.name}</div>
+                          <div className="text-[9px] text-zinc-600 font-black mt-0.5">
+                            P3:{formatSummary(f.par3)} · P4:{formatSummary(f.par4)} · P5:{formatSummary(f.par5)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity">LOAD</span>
+                          <button onClick={e => deleteSavedFormat(f.id, e)} className="text-zinc-700 hover:text-rose-500 transition-colors p-1">
+                            <Trash2 size={14}/>
+                          </button>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+
             <ParSection label="PAR 3" balls={customFormat.par3} warning={warnPar3}
               onChange={balls => setCustomFormat(prev => ({...prev, par3: balls}))}/>
             <ParSection label="PAR 4" balls={customFormat.par4} warning={warnPar4}
               onChange={balls => setCustomFormat(prev => ({...prev, par4: balls}))}/>
             <ParSection label="PAR 5" balls={customFormat.par5} warning={warnPar5}
               onChange={balls => setCustomFormat(prev => ({...prev, par5: balls}))}/>
+
             <div className="flex gap-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
               <Info size={14} className="text-blue-400 flex-shrink-0 mt-0.5"/>
               <p className="text-blue-300 text-xs font-black normal-case leading-relaxed">
-                Each player can only contribute one score per hole — not both net and gross. The engine finds the best combination automatically.
+                Each player counts once per hole — not both net and gross. Engine finds the best combination automatically.
               </p>
             </div>
           </div>
@@ -290,7 +322,7 @@ export default function FormatPage() {
         </Link>
       </div>
 
-      {/* ── CONFIRMATION MODAL ── */}
+      {/* CONFIRMATION MODAL */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-zinc-900 rounded-[2rem] border-2 border-amber-500/50 shadow-2xl overflow-hidden">
@@ -299,18 +331,14 @@ export default function FormatPage() {
                 <AlertTriangle size={20} className="text-amber-400"/>
                 <h2 className="font-black text-base uppercase italic text-amber-400">Scores In Play</h2>
               </div>
-              <button onClick={() => setShowConfirm(false)}>
-                <X size={18} className="text-zinc-500 hover:text-white transition-colors"/>
-              </button>
+              <button onClick={() => setShowConfirm(false)}><X size={18} className="text-zinc-500 hover:text-white transition-colors"/></button>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-zinc-300 text-sm font-black normal-case leading-relaxed">
-                You're changing the team scoring format from{' '}
-                <span className="text-white">"{currentFormatName}"</span> to{' '}
-                <span className="text-white">"{newFormatName}"</span> while scores are already in play.
+                You're changing from <span className="text-white">"{currentFormatName}"</span> to <span className="text-white">"{newFormatName}"</span> while scores are in play.
               </p>
               <p className="text-amber-400 text-xs font-black normal-case leading-relaxed">
-                ⚠ All team match payouts will immediately recalculate using the new format. This cannot be undone.
+                ⚠ All team match payouts will recalculate immediately. This cannot be undone.
               </p>
               <div className="flex gap-3 pt-2">
                 <button onClick={doSave}
