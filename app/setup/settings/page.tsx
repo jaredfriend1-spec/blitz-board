@@ -115,6 +115,34 @@ export default function CourseSetup() {
     setScanPreview(null)
   }
 
+  const acceptAndSave = async () => {
+    if (!scanPreview) return
+    if (!courseName.trim()) {
+      setHoles(scanPreview)
+      setScanPreview(null)
+      setError("SCAN ACCEPTED · PLEASE ENTER A COURSE NAME AND TAP SAVE")
+      return
+    }
+    const hcpSet = new Set(scanPreview.map(h => h.hcp))
+    if (hcpSet.size !== 18) {
+      setHoles(scanPreview)
+      setScanPreview(null)
+      setError("HCP VALUES NOT UNIQUE — PLEASE REVIEW AND SAVE MANUALLY")
+      return
+    }
+    const courseData = { name: courseName.trim(), holes: scanPreview, pars: scanPreview.map(h => h.par) }
+    await set(ref(db, 'tournament/course'), courseData)
+    const alreadySaved = savedCourses.find((c:any) => c.name.toLowerCase() === courseName.trim().toLowerCase())
+    if (!alreadySaved) {
+      const hRef = push(ref(db, 'courseHistory'))
+      await set(hRef, { id: hRef.key, savedAt: Date.now(), ...courseData })
+    }
+    setHoles(scanPreview)
+    setScanPreview(null)
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 3000)
+  }
+
   // Discard scan results
   const discardScan = () => {
     setScanPreview(null)
@@ -244,8 +272,8 @@ export default function CourseSetup() {
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
-      <Link href="/setup/admin" className="text-emerald-500 font-black mb-8 inline-block">
-        <ArrowLeft size={18} className="inline mr-2"/> CHECKLIST
+      <Link href="/setup" className="text-emerald-500 font-black mb-8 inline-block">
+        <ArrowLeft size={18} className="inline mr-2"/> HUB
       </Link>
 
       <div className="max-w-5xl mx-auto space-y-6">
@@ -349,9 +377,15 @@ export default function CourseSetup() {
                 </button>
                 <button
                   onClick={acceptScan}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-black px-6 py-3 rounded-2xl font-black text-sm transition-colors shadow-lg"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-4 py-3 rounded-2xl font-black text-sm transition-colors"
                 >
-                  <Check size={16}/> LOOKS GOOD · ACCEPT
+                  <Check size={16}/> ACCEPT ONLY
+                </button>
+                <button
+                  onClick={acceptAndSave}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-3 rounded-2xl font-black text-sm transition-colors shadow-lg"
+                >
+                  <Save size={16}/> ACCEPT & SAVE
                 </button>
               </div>
             </div>
