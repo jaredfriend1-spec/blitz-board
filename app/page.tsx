@@ -151,6 +151,13 @@ export default function LandingPage() {
             </button>
           </div>
 
+          <Link href="/guide"
+            className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
+            <BookOpen size={14} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+            <span className="font-black text-xs text-zinc-600 group-hover:text-emerald-400 transition-colors tracking-widest">
+              EXPLORE HOW BLITZ BOARD WORKS
+            </span>
+          </Link>
           <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
             BLITZ BOARD · {new Date().getFullYear()}
           </p>
@@ -255,10 +262,20 @@ export default function LandingPage() {
           </div>
 
           {/* Switch role */}
-          <div className="flex items-center justify-between text-[10px] font-black text-zinc-700 px-1">
-            <span className="tracking-widest">SIGNED IN AS PLAYER</span>
+          {/* Guide button */}
+          <Link href="/guide"
+            className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/40 px-5 py-4 rounded-2xl transition-all group">
+            <BookOpen size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+            <span className="font-black text-sm text-zinc-500 group-hover:text-emerald-400 transition-colors tracking-widest">
+              EXPLORE HOW BLITZ BOARD WORKS
+            </span>
+            <ChevronRight size={14} className="text-zinc-700 group-hover:text-emerald-400 transition-colors"/>
+          </Link>
+
+          {/* Switch role */}
+          <div className="flex justify-center">
             <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
-              className="text-zinc-600 hover:text-zinc-400 transition-colors tracking-widest">
+              className="text-zinc-700 hover:text-zinc-500 transition-colors tracking-widest font-black text-[10px]">
               SWITCH ROLE →
             </button>
           </div>
@@ -431,13 +448,20 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* Guide + switch role */}
-        <div className="flex items-center justify-between text-[10px] font-black text-zinc-700 px-1">
-          <Link href="/guide" className="hover:text-zinc-500 transition-colors tracking-widest flex items-center gap-1">
-            <BookOpen size={11}/> HOW TO PLAY
-          </Link>
+        {/* Guide button */}
+        <Link href="/guide"
+          className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/40 px-5 py-4 rounded-2xl transition-all group">
+          <BookOpen size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+          <span className="font-black text-sm text-zinc-500 group-hover:text-emerald-400 transition-colors tracking-widest">
+            EXPLORE HOW BLITZ BOARD WORKS
+          </span>
+          <ChevronRight size={14} className="text-zinc-700 group-hover:text-emerald-400 transition-colors"/>
+        </Link>
+
+        {/* Switch role */}
+        <div className="flex justify-center">
           <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
-            className="text-zinc-600 hover:text-zinc-400 transition-colors tracking-widest">
+            className="text-zinc-700 hover:text-zinc-500 transition-colors tracking-widest font-black text-[10px]">
             SWITCH ROLE →
           </button>
         </div>
