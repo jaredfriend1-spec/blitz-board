@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { ArrowLeft, Zap, ZapOff, DollarSign, Target, Settings, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Zap, ZapOff, DollarSign, Target, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 
 // ── TYPES ──────────────────────────────────────────────────────────
@@ -454,10 +454,6 @@ export default function PayoutsPage() {
           <DollarSign size={36} className="text-emerald-500"/>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tighter">Match Payouts</h1>
         </div>
-        <Link href="/setup/format"
-          className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 px-4 py-2 rounded-xl text-xs font-black text-zinc-400 hover:text-white transition-all">
-          <Settings size={14}/> FORMAT: {format.name}
-        </Link>
       </div>
 
       {/* Legend */}
@@ -633,7 +629,7 @@ export default function PayoutsPage() {
 
               {/* Net result */}
               <div className="mx-4 sm:mx-8 mb-8 flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-6 sm:p-8 rounded-3xl gap-4">
-                <div className="text-zinc-500 font-black text-xs tracking-widest">MATCH NET</div>
+                <div className="text-zinc-500 font-black text-xs tracking-widest">MATCH RESULT</div>
                 <div className="text-4xl sm:text-5xl font-black">
                   {res.net > 0
                     ? <span className="text-emerald-400">{sideBLabel} OWES ${res.net}</span>
