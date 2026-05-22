@@ -261,7 +261,6 @@ export default function LandingPage() {
  ))}
  </div>
 
- {/* Switch role */}
  {/* Guide button */}
  <Link href="/guide"
  className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/40 px-5 py-4 rounded-2xl transition-all group">
@@ -273,12 +272,14 @@ export default function LandingPage() {
  </Link>
 
  {/* Switch role */}
+ <div className="pt-1">
  <button
  onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
  className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-600 px-5 py-3.5 rounded-2xl transition-all group"
  >
  <span className="text-zinc-500 group-hover:text-zinc-300 transition-colors text-sm font-semibold">Switch Role</span>
  </button>
+ </div>
  </div>
  </div>
  )
@@ -459,12 +460,14 @@ export default function LandingPage() {
  </Link>
 
  {/* Switch role */}
+ <div className="pt-1">
  <button
  onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
  className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-600 px-5 py-3.5 rounded-2xl transition-all group"
  >
  <span className="text-zinc-500 group-hover:text-zinc-300 transition-colors text-sm font-semibold">Switch Role</span>
  </button>
+ </div>
  </div>
  </div>
  )
