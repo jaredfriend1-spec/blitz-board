@@ -5,7 +5,7 @@ import { ref, onValue, set } from 'firebase/database'
 import {
   ArrowLeft, Archive, Calendar, Users, Trophy, Zap,
   Trash2, ChevronDown, ChevronUp, Medal, Target,
-  Flag, DollarSign, Sword
+  Flag, DollarSign, Sword, RefreshCw, Check
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -93,45 +93,88 @@ function buildRecap(arch: any) {
     return a.tot - b.tot
   })
 
-  // ── MATCH RESULTS (simplified) ────────────────────────────────────
-  const matchResults = matchups.map(m => {
-    const pA = m.type === 'PvP'
-      ? activePlayers.filter(p => p.name === m.sideA)
-      : activePlayers.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id))
-    const pB = m.type === 'PvP'
-      ? activePlayers.filter(p => p.name === m.sideB)
-      : activePlayers.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id))
-    if (pA.length === 0 || pB.length === 0) return null
+  // ── MATCH RESULTS (full payout engine) ──────────────────────────
+  const getStrokes = (playerHcp: number, holeIdx: number, baseHcp: number, isGross: boolean) => {
+    if (isGross) return 0
+    const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx + 1)
+    const diff = Math.max(0, playerHcp - baseHcp)
+    let s = Math.floor(diff / 18)
+    if (hcpRating <= (diff % 18)) s++
+    return s
+  }
 
-    // Simple net total comparison
+  const runNassauNine = (scA: number[], scB: number[], start: number, end: number, nassau: number, press: number, autoPress: boolean) => {
+    let bets = [{ score: 0, pressed: false, isBase: true }]
+    const holeWinners: string[] = []
+    let totalPresses = 0
+    for (let i = start; i <= end; i++) {
+      const sa = scA[i], sb = scB[i]
+      let winner = '·'
+      if (sa > 0 && sb > 0) {
+        if (sa < sb) winner = 'A'
+        else if (sb < sa) winner = 'B'
+        else winner = '½'
+      }
+      holeWinners.push(winner)
+      const delta = winner === 'A' ? 1 : winner === 'B' ? -1 : 0
+      if (delta !== 0) {
+        let newPresses = 0
+        bets.forEach(b => {
+          b.score += delta
+          if (autoPress && Math.abs(b.score) >= 2 && !b.pressed) { b.pressed = true; newPresses++; totalPresses++ }
+        })
+        for (let p = 0; p < newPresses; p++) bets.push({ score: 0, pressed: false, isBase: false })
+      }
+    }
+    let payA = 0, payB = 0
+    bets.forEach(b => {
+      const amt = b.isBase ? nassau : press
+      if (b.score > 0) payA += amt
+      else if (b.score < 0) payB += amt
+    })
+    return { payA, payB, totalPresses, holeWinners }
+  }
+
+  const matchResults = matchups.map(m => {
+    let pA: any[] = [], pB: any[] = []
+    if (m.type === 'PvP') {
+      pA = activePlayers.filter(p => p.name === m.sideA)
+      pB = activePlayers.filter(p => p.name === m.sideB)
+    } else if (m.type === '2v2') {
+      pA = activePlayers.filter(p => p.name === m.sideA || p.name === m.sideA2)
+      pB = activePlayers.filter(p => p.name === m.sideB || p.name === m.sideB2)
+    } else if (m.type === 'Wheel') {
+      return { type: 'Wheel', id: m.id, wheelPlayers: m.wheelPlayers, wheelAmount: m.wheelAmount, scoringType: m.scoringType || 'NET', wheelFormat: m.wheelFormat || 'straight', wheelNassau: m.wheelNassau, wheelPress: m.wheelPress, wheelAutoPress: m.wheelAutoPress, sideA: 'Wheel', sideB: '', winner: '' }
+    } else {
+      pA = activePlayers.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id))
+      pB = activePlayers.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id))
+    }
+    if (pA.length === 0 || pB.length === 0) return null
     const isGross = m.scoringType === 'GROSS'
     const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Number(p.handicap) || 0)
     const baseHcp = Math.min(...allHcps)
-
-    const netTotal = (playerList: any[]) => {
-      return pars.map((par, i) => {
-        const hcpRating = Number(course.holes?.[i]?.hcp) || (i + 1)
-        const nets = playerList.map(p => {
-          const g = scores[p.id]?.[i] || 0
-          if (!g) return 0
-          const diff = Math.max(0, (Number(p.handicap) || 0) - baseHcp)
-          let s = Math.floor(diff / 18)
-          if (hcpRating <= (diff % 18)) s++
-          return g - s
-        }).filter(Boolean)
-        if (nets.length === 0) return 0
-        if (m.type === 'PvP') return Math.min(...nets)
-        const take = par === 3 ? 3 : 2
-        return [...nets].sort((a, b) => a - b).slice(0, take).reduce((a, b) => a + b, 0)
-      }).reduce((a, b) => a + b, 0)
-    }
-
-    const totA = netTotal(pA)
-    const totB = netTotal(pB)
-    if (!totA || !totB) return null
-
-    const winner = totA < totB ? m.sideA : totB < totA ? m.sideB : 'TIE'
-    return { sideA: m.sideA, sideB: m.sideB, totA, totB, winner, type: m.type, scoringType: m.scoringType || 'NET' }
+    const makeNetScores = (playerList: any[]) => pars.map((par, i) => {
+      const valid = playerList.map(p => { const g = scores[p.id]?.[i] || 0; return g > 0 ? g - getStrokes(Number(p.handicap)||0, i, baseHcp, isGross) : 0 }).filter(Boolean)
+      return valid.length > 0 ? Math.min(...valid) : 0
+    })
+    const sA = makeNetScores(pA)
+    const sB = makeNetScores(pB)
+    const nassau = Number(m.nassau) || 5
+    const press = Number(m.press) || 5
+    const autoPress = m.autoPress !== false && (m.type === 'PvP' || m.type === '2v2')
+    const f9 = runNassauNine(sA, sB, 0, 8, nassau, press, autoPress)
+    const b9 = runNassauNine(sA, sB, 9, 17, nassau, press, autoPress)
+    // Total 18 winner
+    let aWins18 = 0, bWins18 = 0
+    for (let i = 0; i < 18; i++) { if(sA[i]>0&&sB[i]>0) { if(sA[i]<sB[i]) aWins18++; else if(sB[i]<sA[i]) bWins18++ } }
+    const tot18Pay = aWins18 > bWins18 ? nassau : bWins18 > aWins18 ? -nassau : 0
+    const birdieA = pars.map((par,i) => { const bg = Math.min(...pA.map(p=>scores[p.id]?.[i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
+    const birdieB = pars.map((par,i) => { const bg = Math.min(...pB.map(p=>scores[p.id]?.[i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
+    const net = (f9.payA - f9.payB) + (b9.payA - b9.payB) + tot18Pay + birdieA - birdieB
+    const winner = net > 0 ? (m.type==='2v2'?`${m.sideA}+${m.sideA2||''}`:m.sideA) : net < 0 ? (m.type==='2v2'?`${m.sideB}+${m.sideB2||''}`:m.sideB) : 'TIE'
+    const sideALabel = m.type==='2v2' ? `${m.sideA} + ${m.sideA2}` : m.sideA
+    const sideBLabel = m.type==='2v2' ? `${m.sideB} + ${m.sideB2}` : m.sideB
+    return { id: m.id, type: m.type, sideA: sideALabel, sideB: sideBLabel, sA, sB, f9, b9, tot18Pay, birdieA, birdieB, net, winner, nassau, press, autoPress, scoringType: m.scoringType||'NET', pars }
   }).filter(Boolean)
 
   return {
@@ -160,6 +203,7 @@ function RankBadge({ rank }: { rank: number }) {
 export default function HistoryPage() {
   const [archives, setArchives] = useState<any[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
 
   useEffect(() => {
     onValue(ref(db, 'history'), snap => {
@@ -400,30 +444,144 @@ export default function HistoryPage() {
                     {recap.matchResults.length > 0 && (
                       <Section title="Match Results" icon={<Sword size={14}/>} color="text-amber-400">
                         <div className="space-y-3">
-                          {recap.matchResults.map((m: any, i: number) => (
-                            <div key={i} className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded ${m.scoringType === 'GROSS' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                    {m.scoringType}
-                                  </span>
-                                  <span className="text-[9px] font-black text-zinc-600">{m.type}</span>
+                          {recap.matchResults.map((m: any, i: number) => {
+                            const matchKey = `${arch.id}-match-${i}`
+                            const isOpen = expandedMatchKey === matchKey
+                            const isWheel = m.type === 'Wheel'
+                            return (
+                              <div key={i} className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
+                                {/* Match pill — tap to expand */}
+                                <button onClick={() => setExpandedMatchKey(isOpen ? null : matchKey)}
+                                  className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/40 transition-colors">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded ${m.scoringType==='GROSS'?'bg-rose-500/20 text-rose-400':'bg-emerald-500/20 text-emerald-400'}`}>{m.scoringType}</span>
+                                    <span className="text-[9px] font-black text-zinc-600">{m.type}</span>
+                                    {!isWheel && <span className={`font-black text-xs ${m.winner==='TIE'?'text-zinc-400':'text-amber-400'}`}>{m.winner==='TIE'?'TIE':`${m.winner} WINS`}</span>}
+                                    {!isWheel && m.net !== 0 && <span className="text-zinc-600 text-[9px] font-black">${Math.abs(m.net)}</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-black text-zinc-600">{isOpen?'▲ HIDE':'▼ DETAILS'}</span>
+                                  </div>
+                                </button>
+
+                                {/* Match summary row */}
+                                <div className="px-4 pb-3 flex items-center justify-between">
+                                  <span className={`font-black text-sm truncate ${!isWheel&&m.net>0?'text-emerald-400':'text-zinc-400'}`}>{m.sideA}</span>
+                                  {!isWheel && <span className="text-zinc-600 font-black text-xs mx-3">VS</span>}
+                                  {!isWheel && <span className={`font-black text-sm truncate text-right ${m.net<0?'text-emerald-400':'text-zinc-400'}`}>{m.sideB}</span>}
+                                  {isWheel && <span className="text-purple-400 text-[10px] font-black">WHEEL · {(m.wheelPlayers||[]).join(' · ')}</span>}
                                 </div>
-                                <span className={`font-black text-sm ${m.winner === 'TIE' ? 'text-zinc-400' : 'text-amber-400'}`}>
-                                  {m.winner === 'TIE' ? 'TIE' : `${m.winner} WINS`}
-                                </span>
+
+                                {/* Expanded scorecard */}
+                                {isOpen && !isWheel && (
+                                  <div className="border-t border-zinc-800 bg-black/30">
+                                    {/* F9 and B9 mini scorecards */}
+                                    {[{start:0,label:'FRONT 9',nine:m.f9},{start:9,label:'BACK 9',nine:m.b9}].map(({start,label,nine}) => (
+                                      <div key={label} className="overflow-x-auto">
+                                        <div className="px-4 py-2 bg-zinc-900/50 border-b border-zinc-800">
+                                          <span className="text-[9px] font-black text-zinc-500 tracking-widest">{label}</span>
+                                          {nine.totalPresses > 0 && <span className="ml-2 text-[9px] font-black text-yellow-400">⚡ {nine.totalPresses}× PRESS</span>}
+                                        </div>
+                                        <table className="w-full text-center" style={{minWidth:'480px'}}>
+                                          <thead>
+                                            <tr className="bg-zinc-950">
+                                              <th className="py-1.5 px-3 text-left text-[9px] text-zinc-600 font-black w-24">SIDE</th>
+                                              {Array.from({length:9},(_,i)=>start+i).map(i => (
+                                                <th key={i} className="py-1.5 w-8">
+                                                  <div className="text-[9px] text-zinc-500 font-black">{i+1}</div>
+                                                  <div className="text-[8px] text-zinc-700 font-black">p{m.pars?.[i]||4}</div>
+                                                </th>
+                                              ))}
+                                              <th className="py-1.5 px-2 text-[9px] text-blue-400 font-black">{start===0?'OUT':'IN'}</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {[{label:m.sideA,scores:m.sA,color:'text-emerald-400'},{label:m.sideB,scores:m.sB,color:'text-blue-400'}].map(side => {
+                                              const nineScores = (side.scores||[]).slice(start,start+9)
+                                              const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+                                              return (
+                                                <tr key={side.label} className="border-t border-zinc-900">
+                                                  <td className={`py-2 px-3 text-left font-black text-[9px] truncate ${side.color}`}>{side.label}</td>
+                                                  {nineScores.map((s:number,i:number) => {
+                                                    const par = m.pars?.[start+i]||4
+                                                    const diff = s>0 ? s-par : null
+                                                    let cls = 'w-6 h-6 rounded flex items-center justify-center mx-auto text-[9px] font-black '
+                                                    if (diff===null) cls+='text-zinc-700'
+                                                    else if (diff<=-2) cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+                                                    else if (diff===-1) cls+='rounded-full border border-red-500 text-red-400'
+                                                    else if (diff===0) cls+='bg-zinc-800 text-white'
+                                                    else if (diff===1) cls+='border border-zinc-600 text-zinc-400'
+                                                    else cls+='border-2 border-zinc-600 text-zinc-500'
+                                                    return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+                                                  })}
+                                                  <td className={`py-2 px-2 font-black text-sm ${side.color}`}>{total||'—'}</td>
+                                                </tr>
+                                              )
+                                            })}
+                                            {/* Hole winners */}
+                                            <tr className="border-t border-zinc-800 bg-zinc-900/40">
+                                              <td className="py-1.5 px-3 text-[9px] font-black text-zinc-600 text-left">HOLE</td>
+                                              {(nine.holeWinners||[]).map((w:string, i:number) => (
+                                                <td key={i} className="py-1 text-center">
+                                                  <span className={`text-[9px] font-black ${w==='A'?'text-emerald-400':w==='B'?'text-blue-400':w==='½'?'text-zinc-500':'text-zinc-800'}`}>{w==='·'?'':w}</span>
+                                                </td>
+                                              ))}
+                                              <td/>
+                                            </tr>
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    ))}
+                                    {/* Payout breakdown */}
+                                    <div className="p-4 grid grid-cols-3 gap-2 border-t border-zinc-800">
+                                      {[
+                                        {label:'FRONT 9',payA:m.f9?.payA||0,payB:m.f9?.payB||0},
+                                        {label:'BACK 9',payA:m.b9?.payA||0,payB:m.b9?.payB||0},
+                                        {label:'BIRDIES',payA:m.birdieA||0,payB:m.birdieB||0},
+                                      ].map(row => (
+                                        <div key={row.label} className="bg-black rounded-xl p-2 text-center">
+                                          <div className="text-zinc-600 text-[8px] font-black mb-1">{row.label}</div>
+                                          <div className="text-[9px] font-black">
+                                            <span className="text-emerald-400">${row.payA}</span>
+                                            <span className="text-zinc-700 mx-1">·</span>
+                                            <span className="text-blue-400">${row.payB}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="px-4 pb-4 flex items-center justify-between bg-zinc-900/40 mx-4 mb-4 rounded-2xl p-3">
+                                      <span className="text-zinc-500 text-[9px] font-black">MATCH RESULT</span>
+                                      <span className={`font-black text-base ${m.net===0?'text-zinc-500':m.net>0?'text-emerald-400':'text-blue-400'}`}>
+                                        {m.net===0?'EVEN':m.net>0?`${m.sideB} OWES $${Math.abs(m.net)}`:`${m.sideA} OWES $${Math.abs(m.net)}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Wheel expanded */}
+                                {isOpen && isWheel && (
+                                  <div className="border-t border-zinc-800 p-4 bg-black/20">
+                                    <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-3">WHEEL PAIRS · {(m.wheelPlayers||[]).join(' · ')}</p>
+                                    <div className="space-y-2">
+                                      {(()=>{
+                                        const wp = m.wheelPlayers||[]
+                                        const pairs = []
+                                        for(let a=0;a<wp.length;a++) for(let b=a+1;b<wp.length;b++) pairs.push({a:wp[a],b:wp[b]})
+                                        return pairs.map((pair,pi) => (
+                                          <div key={pi} className="flex items-center justify-between bg-black rounded-xl px-4 py-2.5 border border-zinc-800">
+                                            <span className="text-purple-400 font-black text-xs">{pair.a}</span>
+                                            <span className="text-zinc-600 font-black text-[9px]">vs</span>
+                                            <span className="text-purple-400 font-black text-xs">{pair.b}</span>
+                                          </div>
+                                        ))
+                                      })()}
+                                    </div>
+                                    <p className="text-zinc-700 text-[9px] font-black normal-case mt-3">Full wheel scorecard available in current payouts page for active matches.</p>
+                                  </div>
+                                )}
                               </div>
-                              <div className="flex items-center justify-between">
-                                <span className={`font-black ${m.winner === m.sideA ? 'text-emerald-400' : 'text-zinc-400'}`}>{m.sideA}</span>
-                                <div className="text-center">
-                                  <span className="text-zinc-700 font-black text-sm">{m.totA}</span>
-                                  <span className="text-zinc-600 font-black text-xs mx-2">vs</span>
-                                  <span className="text-zinc-700 font-black text-sm">{m.totB}</span>
-                                </div>
-                                <span className={`font-black ${m.winner === m.sideB ? 'text-emerald-400' : 'text-zinc-400'}`}>{m.sideB}</span>
-                              </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </Section>
                     )}
