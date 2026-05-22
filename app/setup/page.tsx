@@ -70,7 +70,7 @@ export default function SetupCenter() {
   // ── PIN GATE ────────────────────────────────────────────────────
   if (!unlocked) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 font-sans uppercase italic">
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 font-sans">
         <div className="w-full max-w-sm space-y-6">
 
           {/* Back */}

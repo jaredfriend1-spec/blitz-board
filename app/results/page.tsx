@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { Trophy, Award, ArrowLeft, LayoutGrid, Medal } from 'lucide-react'
+import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ResultsPage() {
@@ -22,215 +22,293 @@ export default function ResultsPage() {
   }, [])
 
   const getIndividualResults = () => {
-    const activePlayerIds = new Set<string>();
-    teams.forEach(t => (t.playerIds || []).forEach((id: string) => activePlayerIds.add(id)));
-    const activeFieldSize = activePlayerIds.size;
+    const activePlayerIds = new Set<string>()
+    teams.forEach(t => (t.playerIds || []).forEach((id: string) => activePlayerIds.add(id)))
+    const activeFieldSize = activePlayerIds.size
 
     const list = players.filter(p => activePlayerIds.has(p.id)).map(p => {
-      const s = scores[p.id] || Array(18).fill(0);
-      const f9 = s.slice(0, 9).reduce((a, b) => a + (Number(b) || 0), 0);
-      const b9 = s.slice(9, 18).reduce((a, b) => a + (Number(b) || 0), 0);
+      const s = scores[p.id] || Array(18).fill(0)
+      const f9 = s.slice(0, 9).reduce((a, b) => a + (Number(b) || 0), 0)
+      const b9 = s.slice(9, 18).reduce((a, b) => a + (Number(b) || 0), 0)
       return { ...p, f9, b9, hasPlayed: s.some(val => val > 0) }
-    }).filter(p => p.hasPlayed);
-    
-    const f9Winners = [...list].sort((a,b) => a.f9 - b.f9).slice(0, 3);
-    const b9Winners = [...list].sort((a,b) => a.b9 - b.b9).slice(0, 3);
+    }).filter(p => p.hasPlayed)
 
-    const skinsMap = Array(18).fill(null);
-    const skinsCount: Record<string, number> = {};
-    let totalSkinsWon = 0;
+    const f9Winners = [...list].sort((a, b) => a.f9 - b.f9).slice(0, 3)
+    const b9Winners = [...list].sort((a, b) => a.b9 - b.b9).slice(0, 3)
+
+    const skinsMap = Array(18).fill(null)
+    const skinsCount: Record<string, number> = {}
+    let totalSkinsWon = 0
 
     for (let h = 0; h < 18; h++) {
-      const holeScores = players.filter(p => activePlayerIds.has(p.id)).map(p => ({ 
-        id: p.id, name: p.name, s: (scores[p.id] || [])[h] || 0 
-      })).filter(x => x.s > 0);
+      const holeScores = players
+        .filter(p => activePlayerIds.has(p.id))
+        .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[h] || 0 }))
+        .filter(x => x.s > 0)
       if (holeScores.length > 0) {
-        const min = Math.min(...holeScores.map(x => x.s));
-        const winners = holeScores.filter(x => x.s === min);
+        const min = Math.min(...holeScores.map(x => x.s))
+        const winners = holeScores.filter(x => x.s === min)
         if (winners.length === 1) {
-          skinsMap[h] = winners[0];
-          skinsCount[winners[0].id] = (skinsCount[winners[0].id] || 0) + 1;
-          totalSkinsWon++;
+          skinsMap[h] = winners[0]
+          skinsCount[winners[0].id] = (skinsCount[winners[0].id] || 0) + 1
+          totalSkinsWon++
         }
       }
     }
 
-    const totalSkinsPot = activeFieldSize * (money.skinsAllocation || 0);
-    // NEW LOGIC: Round to nearest whole dollar
-    const perSkin = totalSkinsWon > 0 ? Math.round(totalSkinsPot / totalSkinsWon) : 0;
-    
-    // ADJUSTMENT: Find who has the most skins to handle the rounding delta
-    const sortedSkins = Object.entries(skinsCount).sort((a,b) => b[1] - a[1]);
-    const mostSkinsPlayerId = sortedSkins.length > 0 ? sortedSkins[0][0] : null;
-    const totalPaidOutBase = totalSkinsWon * perSkin;
-    const adjustment = totalSkinsPot - totalPaidOutBase;
+    const totalSkinsPot = activeFieldSize * (money.skinsAllocation || 0)
+    const perSkin = totalSkinsWon > 0 ? Math.round(totalSkinsPot / totalSkinsWon) : 0
+    const sortedSkins = Object.entries(skinsCount).sort((a, b) => b[1] - a[1])
+    const mostSkinsPlayerId = sortedSkins.length > 0 ? sortedSkins[0][0] : null
+    const totalPaidOutBase = totalSkinsWon * perSkin
+    const adjustment = totalSkinsPot - totalPaidOutBase
 
-    return { f9Winners, b9Winners, skinsMap, skinsCount, mostSkinsPlayerId, totalSkinsPot, totalSkinsWon, perSkin, adjustment };
+    return { f9Winners, b9Winners, skinsMap, skinsCount, mostSkinsPlayerId, totalSkinsPot, totalSkinsWon, perSkin, adjustment }
   }
 
   const getTeamResults = () => {
-    const activePlayerIds = new Set<string>();
-    teams.forEach(t => (t.playerIds || []).forEach((id: string) => activePlayerIds.add(id)));
-    const totalTeamPot = activePlayerIds.size * ((money.entryFee || 0) - (money.skinsAllocation || 0));
-    const sidePot = totalTeamPot / 2;
+    const activePlayerIds = new Set<string>()
+    teams.forEach(t => (t.playerIds || []).forEach((id: string) => activePlayerIds.add(id)))
+    const totalTeamPot = activePlayerIds.size * ((money.entryFee || 0) - (money.skinsAllocation || 0))
+    const sidePot = totalTeamPot / 2
 
     const teamScores = teams.map(t => {
-      const pIds = t.playerIds || [];
+      const pIds = t.playerIds || []
       const holeAggregates = Array(18).fill(0).map((_, i) => {
-        const par = course.pars[i] || 4;
-        const pScores = pIds.map((id:string) => scores[id]?.[i] || 0).filter((s:number) => s > 0).sort((a:number,b:number)=>a-b);
-        if (pScores.length === 0) return 0;
-        return pScores.slice(0, par === 3 ? 3 : 2).reduce((a:number, b:number) => a + b, 0);
-      });
-      return { id: t.id, name: t.name, f9: holeAggregates.slice(0, 9).reduce((a,b)=>a+b, 0), b9: holeAggregates.slice(9, 18).reduce((a,b)=>a+b, 0) }
-    });
+        const par = course.pars[i] || 4
+        const pScores = pIds.map((id: string) => scores[id]?.[i] || 0).filter((s: number) => s > 0).sort((a: number, b: number) => a - b)
+        if (pScores.length === 0) return 0
+        return pScores.slice(0, par === 3 ? 3 : 2).reduce((a: number, b: number) => a + b, 0)
+      })
+      return {
+        id: t.id,
+        name: t.name,
+        f9: holeAggregates.slice(0, 9).reduce((a, b) => a + b, 0),
+        b9: holeAggregates.slice(9, 18).reduce((a, b) => a + b, 0)
+      }
+    })
 
-    const calcPayouts = (pot: number, teamsArr: any[], half: 'f9'|'b9') => {
-      const valid = teamsArr.filter(t => t[half] > 0).sort((a,b) => a[half] - b[half]);
-      if (valid.length === 0) return [];
-      const scoreGroups: any = {};
-      valid.forEach(t => { if(!scoreGroups[t[half]]) scoreGroups[t[half]] = []; scoreGroups[t[half]].push(t); });
-      const sortedScores = Object.keys(scoreGroups).map(Number).sort((a,b)=>a-b);
-      const results = valid.map(t => ({ ...t, payout: 0, rank: 0 }));
+    const calcPayouts = (pot: number, teamsArr: any[], half: 'f9' | 'b9') => {
+      const valid = teamsArr.filter(t => t[half] > 0).sort((a, b) => a[half] - b[half])
+      if (valid.length === 0) return []
+      const scoreGroups: any = {}
+      valid.forEach(t => { if (!scoreGroups[t[half]]) scoreGroups[t[half]] = []; scoreGroups[t[half]].push(t) })
+      const sortedScores = Object.keys(scoreGroups).map(Number).sort((a, b) => a - b)
+      const results = valid.map(t => ({ ...t, payout: 0, rank: 0 }))
       if (sortedScores.length > 0) {
-        const firstPlaceGroup = scoreGroups[sortedScores[0]];
-        if (firstPlaceGroup.length === 1) {
-          results.find(t => t.id === firstPlaceGroup[0].id)!.payout = pot * 0.60;
-          results.find(t => t.id === firstPlaceGroup[0].id)!.rank = 1;
+        const firstGroup = scoreGroups[sortedScores[0]]
+        if (firstGroup.length === 1) {
+          results.find(t => t.id === firstGroup[0].id)!.payout = pot * 0.60
+          results.find(t => t.id === firstGroup[0].id)!.rank = 1
           if (sortedScores.length > 1) {
-            const secondPlaceGroup = scoreGroups[sortedScores[1]];
-            const secondPrizeEach = (pot * 0.40) / secondPlaceGroup.length;
-            secondPlaceGroup.forEach((t:any) => { const r = results.find(x => x.id === t.id); if (r) { r.payout = secondPrizeEach; r.rank = 2; } });
+            const secondGroup = scoreGroups[sortedScores[1]]
+            const secondEach = (pot * 0.40) / secondGroup.length
+            secondGroup.forEach((t: any) => {
+              const r = results.find(x => x.id === t.id)
+              if (r) { r.payout = secondEach; r.rank = 2 }
+            })
           }
         } else {
-          const splitPrize = pot / firstPlaceGroup.length;
-          firstPlaceGroup.forEach((t:any) => { const r = results.find(x => x.id === t.id); if (r) { r.payout = splitPrize; r.rank = 1; } });
+          const split = pot / firstGroup.length
+          firstGroup.forEach((t: any) => {
+            const r = results.find(x => x.id === t.id)
+            if (r) { r.payout = split; r.rank = 1 }
+          })
         }
       }
-      return results;
+      return results
     }
-    return { totalTeamPot, sidePot, f9Results: calcPayouts(sidePot, teamScores, 'f9'), b9Results: calcPayouts(sidePot, teamScores, 'b9') }
+
+    return {
+      totalTeamPot,
+      sidePot,
+      f9Results: calcPayouts(sidePot, teamScores, 'f9'),
+      b9Results: calcPayouts(sidePot, teamScores, 'b9')
+    }
   }
 
-  const ind = getIndividualResults();
-  const tm = getTeamResults();
+  const ind = getIndividualResults()
+  const tm = getTeamResults()
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans uppercase italic">
-      <div className="max-w-6xl mx-auto">
-        <Link href="/" className="text-emerald-500 font-black mb-8 inline-block"><ArrowLeft size={18} className="inline mr-2"/> HUB</Link>
-        <div className="flex bg-zinc-900 rounded-2xl p-2 mb-12 border-2 border-zinc-800">
-          <button onClick={() => setActiveTab('INDIVIDUAL')} className={`flex-1 py-4 rounded-xl font-black text-lg transition-all ${activeTab === 'INDIVIDUAL' ? 'bg-emerald-500 text-black' : 'text-zinc-500'}`}>INDIVIDUAL</button>
-          <button onClick={() => setActiveTab('TEAM')} className={`flex-1 py-4 rounded-xl font-black text-lg transition-all ${activeTab === 'TEAM' ? 'bg-blue-500 text-black' : 'text-zinc-500'}`}>TEAM</button>
+    <div className="min-h-screen bg-black text-white p-4 sm:p-8">
+      <div className="max-w-4xl mx-auto">
+
+        <Link href="/" className="text-emerald-500 font-semibold mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors text-sm">
+          <ArrowLeft size={16}/> Home
+        </Link>
+
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Results</h1>
         </div>
 
-        {activeTab === 'INDIVIDUAL' && (
-          <div className="space-y-12">
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] overflow-hidden">
-                <div className="bg-emerald-600 p-4 text-center font-black text-black flex items-center justify-center gap-2"><Medal size={20}/> FRONT 9 LOW</div>
-                <div className="p-6 space-y-3">
-                  {ind.f9Winners.map((w, i) => (
-                    <div key={i} className="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-zinc-800">
-                      <span className="font-black text-lg">{i+1}. {w.name}</span>
-                      <span className="text-emerald-400 font-black text-xl">{w.f9}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] overflow-hidden">
-                <div className="bg-emerald-600 p-4 text-center font-black text-black flex items-center justify-center gap-2"><Award size={20}/> BACK 9 LOW</div>
-                <div className="p-6 space-y-3">
-                  {ind.b9Winners.map((w, i) => (
-                    <div key={i} className="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-zinc-800">
-                      <span className="font-black text-lg">{i+1}. {w.name}</span>
-                      <span className="text-emerald-400 font-black text-xl">{w.b9}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
+        {/* Tab switcher */}
+        <div className="flex bg-zinc-900 rounded-2xl p-1.5 mb-8 border border-zinc-800 gap-1">
+          <button
+            onClick={() => setActiveTab('INDIVIDUAL')}
+            className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'INDIVIDUAL' ? 'bg-emerald-500 text-black' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Individual
+          </button>
+          <button
+            onClick={() => setActiveTab('TEAM')}
+            className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all ${
+              activeTab === 'TEAM' ? 'bg-blue-500 text-white' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Team
+          </button>
+        </div>
 
-            <section>
-              <div className="bg-emerald-500 text-black p-6 rounded-t-[2.5rem] border-x-4 border-t-4 border-black flex justify-between items-center">
-                <div className="flex items-center gap-3"><LayoutGrid size={24} /><h2 className="text-3xl font-black">Skins</h2></div>
+        {/* ── INDIVIDUAL TAB ── */}
+        {activeTab === 'INDIVIDUAL' && (
+          <div className="space-y-8">
+
+            {/* Front 9 / Back 9 low */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { title: 'Front 9 Low', icon: <Medal size={16}/>, winners: ind.f9Winners, key: 'f9' },
+                { title: 'Back 9 Low', icon: <Award size={16}/>, winners: ind.b9Winners, key: 'b9' },
+              ].map(section => (
+                <div key={section.title} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                  <div className="bg-emerald-600/20 border-b border-zinc-800 px-5 py-3 flex items-center gap-2">
+                    <span className="text-emerald-400">{section.icon}</span>
+                    <span className="font-semibold text-sm text-emerald-400">{section.title}</span>
+                  </div>
+                  <div className="p-4 space-y-2">
+                    {section.winners.map((w, i) => (
+                      <div key={i} className="flex justify-between items-center bg-black rounded-xl px-4 py-3 border border-zinc-800">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-sm font-bold ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-zinc-400' : 'text-amber-700'}`}>
+                            {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
+                          </span>
+                          <span className="font-semibold text-sm">{w.name}</span>
+                        </div>
+                        <span className="text-emerald-400 font-bold">{(w as any)[section.key]}</span>
+                      </div>
+                    ))}
+                    {section.winners.length === 0 && (
+                      <p className="text-zinc-600 text-sm text-center py-4">No scores yet</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Skins map */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LayoutGrid size={16} className="text-emerald-400"/>
+                  <span className="font-semibold text-sm">Skins</span>
+                </div>
                 <div className="text-right">
-                   <div className="text-[10px] font-black uppercase">Pot: ${ind.totalSkinsPot} | {ind.totalSkinsWon} Won</div>
-                   <div className="text-xl font-black">${ind.perSkin} / Skin</div>
+                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${ind.perSkin}/skin · Pot ${ind.totalSkinsPot}</span>
                 </div>
               </div>
-              <div className="bg-zinc-900 p-8 border-4 border-black rounded-b-[2.5rem] grid grid-cols-3 md:grid-cols-6 gap-4">
+              <div className="p-4 grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {ind.skinsMap.map((winner, i) => (
-                  <div key={i} className={`p-4 rounded-2xl border-2 flex flex-col items-center justify-center min-h-[100px] ${winner ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-black/40'}`}>
-                    <span className="text-[10px] text-zinc-600 font-black mb-1">HOLE {i+1}</span>
-                    <span className={`text-[11px] font-black text-center ${winner ? 'text-emerald-400' : 'text-zinc-700'}`}>{winner ? winner.name : "---"}</span>
+                  <div key={i} className={`p-3 rounded-xl border flex flex-col items-center justify-center min-h-[72px] ${
+                    winner ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-zinc-800 bg-black/30'
+                  }`}>
+                    <span className="text-[10px] text-zinc-600 font-medium mb-1">Hole {i + 1}</span>
+                    <span className={`text-[10px] font-semibold text-center leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-700'}`}>
+                      {winner ? winner.name : '—'}
+                    </span>
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
 
-            <section className="bg-orange-100 rounded-[3rem] border-4 border-black overflow-hidden flex flex-col">
-              <div className="bg-orange-500 p-6 font-black text-center text-white text-xl border-b-4 border-black uppercase italic text-shadow">Payout Table</div>
-              {ind.adjustment !== 0 && ind.mostSkinsPlayerId && (
-                <div className="bg-orange-300 p-3 text-center text-[10px] text-orange-900 font-black border-b-2 border-orange-400">
-                  Adjustment of ${Math.abs(ind.adjustment)} to {players.find(p=>p.id === ind.mostSkinsPlayerId)?.name} (Most Skins)
+            {/* Payout table */}
+            {Object.keys(ind.skinsCount).length > 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-2">
+                  <Trophy size={16} className="text-amber-400"/>
+                  <span className="font-semibold text-sm">Skins Payouts</span>
                 </div>
-              )}
-              <table className="w-full text-black font-black text-xs italic">
-                <thead><tr className="bg-orange-200 border-b-2 border-black"><th className="p-4 text-left">PLAYER</th><th className="p-4">QTY</th><th className="p-4 text-right">TOTAL</th></tr></thead>
-                <tbody>
+                {ind.adjustment !== 0 && ind.mostSkinsPlayerId && (
+                  <div className="px-5 py-2 bg-amber-500/10 border-b border-zinc-800 text-amber-400 text-xs font-medium">
+                    ${Math.abs(ind.adjustment)} rounding adjustment to {players.find(p => p.id === ind.mostSkinsPlayerId)?.name} (most skins)
+                  </div>
+                )}
+                <div className="divide-y divide-zinc-800">
                   {players.filter(p => ind.skinsCount[p.id] > 0).map(p => {
-                    const final = (ind.skinsCount[p.id] * ind.perSkin) + (p.id === ind.mostSkinsPlayerId ? ind.adjustment : 0);
+                    const final = (ind.skinsCount[p.id] * ind.perSkin) + (p.id === ind.mostSkinsPlayerId ? ind.adjustment : 0)
                     return (
-                      <tr key={p.id} className="border-b border-orange-200 bg-white/50">
-                        <td className="p-4 flex items-center gap-2"><Trophy size={14} className="text-orange-500"/> {p.name}</td>
-                        <td className="p-4 text-center text-lg">{ind.skinsCount[p.id]}</td>
-                        <td className="p-4 text-right text-emerald-700 text-lg">${final}</td>
-                      </tr>
+                      <div key={p.id} className="flex items-center justify-between px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <Trophy size={14} className="text-amber-400"/>
+                          <span className="font-semibold text-sm">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-zinc-500 text-xs">{ind.skinsCount[p.id]} skin{ind.skinsCount[p.id] > 1 ? 's' : ''}</span>
+                          <span className="text-emerald-400 font-bold">${final}</span>
+                        </div>
+                      </div>
                     )
                   })}
-                </tbody>
-              </table>
-            </section>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
+        {/* ── TEAM TAB ── */}
         {activeTab === 'TEAM' && (
-          <div className="space-y-8 animate-in fade-in">
-             <div className="bg-zinc-900 p-8 rounded-[2.5rem] border-2 border-blue-500 text-center shadow-2xl mb-12">
-              <h2 className="text-sm text-zinc-500 font-black tracking-widest mb-2 uppercase">Total Team Pot</h2>
-              <div className="text-6xl font-black text-blue-500">${tm.totalTeamPot}</div>
+          <div className="space-y-6">
+
+            {/* Total pot */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Users size={20} className="text-blue-400"/>
+                <span className="font-semibold text-sm text-zinc-400">Total Team Pot</span>
+              </div>
+              <span className="text-3xl font-bold text-blue-400">${tm.totalTeamPot}</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* FRONT/BACK TEAM RESULTS AS CONFIGURED */}
+
+            {/* Front 9 / Back 9 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
-                { title: 'FRONT 9', res: tm.f9Results, pot: tm.sidePot },
-                { title: 'BACK 9', res: tm.b9Results, pot: tm.sidePot }
-              ].map((h, idx) => (
-                <div key={idx} className="bg-zinc-900 rounded-[3rem] border-2 border-zinc-800 overflow-hidden">
-                  <div className="bg-blue-600 p-6 text-center text-black font-black">
-                    <h3 className="text-2xl">{h.title}</h3><div className="text-xs uppercase italic">Side Pot: ${h.pot}</div>
+                { title: 'Front 9', res: tm.f9Results, pot: tm.sidePot, key: 'f9' },
+                { title: 'Back 9', res: tm.b9Results, pot: tm.sidePot, key: 'b9' },
+              ].map(half => (
+                <div key={half.title} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                  <div className="bg-blue-600/20 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
+                    <span className="font-semibold text-sm text-blue-400">{half.title}</span>
+                    <span className="text-zinc-500 text-xs">Side pot ${half.pot}</span>
                   </div>
                   <div className="p-4 space-y-2">
-                    {h.res.map((t: any, i: number) => (
-                      <div key={t.id} className={`flex justify-between items-center p-5 rounded-2xl border ${t.payout > 0 ? 'bg-black border-blue-500 shadow-lg shadow-blue-500/10' : 'bg-black/50 border-zinc-800'}`}>
-                        <div className="flex items-center gap-4">
-                          {t.rank === 1 && <Trophy className="text-yellow-500" size={20} />}
-                          {t.rank === 2 && <Award className="text-zinc-400" size={20} />}
-                          <span className="font-black text-lg text-white">{t.name}</span>
+                    {half.res.map((t: any) => (
+                      <div key={t.id} className={`flex justify-between items-center px-4 py-3 rounded-xl border ${
+                        t.payout > 0 ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-800 bg-black/30'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          {t.rank === 1 && <Trophy size={14} className="text-yellow-400 flex-shrink-0"/>}
+                          {t.rank === 2 && <Award size={14} className="text-zinc-400 flex-shrink-0"/>}
+                          {t.rank > 2 && <span className="w-3.5"/>}
+                          <span className="font-semibold text-sm">{t.name}</span>
                         </div>
                         <div className="text-right">
-                          <div className="font-black text-2xl text-zinc-300">{idx === 0 ? t.f9 : t.b9}</div>
-                          {t.payout > 0 && <div className="text-blue-400 font-black text-xs">${t.payout.toFixed(2)}</div>}
+                          <div className="font-bold text-zinc-300">{(t as any)[half.key]}</div>
+                          {t.payout > 0 && (
+                            <div className="text-blue-400 font-semibold text-xs">${t.payout.toFixed(2)}</div>
+                          )}
                         </div>
                       </div>
                     ))}
+                    {half.res.length === 0 && (
+                      <p className="text-zinc-600 text-sm text-center py-4">No scores yet</p>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
       </div>
     </div>
   )

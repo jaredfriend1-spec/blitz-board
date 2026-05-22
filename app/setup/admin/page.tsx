@@ -3,381 +3,381 @@ import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, get, onValue } from 'firebase/database'
 import {
-  ArrowLeft, CheckCircle2, Circle, ChevronRight, Flag, Users,
-  DollarSign, Sword, Loader2, Archive, Trash2, Play, ShieldAlert,
-  Eraser, Calendar, Save, Layers, RotateCcw
+ ArrowLeft, CheckCircle2, Circle, ChevronRight, Flag, Users,
+ DollarSign, Sword, Loader2, Archive, Trash2, Play, ShieldAlert,
+ Eraser, Calendar, Save, Layers, RotateCcw
 } from 'lucide-react'
 import Link from 'next/link'
 
 const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5']
 
 export default function AdminWizard() {
-  const [meta, setMeta] = useState<any>({})
-  const [course, setCourse] = useState<any>(null)
-  const [playerCount, setPlayerCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-  const [teamsHavePlayers, setTeamsHavePlayers] = useState(false)
-  const [moneySet, setMoneySet] = useState(false)
-  const [formatName, setFormatName] = useState("Jeff's Blitz")
-  const [formatCustom, setFormatCustom] = useState(false)
-  const [matchupCount, setMatchupCount] = useState(0)
-  const [hasAnyData, setHasAnyData] = useState(false)
-  const [archivedDays, setArchivedDays] = useState<string[]>([])
+ const [meta, setMeta] = useState<any>({})
+ const [course, setCourse] = useState<any>(null)
+ const [playerCount, setPlayerCount] = useState(0)
+ const [teamCount, setTeamCount] = useState(0)
+ const [teamsHavePlayers, setTeamsHavePlayers] = useState(false)
+ const [moneySet, setMoneySet] = useState(false)
+ const [formatName, setFormatName] = useState("Jeff's Blitz")
+ const [formatCustom, setFormatCustom] = useState(false)
+ const [matchupCount, setMatchupCount] = useState(0)
+ const [hasAnyData, setHasAnyData] = useState(false)
+ const [archivedDays, setArchivedDays] = useState<string[]>([])
 
-  const [editingTrip, setEditingTrip] = useState(false)
-  const [tripNameInput, setTripNameInput] = useState('')
-  const [totalDaysInput, setTotalDaysInput] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [actionMsg, setActionMsg] = useState<string|null>(null)
-  const [showDestructive, setShowDestructive] = useState(false)
-  const [transitioningDay, setTransitioningDay] = useState(false)
+ const [editingTrip, setEditingTrip] = useState(false)
+ const [tripNameInput, setTripNameInput] = useState('')
+ const [totalDaysInput, setTotalDaysInput] = useState(1)
+ const [loading, setLoading] = useState(false)
+ const [actionMsg, setActionMsg] = useState<string|null>(null)
+ const [showDestructive, setShowDestructive] = useState(false)
+ const [transitioningDay, setTransitioningDay] = useState(false)
 
-  useEffect(() => {
-    onValue(ref(db,'tournament/meta'), snap => {
-      const m = snap.val() || {}
-      setMeta(m)
-      setTripNameInput(m.tripName || '')
-      setTotalDaysInput(m.totalDays || 1)
-    })
-    onValue(ref(db,'tournament/course'), snap => setCourse(snap.val()))
-    onValue(ref(db,'tournament/roster'), snap => setPlayerCount(snap.val() ? Object.keys(snap.val()).length : 0))
-    onValue(ref(db,'tournament/teams'), snap => {
-      const t = snap.val()
-      if (!t) { setTeamCount(0); setTeamsHavePlayers(false); return }
-      const teams = Object.values(t) as any[]
-      setTeamCount(teams.length)
-      setTeamsHavePlayers(teams.some((tm:any) => (tm.playerIds||[]).length > 0))
-    })
-    onValue(ref(db,'tournament/money'), snap => setMoneySet(!!(snap.val()?.entryFee > 0)))
-    onValue(ref(db,'tournament/format'), snap => {
-      if (snap.val()) {
-        setFormatCustom(snap.val().name !== "Jeff's Blitz")
-        setFormatName(snap.val().name || "Jeff's Blitz")
-      }
-    })
-    onValue(ref(db,'tournament/matchups'), snap => setMatchupCount(snap.val() ? Object.keys(snap.val()).length : 0))
-    onValue(ref(db,'tournament'), snap => setHasAnyData(!!snap.val()))
-    onValue(ref(db,'history'), snap => {
-      if (!snap.val()) { setArchivedDays([]); return }
-      const days: string[] = []
-      Object.values(snap.val()).forEach((h:any) => { if (h._meta?.dayLabel) days.push(h._meta.dayLabel) })
-      setArchivedDays(days)
-    })
-  }, [])
+ useEffect(() => {
+ onValue(ref(db,'tournament/meta'), snap => {
+ const m = snap.val() || {}
+ setMeta(m)
+ setTripNameInput(m.tripName || '')
+ setTotalDaysInput(m.totalDays || 1)
+ })
+ onValue(ref(db,'tournament/course'), snap => setCourse(snap.val()))
+ onValue(ref(db,'tournament/roster'), snap => setPlayerCount(snap.val() ? Object.keys(snap.val()).length : 0))
+ onValue(ref(db,'tournament/teams'), snap => {
+ const t = snap.val()
+ if (!t) { setTeamCount(0); setTeamsHavePlayers(false); return }
+ const teams = Object.values(t) as any[]
+ setTeamCount(teams.length)
+ setTeamsHavePlayers(teams.some((tm:any) => (tm.playerIds||[]).length > 0))
+ })
+ onValue(ref(db,'tournament/money'), snap => setMoneySet(!!(snap.val()?.entryFee > 0)))
+ onValue(ref(db,'tournament/format'), snap => {
+ if (snap.val()) {
+ setFormatCustom(snap.val().name !== "Jeff's Blitz")
+ setFormatName(snap.val().name || "Jeff's Blitz")
+ }
+ })
+ onValue(ref(db,'tournament/matchups'), snap => setMatchupCount(snap.val() ? Object.keys(snap.val()).length : 0))
+ onValue(ref(db,'tournament'), snap => setHasAnyData(!!snap.val()))
+ onValue(ref(db,'history'), snap => {
+ if (!snap.val()) { setArchivedDays([]); return }
+ const days: string[] = []
+ Object.values(snap.val()).forEach((h:any) => { if (h._meta?.dayLabel) days.push(h._meta.dayLabel) })
+ setArchivedDays(days)
+ })
+ }, [])
 
-  const flash = (msg:string) => { setActionMsg(msg); setTimeout(()=>setActionMsg(null), 5000) }
+ const flash = (msg:string) => { setActionMsg(msg); setTimeout(()=>setActionMsg(null), 5000) }
 
-  const saveTripMeta = async () => {
-    await set(ref(db,'tournament/meta'), {
-      ...meta,
-      tripName: tripNameInput.trim(),
-      totalDays: totalDaysInput,
-      currentDay: meta.currentDay || 'Day 1',
-      isMock: false,
-    })
-    setEditingTrip(false)
-    flash('✓ Trip setup saved.')
-  }
+ const saveTripMeta = async () => {
+ await set(ref(db,'tournament/meta'), {
+ ...meta,
+ tripName: tripNameInput.trim(),
+ totalDays: totalDaysInput,
+ currentDay: meta.currentDay || 'Day 1',
+ isMock: false,
+ })
+ setEditingTrip(false)
+ flash('✓ Trip setup saved.')
+ }
 
-  const clearData = async () => {
-    const pw = prompt("ADMIN PASSWORD:")
-    if (pw !== "jeff") return alert("ACCESS DENIED")
-    if (!confirm("ARCHIVE current tournament to History, then wipe everything?")) return
-    setLoading(true)
-    const snap = await get(ref(db,'tournament'))
-    if (snap.exists()) await set(ref(db,`history/${Date.now()}`), snap.val())
-    await set(ref(db,'tournament'), null)
-    flash("✓ Archived to History. Ready for fresh setup.")
-    setLoading(false)
-  }
+ const clearData = async () => {
+ const pw = prompt("ADMIN PASSWORD:")
+ if (pw !== "jeff") return alert("ACCESS DENIED")
+ if (!confirm("ARCHIVE current tournament to History, then wipe everything?")) return
+ setLoading(true)
+ const snap = await get(ref(db,'tournament'))
+ if (snap.exists()) await set(ref(db,`history/${Date.now()}`), snap.val())
+ await set(ref(db,'tournament'), null)
+ flash("✓ Archived to History. Ready for fresh setup.")
+ setLoading(false)
+ }
 
-  const startNextDay = async () => {
-    const currentIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
-    const nextDay = DAY_LABELS[Math.min(currentIdx + 1, DAY_LABELS.length - 1)]
-    if (!confirm(`CLOSE ${(meta.currentDay||'Day 1').toUpperCase()} AND START ${nextDay.toUpperCase()}?\n\nArchives today and wipes scores + matchups. Teams and course stay.`)) return
-    setTransitioningDay(true)
-    const snap = await get(ref(db,'tournament'))
-    if (snap.exists()) {
-      await set(ref(db,`history/${Date.now()}`), {
-        ...snap.val(),
-        _meta: { tripName: meta.tripName, dayLabel: meta.currentDay, archivedAt: Date.now(), isFinal: false }
-      })
-    }
-    await set(ref(db,'tournament/scores'), null)
-    await set(ref(db,'tournament/matchups'), null)
-    await set(ref(db,'tournament/meta'), { ...meta, currentDay: nextDay, isMock: false })
-    flash(`✓ ${meta.currentDay} archived. Set up matchups for ${nextDay} then go live.`)
-    setTransitioningDay(false)
-  }
+ const startNextDay = async () => {
+ const currentIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
+ const nextDay = DAY_LABELS[Math.min(currentIdx + 1, DAY_LABELS.length - 1)]
+ if (!confirm(`CLOSE ${(meta.currentDay||'Day 1').toUpperCase()} AND START ${nextDay.toUpperCase()}?\n\nArchives today and wipes scores + matchups. Teams and course stay.`)) return
+ setTransitioningDay(true)
+ const snap = await get(ref(db,'tournament'))
+ if (snap.exists()) {
+ await set(ref(db,`history/${Date.now()}`), {
+ ...snap.val(),
+ _meta: { tripName: meta.tripName, dayLabel: meta.currentDay, archivedAt: Date.now(), isFinal: false }
+ })
+ }
+ await set(ref(db,'tournament/scores'), null)
+ await set(ref(db,'tournament/matchups'), null)
+ await set(ref(db,'tournament/meta'), { ...meta, currentDay: nextDay, isMock: false })
+ flash(`✓ ${meta.currentDay} archived. Set up matchups for ${nextDay} then go live.`)
+ setTransitioningDay(false)
+ }
 
-  const tripReady = !!(meta.tripName && meta.totalDays > 0)
-  const courseReady = !!(course?.holes?.length === 18)
-  const rosterReady = playerCount > 0 && teamCount > 0 && teamsHavePlayers
-  const moneyReady = moneySet
-  const matchupsReady = matchupCount > 0
-  const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length
-  const allComplete = tripReady && courseReady && rosterReady && moneyReady && matchupsReady
-  const currentDayIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
-  const canGoNextDay = tripReady && (currentDayIdx + 1) < (meta.totalDays || 1)
+ const tripReady = !!(meta.tripName && meta.totalDays > 0)
+ const courseReady = !!(course?.holes?.length === 18)
+ const rosterReady = playerCount > 0 && teamCount > 0 && teamsHavePlayers
+ const moneyReady = moneySet
+ const matchupsReady = matchupCount > 0
+ const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length
+ const allComplete = tripReady && courseReady && rosterReady && moneyReady && matchupsReady
+ const currentDayIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
+ const canGoNextDay = tripReady && (currentDayIdx + 1) < (meta.totalDays || 1)
 
-  return (
-    <div className="min-h-screen bg-black text-white font-sans uppercase italic">
-      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur border-b border-zinc-900 px-4 py-3 flex items-center justify-between">
-        <Link href="/setup" className="text-emerald-500 font-black flex items-center gap-2 text-sm hover:text-emerald-400 transition-colors">
-          <ArrowLeft size={16}/> SETUP
-        </Link>
-        <span className="font-black text-sm tracking-widest text-zinc-400">TOURNAMENT WIZARD</span>
-        <div className="w-20"/>
-      </div>
+ return (
+ <div className="min-h-screen bg-black text-white font-sans">
+ <div className="sticky top-0 z-20 bg-black/95 backdrop-blur border-b border-zinc-900 px-4 py-3 flex items-center justify-between">
+ <Link href="/setup" className="text-emerald-500 font-black flex items-center gap-2 text-sm hover:text-emerald-400 transition-colors">
+ <ArrowLeft size={16}/> SETUP
+ </Link>
+ <span className="font-black text-sm tracking-widest text-zinc-400">TOURNAMENT WIZARD</span>
+ <div className="w-20"/>
+ </div>
 
-      <div className="max-w-lg mx-auto px-4 py-8 space-y-3">
+ <div className="max-w-lg mx-auto px-4 py-8 space-y-3">
 
-        <div className="flex items-center gap-3 mb-4">
-          <ShieldAlert size={26} className="text-rose-500"/>
-          <div>
-            <h1 className="text-3xl font-black tracking-tight">Setup Checklist</h1>
-            <p className="text-zinc-600 text-[10px] font-black tracking-widest normal-case">Complete all steps to unlock the scorer</p>
-          </div>
-        </div>
+ <div className="flex items-center gap-3 mb-4">
+ <ShieldAlert size={26} className="text-rose-500"/>
+ <div>
+ <h1 className="text-3xl font-black tracking-tight">Setup Checklist</h1>
+ <p className="text-zinc-600 text-[10px] font-black tracking-widest normal-case">Complete all steps to unlock the scorer</p>
+ </div>
+ </div>
 
-        {actionMsg && (
-          <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 p-4 rounded-2xl text-sm font-black">
-            {actionMsg}
-          </div>
-        )}
+ {actionMsg && (
+ <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 p-4 rounded-2xl text-sm font-black">
+ {actionMsg}
+ </div>
+ )}
 
-        {/* ── ARCHIVE + RESET — TOP ── */}
-        {hasAnyData && (
-          <div className="rounded-2xl border-2 border-blue-500/30 bg-blue-500/5 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-black tracking-widest text-zinc-500">
-                {meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS
-              </p>
-              {meta.currentDay && (
-                <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">{meta.currentDay}</span>
-              )}
-            </div>
-            <button
-              onClick={clearData}
-              disabled={loading}
-              className="w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
-            >
-              {loading ? <Loader2 size={12} className="animate-spin"/> : <Archive size={12}/>}
-              ARCHIVE + FULL RESET
-            </button>
-          </div>
-        )}
+ {/* ── ARCHIVE + RESET — TOP ── */}
+ {hasAnyData && (
+ <div className="rounded-2xl border-2 border-blue-500/30 bg-blue-500/5 p-5">
+ <div className="flex items-center justify-between mb-3">
+ <p className="text-[10px] font-black tracking-widest text-zinc-500">
+ {meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS
+ </p>
+ {meta.currentDay && (
+ <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">{meta.currentDay}</span>
+ )}
+ </div>
+ <button
+ onClick={clearData}
+ disabled={loading}
+ className="w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
+ >
+ {loading ? <Loader2 size={12} className="animate-spin"/> : <Archive size={12}/>}
+ ARCHIVE + FULL RESET
+ </button>
+ </div>
+ )}
 
-        {/* Progress */}
-        <div className="bg-zinc-900 rounded-full h-2 overflow-hidden">
-          <div className="h-full bg-emerald-500 transition-all duration-700" style={{width:`${(stepsComplete/5)*100}%`}}/>
-        </div>
-        <div className="flex justify-between text-[9px] font-black text-zinc-600 tracking-widest px-0.5">
-          <span>SETUP PROGRESS</span><span>{stepsComplete} / 5 COMPLETE</span>
-        </div>
+ {/* Progress */}
+ <div className="bg-zinc-900 rounded-full h-2 overflow-hidden">
+ <div className="h-full bg-emerald-500 transition-all duration-700" style={{width:`${(stepsComplete/5)*100}%`}}/>
+ </div>
+ <div className="flex justify-between text-[9px] font-black text-zinc-600 tracking-widest px-0.5">
+ <span>SETUP PROGRESS</span><span>{stepsComplete} / 5 COMPLETE</span>
+ </div>
 
-        {/* ── STEP 1: TRIP ── */}
-        <StepCard number={1} title="Trip Setup" icon={<Calendar size={18}/>}
-          status={tripReady?'complete':'empty'}
-          summary={tripReady?`${meta.tripName} · ${meta.totalDays} Day${meta.totalDays>1?'s':''}`:'No trip configured'}
-        >
-          {editingTrip ? (
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">TRIP NAME</label>
-                <input value={tripNameInput} onChange={e=>setTripNameInput(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-base transition-colors"
-                  placeholder="E.G. CABO 2026"/>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">NUMBER OF DAYS</label>
-                <div className="flex gap-2">
-                  {[1,2,3,4,5].map(n => (
-                    <button key={n} onClick={()=>setTotalDaysInput(n)}
-                      className={`w-11 h-11 rounded-xl font-black text-lg transition-all border-2 ${totalDaysInput===n?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={saveTripMeta} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-colors">
-                  <Save size={14}/> SAVE
-                </button>
-                <button onClick={()=>setEditingTrip(false)} className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-sm transition-colors">CANCEL</button>
-              </div>
-            </div>
-          ) : tripReady ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-white font-black">{meta.tripName}</div>
-                  <div className="text-zinc-500 text-[10px] font-black mt-0.5">{meta.totalDays} Day{meta.totalDays>1?'s':''}</div>
-                </div>
-                <button onClick={()=>setEditingTrip(true)} className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></button>
-              </div>
-              {meta.totalDays > 1 && (
-                <div>
-                  <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TOURNAMENT DAYS</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {Array.from({length:meta.totalDays},(_,i) => {
-                      const dayLabel = DAY_LABELS[i]
-                      const isArchived = archivedDays.includes(dayLabel)
-                      const isCurrent = meta.currentDay === dayLabel
-                      return (
-                        <div key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-xs ${
-                          isArchived?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':
-                          isCurrent?'border-blue-500/50 bg-blue-500/10 text-blue-400':
-                          'border-zinc-800 bg-black text-zinc-600'}`}>
-                          {isArchived?<CheckCircle2 size={12}/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>:<Circle size={12}/>}
-                          {dayLabel}
-                          {isCurrent && <span className="text-[9px]">← NOW</span>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-              {canGoNextDay && (
-                <button onClick={startNextDay} disabled={transitioningDay}
-                  className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
-                  <span className="flex items-center gap-2">
-                    {transitioningDay?<Loader2 size={14} className="animate-spin"/>:<RotateCcw size={14}/>}
-                    CLOSE {meta.currentDay?.toUpperCase()} · START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
-                  </span>
-                  <span className="text-[9px] text-blue-600">ARCHIVES + RESETS SCORES</span>
-                </button>
-              )}
-            </div>
-          ) : (
-            <button onClick={()=>setEditingTrip(true)} className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
-              <span className="flex items-center gap-2"><Calendar size={14}/> SET UP TRIP</span><ChevronRight size={14}/>
-            </button>
-          )}
-        </StepCard>
+ {/* ── STEP 1: TRIP ── */}
+ <StepCard number={1} title="Trip Setup" icon={<Calendar size={18}/>}
+ status={tripReady?'complete':'empty'}
+ summary={tripReady?`${meta.tripName} · ${meta.totalDays} Day${meta.totalDays>1?'s':''}`:'No trip configured'}
+ >
+ {editingTrip ? (
+ <div className="space-y-3">
+ <div>
+ <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">TRIP NAME</label>
+ <input value={tripNameInput} onChange={e=>setTripNameInput(e.target.value)}
+ className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-base transition-colors"
+ placeholder="E.G. CABO 2026"/>
+ </div>
+ <div>
+ <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">NUMBER OF DAYS</label>
+ <div className="flex gap-2">
+ {[1,2,3,4,5].map(n => (
+ <button key={n} onClick={()=>setTotalDaysInput(n)}
+ className={`w-11 h-11 rounded-xl font-black text-lg transition-all border-2 ${totalDaysInput===n?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+ {n}
+ </button>
+ ))}
+ </div>
+ </div>
+ <div className="flex gap-2 pt-1">
+ <button onClick={saveTripMeta} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-colors">
+ <Save size={14}/> SAVE
+ </button>
+ <button onClick={()=>setEditingTrip(false)} className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-sm transition-colors">CANCEL</button>
+ </div>
+ </div>
+ ) : tripReady ? (
+ <div className="space-y-4">
+ <div className="flex items-center justify-between">
+ <div>
+ <div className="text-white font-black">{meta.tripName}</div>
+ <div className="text-zinc-500 text-[10px] font-black mt-0.5">{meta.totalDays} Day{meta.totalDays>1?'s':''}</div>
+ </div>
+ <button onClick={()=>setEditingTrip(true)} className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></button>
+ </div>
+ {meta.totalDays > 1 && (
+ <div>
+ <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TOURNAMENT DAYS</p>
+ <div className="flex gap-2 flex-wrap">
+ {Array.from({length:meta.totalDays},(_,i) => {
+ const dayLabel = DAY_LABELS[i]
+ const isArchived = archivedDays.includes(dayLabel)
+ const isCurrent = meta.currentDay === dayLabel
+ return (
+ <div key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-xs ${
+ isArchived?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':
+ isCurrent?'border-blue-500/50 bg-blue-500/10 text-blue-400':
+ 'border-zinc-800 bg-black text-zinc-600'}`}>
+ {isArchived?<CheckCircle2 size={12}/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>:<Circle size={12}/>}
+ {dayLabel}
+ {isCurrent && <span className="text-[9px]">← NOW</span>}
+ </div>
+ )
+ })}
+ </div>
+ </div>
+ )}
+ {canGoNextDay && (
+ <button onClick={startNextDay} disabled={transitioningDay}
+ className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
+ <span className="flex items-center gap-2">
+ {transitioningDay?<Loader2 size={14} className="animate-spin"/>:<RotateCcw size={14}/>}
+ CLOSE {meta.currentDay?.toUpperCase()} · START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
+ </span>
+ <span className="text-[9px] text-blue-600">ARCHIVES + RESETS SCORES</span>
+ </button>
+ )}
+ </div>
+ ) : (
+ <button onClick={()=>setEditingTrip(true)} className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
+ <span className="flex items-center gap-2"><Calendar size={14}/> SET UP TRIP</span><ChevronRight size={14}/>
+ </button>
+ )}
+ </StepCard>
 
-        {/* ── STEP 2: COURSE ── */}
-        <StepCard number={2} title="Course Setup" icon={<Flag size={18}/>} status={courseReady?'complete':'empty'} summary={courseReady?`${course?.name} · Par ${(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)}`:'No course set'}>
-          {courseReady ? (
-            <div className="flex items-center justify-between">
-              <div><div className="text-white font-black">{course?.name}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">Par {(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes</div></div>
-              <Link href="/setup/settings" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
-            </div>
-          ) : (
-            <Link href="/setup/settings" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
-              <span className="flex items-center gap-2"><Flag size={14}/> SET UP COURSE</span><ChevronRight size={14}/>
-            </Link>
-          )}
-        </StepCard>
+ {/* ── STEP 2: COURSE ── */}
+ <StepCard number={2} title="Course Setup" icon={<Flag size={18}/>} status={courseReady?'complete':'empty'} summary={courseReady?`${course?.name} · Par ${(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)}`:'No course set'}>
+ {courseReady ? (
+ <div className="flex items-center justify-between">
+ <div><div className="text-white font-black">{course?.name}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">Par {(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes</div></div>
+ <Link href="/setup/settings" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
+ </div>
+ ) : (
+ <Link href="/setup/settings" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
+ <span className="flex items-center gap-2"><Flag size={14}/> SET UP COURSE</span><ChevronRight size={14}/>
+ </Link>
+ )}
+ </StepCard>
 
-        {/* ── STEP 3: ROSTER ── */}
-        <StepCard number={3} title="Roster & Teams" icon={<Users size={18}/>} status={rosterReady?'complete':'empty'} summary={playerCount>0?`${playerCount} players · ${teamCount} teams`:'No players yet'}>
-          {rosterReady ? (
-            <div className="flex items-center justify-between">
-              <div><div className="text-white font-black">{playerCount} Players · {teamCount} Teams</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">All players assigned</div></div>
-              <Link href="/setup/roster" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
-            </div>
-          ) : (
-            <Link href="/setup/roster" className="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
-              <span className="flex items-center gap-2"><Users size={14}/> BUILD ROSTER & TEAMS</span><ChevronRight size={14}/>
-            </Link>
-          )}
-        </StepCard>
+ {/* ── STEP 3: ROSTER ── */}
+ <StepCard number={3} title="Roster & Teams" icon={<Users size={18}/>} status={rosterReady?'complete':'empty'} summary={playerCount>0?`${playerCount} players · ${teamCount} teams`:'No players yet'}>
+ {rosterReady ? (
+ <div className="flex items-center justify-between">
+ <div><div className="text-white font-black">{playerCount} Players · {teamCount} Teams</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">All players assigned</div></div>
+ <Link href="/setup/roster" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
+ </div>
+ ) : (
+ <Link href="/setup/roster" className="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
+ <span className="flex items-center gap-2"><Users size={14}/> BUILD ROSTER & TEAMS</span><ChevronRight size={14}/>
+ </Link>
+ )}
+ </StepCard>
 
-        {/* ── STEP 4: MONEY ── */}
-        <StepCard number={4} title="Money & Pots" icon={<DollarSign size={18}/>} status={moneyReady?'complete':'empty'} summary={moneyReady?'Entry fee configured':'Not configured'}>
-          {moneyReady ? (
-            <div className="flex items-center justify-between">
-              <div className="text-white font-black text-sm">Entry fee configured</div>
-              <Link href="/setup/money" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
-            </div>
-          ) : (
-            <Link href="/setup/money" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
-              <span className="flex items-center gap-2"><DollarSign size={14}/> CONFIGURE MONEY</span><ChevronRight size={14}/>
-            </Link>
-          )}
-        </StepCard>
+ {/* ── STEP 4: MONEY ── */}
+ <StepCard number={4} title="Money & Pots" icon={<DollarSign size={18}/>} status={moneyReady?'complete':'empty'} summary={moneyReady?'Entry fee configured':'Not configured'}>
+ {moneyReady ? (
+ <div className="flex items-center justify-between">
+ <div className="text-white font-black text-sm">Entry fee configured</div>
+ <Link href="/setup/money" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
+ </div>
+ ) : (
+ <Link href="/setup/money" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
+ <span className="flex items-center gap-2"><DollarSign size={14}/> CONFIGURE MONEY</span><ChevronRight size={14}/>
+ </Link>
+ )}
+ </StepCard>
 
-        {/* ── STEP 5: FORMAT ── */}
-        <StepCard number={5} title="Team Scoring Format" icon={<Layers size={18}/>} status="complete" summary={formatCustom?formatName:"Jeff's Blitz (Default)"}>
-          <div className="flex items-center justify-between">
-            <div><div className="text-white font-black text-sm">{formatName}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">{formatCustom?'Custom format':'Default · Best 2 Net (Best 3 on Par 3)'}</div></div>
-            <Link href="/setup/format" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">{formatCustom?'EDIT':'CONFIGURE'} <ChevronRight size={14}/></Link>
-          </div>
-        </StepCard>
+ {/* ── STEP 5: FORMAT ── */}
+ <StepCard number={5} title="Team Scoring Format" icon={<Layers size={18}/>} status="complete" summary={formatCustom?formatName:"Jeff's Blitz (Default)"}>
+ <div className="flex items-center justify-between">
+ <div><div className="text-white font-black text-sm">{formatName}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">{formatCustom?'Custom format':'Default · Best 2 Net (Best 3 on Par 3)'}</div></div>
+ <Link href="/setup/format" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">{formatCustom?'EDIT':'CONFIGURE'} <ChevronRight size={14}/></Link>
+ </div>
+ </StepCard>
 
-        {/* ── STEP 6: MATCHUPS ── */}
-        <StepCard number={6} title="Side Bets & Matches" icon={<Sword size={18}/>} status={matchupsReady?'complete':'empty'} summary={matchupsReady?`${matchupCount} match${matchupCount>1?'es':''} configured`:'No matches set up'}>
-          {matchupsReady ? (
-            <div className="flex items-center justify-between">
-              <div className="text-white font-black text-sm">{matchupCount} match{matchupCount>1?'es':''} configured</div>
-              <Link href="/setup/matchups" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
-            </div>
-          ) : (
-            <Link href="/setup/matchups" className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
-              <span className="flex items-center gap-2"><Sword size={14}/> SET UP MATCHES</span><ChevronRight size={14}/>
-            </Link>
-          )}
-        </StepCard>
+ {/* ── STEP 6: MATCHUPS ── */}
+ <StepCard number={6} title="Side Bets & Matches" icon={<Sword size={18}/>} status={matchupsReady?'complete':'empty'} summary={matchupsReady?`${matchupCount} match${matchupCount>1?'es':''} configured`:'No matches set up'}>
+ {matchupsReady ? (
+ <div className="flex items-center justify-between">
+ <div className="text-white font-black text-sm">{matchupCount} match{matchupCount>1?'es':''} configured</div>
+ <Link href="/setup/matchups" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
+ </div>
+ ) : (
+ <Link href="/setup/matchups" className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
+ <span className="flex items-center gap-2"><Sword size={14}/> SET UP MATCHES</span><ChevronRight size={14}/>
+ </Link>
+ )}
+ </StepCard>
 
-        {/* ── GO LIVE ── */}
-        <div className={`mt-4 rounded-[2rem] border-2 p-6 transition-all ${allComplete?'bg-emerald-950/40 border-emerald-500/60':'bg-zinc-900/40 border-zinc-800'}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${allComplete?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-600'}`}>
-              {allComplete?<Play size={14}/>:'7'}
-            </div>
-            <div>
-              <h3 className={`font-black text-base ${allComplete?'text-emerald-400':'text-zinc-600'}`}>GO LIVE</h3>
-              <p className="text-[10px] font-black text-zinc-600 tracking-wider">{allComplete?'All set · Ready to start scoring':'Complete steps 1–6 above'}</p>
-            </div>
-          </div>
-          <Link href="/scorer" className={`w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-xl ${allComplete?'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20':'bg-zinc-800 text-zinc-600 pointer-events-none'}`}>
-            <Play size={22}/> {meta.currentDay?`START ${meta.currentDay.toUpperCase()}`:'START TOURNAMENT'}
-          </Link>
-        </div>
+ {/* ── GO LIVE ── */}
+ <div className={`mt-4 rounded-[2rem] border-2 p-6 transition-all ${allComplete?'bg-emerald-950/40 border-emerald-500/60':'bg-zinc-900/40 border-zinc-800'}`}>
+ <div className="flex items-center gap-3 mb-4">
+ <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${allComplete?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-600'}`}>
+ {allComplete?<Play size={14}/>:'7'}
+ </div>
+ <div>
+ <h3 className={`font-black text-base ${allComplete?'text-emerald-400':'text-zinc-600'}`}>GO LIVE</h3>
+ <p className="text-[10px] font-black text-zinc-600 tracking-wider">{allComplete?'All set · Ready to start scoring':'Complete steps 1–6 above'}</p>
+ </div>
+ </div>
+ <Link href="/scorer" className={`w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-xl ${allComplete?'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20':'bg-zinc-800 text-zinc-600 pointer-events-none'}`}>
+ <Play size={22}/> {meta.currentDay?`START ${meta.currentDay.toUpperCase()}`:'START TOURNAMENT'}
+ </Link>
+ </div>
 
-        {/* ── DESTRUCTIVE ── */}
-        <div className="pt-4 border-t border-zinc-900">
-          <button onClick={()=>setShowDestructive(!showDestructive)} className="w-full text-[9px] font-black text-zinc-700 hover:text-zinc-500 tracking-[0.3em] py-3 transition-colors">
-            {showDestructive?'▲ HIDE':'▼ SHOW'} DESTRUCTIVE COMMANDS
-          </button>
-          {showDestructive && (
-            <div className="space-y-2 pt-1">
-              <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("WIPE SCORES ONLY?"))return;await set(ref(db,'tournament/scores'),null);flash("✓ Scores wiped.")}}
-                className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
-                <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>
-                <span className="text-amber-800 text-[9px]">KEEPS TEAMS & BETS</span>
-              </button>
-              <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("FULL RESET?"))return;await set(ref(db,'tournament/scores'),null);await set(ref(db,'tournament/teams'),null);await set(ref(db,'tournament/matchups'),null);await set(ref(db,'tournament/meta'),null);flash("✓ Full reset.")}}
-                className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
-                <span><Trash2 size={12} className="inline mr-2"/>WIPE ALL DATA</span>
-                <span className="text-rose-900 text-[9px]">FULL RESET</span>
-              </button>
-            </div>
-          )}
-        </div>
+ {/* ── DESTRUCTIVE ── */}
+ <div className="pt-4 border-t border-zinc-900">
+ <button onClick={()=>setShowDestructive(!showDestructive)} className="w-full text-[9px] font-black text-zinc-700 hover:text-zinc-500 tracking-[0.3em] py-3 transition-colors">
+ {showDestructive?'▲ HIDE':'▼ SHOW'} DESTRUCTIVE COMMANDS
+ </button>
+ {showDestructive && (
+ <div className="space-y-2 pt-1">
+ <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("WIPE SCORES ONLY?"))return;await set(ref(db,'tournament/scores'),null);flash("✓ Scores wiped.")}}
+ className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
+ <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>
+ <span className="text-amber-800 text-[9px]">KEEPS TEAMS & BETS</span>
+ </button>
+ <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("FULL RESET?"))return;await set(ref(db,'tournament/scores'),null);await set(ref(db,'tournament/teams'),null);await set(ref(db,'tournament/matchups'),null);await set(ref(db,'tournament/meta'),null);flash("✓ Full reset.")}}
+ className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
+ <span><Trash2 size={12} className="inline mr-2"/>WIPE ALL DATA</span>
+ <span className="text-rose-900 text-[9px]">FULL RESET</span>
+ </button>
+ </div>
+ )}
+ </div>
 
-        <p className="text-center text-[9px] text-zinc-800 font-black tracking-widest pb-8">AUTHORIZED ACCESS ONLY · SENIOR MANAGEMENT CONSOLE</p>
-      </div>
-    </div>
-  )
+ <p className="text-center text-[9px] text-zinc-800 font-black tracking-widest pb-8">AUTHORIZED ACCESS ONLY · SENIOR MANAGEMENT CONSOLE</p>
+ </div>
+ </div>
+ )
 }
 
 function StepCard({number,title,summary,status,icon,children}:{number:number;title:string;summary:string;status:'complete'|'empty'|'warning';icon:React.ReactNode;children:React.ReactNode}) {
-  const isComplete=status==='complete',isWarning=status==='warning'
-  return (
-    <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${isComplete?'border-emerald-500/40 bg-zinc-950':isWarning?'border-amber-500/40 bg-zinc-950':'border-zinc-800 bg-zinc-950'}`}>
-      <div className={`px-5 py-4 flex items-center gap-4 border-b ${isComplete?'border-emerald-500/20':isWarning?'border-amber-500/20':'border-zinc-800'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${isComplete?'bg-emerald-500 text-black':isWarning?'bg-amber-500/30 text-amber-400':'bg-zinc-800 text-zinc-500'}`}>
-          {isComplete?<CheckCircle2 size={16}/>:number}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className={`font-black text-sm ${isComplete?'text-emerald-400':isWarning?'text-amber-400':'text-zinc-400'}`}>{title}</div>
-          <div className="text-[10px] font-black text-zinc-600 tracking-wider truncate normal-case mt-0.5">{summary}</div>
-        </div>
-        <div className={`flex-shrink-0 ${isComplete?'text-emerald-500':isWarning?'text-amber-500':'text-zinc-700'}`}>{icon}</div>
-      </div>
-      <div className="px-5 py-4">{children}</div>
-    </div>
-  )
+ const isComplete=status==='complete',isWarning=status==='warning'
+ return (
+ <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${isComplete?'border-emerald-500/40 bg-zinc-950':isWarning?'border-amber-500/40 bg-zinc-950':'border-zinc-800 bg-zinc-950'}`}>
+ <div className={`px-5 py-4 flex items-center gap-4 border-b ${isComplete?'border-emerald-500/20':isWarning?'border-amber-500/20':'border-zinc-800'}`}>
+ <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${isComplete?'bg-emerald-500 text-black':isWarning?'bg-amber-500/30 text-amber-400':'bg-zinc-800 text-zinc-500'}`}>
+ {isComplete?<CheckCircle2 size={16}/>:number}
+ </div>
+ <div className="flex-1 min-w-0">
+ <div className={`font-black text-sm ${isComplete?'text-emerald-400':isWarning?'text-amber-400':'text-zinc-400'}`}>{title}</div>
+ <div className="text-[10px] font-black text-zinc-600 tracking-wider truncate normal-case mt-0.5">{summary}</div>
+ </div>
+ <div className={`flex-shrink-0 ${isComplete?'text-emerald-500':isWarning?'text-amber-500':'text-zinc-700'}`}>{icon}</div>
+ </div>
+ <div className="px-5 py-4">{children}</div>
+ </div>
+ )
 }
