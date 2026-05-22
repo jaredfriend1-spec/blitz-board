@@ -192,15 +192,15 @@ export default function HistoryPage() {
         <div className="flex items-center gap-4 mb-10">
           <Archive size={36} className="text-blue-400"/>
           <div>
-            <h1 className="text-4xl font-black tracking-tight">Tournament History</h1>
-            <p className="text-zinc-600 text-[10px] font-black tracking-widest mt-0.5">{archives.length} ARCHIVED TOURNAMENT{archives.length !== 1 ? 'S' : ''}</p>
+            <h1 className="text-4xl font-black tracking-tight">History</h1>
+            <p className="text-zinc-600 text-[10px] font-black tracking-widest mt-0.5">{archives.length} ARCHIVED RECORD{archives.length !== 1 ? 'S' : ''}</p>
           </div>
         </div>
 
         {archives.length === 0 && (
           <div className="text-center py-24 border-2 border-dashed border-zinc-800 rounded-[2.5rem]">
             <Archive size={48} className="mx-auto mb-4 text-zinc-800"/>
-            <p className="text-zinc-600 font-black text-lg">NO ARCHIVED TOURNAMENTS</p>
+            <p className="text-zinc-600 font-black text-lg">NO HISTORY YET</p>
             <p className="text-zinc-700 text-xs font-black mt-2 tracking-widest normal-case">
               Use Admin → Archive to History after each round
             </p>
@@ -231,6 +231,23 @@ export default function HistoryPage() {
                     <div>
                       <div className="flex items-center gap-2 text-zinc-500 font-black text-[10px] tracking-widest mb-1">
                         <Calendar size={12}/> {date}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        {(arch._meta?.mode === 'match' || arch.meta?.mode === 'match') && (
+                          <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                            ⚡ QUICK MATCH
+                          </span>
+                        )}
+                        {arch._meta?.tripName && arch._meta?.mode !== 'match' && (
+                          <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                            {arch._meta.tripName}
+                          </span>
+                        )}
+                        {arch._meta?.dayLabel && arch._meta?.mode !== 'match' && (
+                          <span className="bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                            {arch._meta.dayLabel}
+                          </span>
+                        )}
                       </div>
                       <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
                         {arch.course?.name || 'TOURNAMENT RECAP'}

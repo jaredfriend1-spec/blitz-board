@@ -238,8 +238,8 @@ export default function LandingPage() {
   // ── ADMIN HUB ──────────────────────────────────────────────────
   const adminItems = [
     {
-      title:"Setup Wizard",
-      desc:"Configure tournament · Checklist",
+      title:"Tournament Wizard",
+      desc:"Full tournament · Multi-day · Skins",
       path:"/setup",
       icon:<ShieldAlert className="text-rose-400" size={28}/>,
       color:"border-rose-500/30 hover:border-rose-500",

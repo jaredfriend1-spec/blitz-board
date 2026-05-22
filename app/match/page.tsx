@@ -55,6 +55,12 @@ export default function QuickMatch() {
   // Format
   const [formatMode, setFormatMode] = useState<'blitz'|'custom'>('blitz')
   const [savedFormats, setSavedFormats] = useState<any[]>([])
+  const [selectedSavedFormat, setSelectedSavedFormat] = useState<any>(null)
+  const [customFormatBalls, setCustomFormatBalls] = useState({
+    par3: [{type:'net'},{type:'net'},{type:'net'}],
+    par4: [{type:'net'},{type:'net'}],
+    par5: [{type:'net'},{type:'net'}],
+  })
 
   // Matches
   const [matches, setMatches] = useState<any[]>([])
@@ -120,15 +126,23 @@ export default function QuickMatch() {
     showToast('✓ Scorecard accepted')
   }
 
+  const [existingMatchMode, setExistingMatchMode] = useState(false)
+
   useEffect(() => {
     // Check for existing tournament data
-    get(ref(db,'tournament/meta')).then(snap => {
+    get(ref(db,'tournament/meta')).then(async snap => {
       const m = snap.val()
-      if (m && m.tripName && !m.isMock) {
+      if (m && m.mode === 'match') {
+        // Existing quick match — offer to continue or restart
+        setExistingMatchMode(true)
+        setCheckingExisting(false)
+      } else if (m && m.tripName && !m.isMock) {
         setExistingTripName(m.tripName)
         setExistingWarning(true)
+        setCheckingExisting(false)
+      } else {
+        setCheckingExisting(false)
       }
-      setCheckingExisting(false)
     })
     // Load course history (shared with tournament)
     onValue(ref(db,'courseHistory'), snap => {
@@ -148,6 +162,44 @@ export default function QuickMatch() {
       if (snap.val()) setSavedFormats(Object.values(snap.val()) as any[])
     })
   }, [])
+
+  // ── CONTINUE EXISTING QUICK MATCH ───────────────────────────────
+  const continueExistingMatch = async () => {
+    setLoading(true)
+    // Pre-load course
+    const courseSnap = await get(ref(db,'tournament/course'))
+    if (courseSnap.val()) {
+      setCourseName(courseSnap.val().name || '')
+      if (courseSnap.val().holes?.length === 18) setHoles(courseSnap.val().holes)
+    }
+    // Pre-load players
+    const rosterSnap = await get(ref(db,'tournament/roster'))
+    if (rosterSnap.val()) {
+      const ps = Object.values(rosterSnap.val()) as any[]
+      setPlayers(ps.map(p => ({ id: p.id, name: p.name, handicap: p.handicap || 0 })))
+    }
+    // Pre-load teams
+    const teamsSnap = await get(ref(db,'tournament/teams'))
+    if (teamsSnap.val()) {
+      const ts = Object.values(teamsSnap.val()) as any[]
+      setTeams(ts.map(t => ({ id: t.id, name: t.name, playerIds: t.playerIds || [] })))
+      setTeamsCreated(true)
+      setSkipTeams(false)
+    }
+    // Pre-load existing matches
+    const matchSnap = await get(ref(db,'tournament/matchups'))
+    if (matchSnap.val()) {
+      setMatches(Object.values(matchSnap.val()) as any[])
+    }
+    setLoading(false)
+    setExistingMatchMode(false)
+    setStep(4) // Jump straight to matches step
+  }
+
+  const startFreshMatch = async () => {
+    await set(ref(db,'tournament'), null)
+    setExistingMatchMode(false)
+  }
 
   // ── ARCHIVE EXISTING + START MATCH ──────────────────────────────
   const archiveAndStart = async () => {
@@ -258,7 +310,11 @@ export default function QuickMatch() {
     }
 
     // Format
-    const formatToSave = formatMode === 'blitz' ? JEFFS_BLITZ : JEFFS_BLITZ // default for now
+    const formatToSave = formatMode === 'blitz'
+      ? JEFFS_BLITZ
+      : selectedSavedFormat
+      ? selectedSavedFormat
+      : { name: 'Custom', ...customFormatBalls }
     await set(ref(db,'tournament/format'), formatToSave)
 
     // Matches — remap player names (they're already names not IDs)
@@ -285,6 +341,41 @@ export default function QuickMatch() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <Loader2 size={32} className="animate-spin text-emerald-500"/>
+      </div>
+    )
+  }
+
+  if (existingMatchMode) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 font-sans uppercase italic">
+        <div className="max-w-md w-full bg-zinc-900 rounded-[2.5rem] border-2 border-amber-500/50 p-8 space-y-6">
+          <div className="flex items-center gap-3">
+            <Zap size={28} className="text-amber-400 flex-shrink-0"/>
+            <div>
+              <h2 className="font-black text-xl">Quick Match In Progress</h2>
+              <p className="text-zinc-500 text-xs font-black normal-case mt-1">
+                A match is already configured
+              </p>
+            </div>
+          </div>
+          <p className="text-zinc-400 text-sm font-black normal-case leading-relaxed">
+            Do you want to add more matches to the current setup, or start a completely fresh match?
+          </p>
+          <div className="space-y-3">
+            <button onClick={continueExistingMatch} disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-2xl font-black text-sm transition-colors flex items-center justify-center gap-2">
+              {loading ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
+              ADD MORE MATCHES
+            </button>
+            <button onClick={startFreshMatch} disabled={loading}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm transition-colors">
+              START FRESH MATCH
+            </button>
+            <Link href="/" className="w-full block text-center text-zinc-600 hover:text-zinc-400 font-black text-sm py-2 transition-colors">
+              CANCEL — GO BACK
+            </Link>
+          </div>
+        </div>
       </div>
     )
   }
@@ -736,9 +827,9 @@ export default function QuickMatch() {
               </button>
               <button onClick={() => setFormatMode('custom')}
                 className={`p-5 rounded-[1.75rem] border-2 text-left transition-all ${formatMode==='custom'?'border-purple-500/60 bg-purple-950/20':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
-                <div className="text-2xl mb-2">📚</div>
-                <div className={`font-black text-sm ${formatMode==='custom'?'text-purple-400':'text-zinc-300'}`}>From Library</div>
-                <div className="text-[10px] text-zinc-600 normal-case mt-1">{savedFormats.length > 0 ? `${savedFormats.length} saved formats` : 'No saved formats yet'}</div>
+                <div className="text-2xl mb-2">⚙️</div>
+                <div className={`font-black text-sm ${formatMode==='custom'?'text-purple-400':'text-zinc-300'}`}>Configure</div>
+                <div className="text-[10px] text-zinc-600 normal-case mt-1">{savedFormats.length > 0 ? `Load from library` : 'Set custom balls'}</div>
                 {formatMode==='custom' && <Check size={14} className="text-purple-400 mt-2"/>}
               </button>
             </div>
@@ -755,6 +846,55 @@ export default function QuickMatch() {
                     <ChevronRight size={16} className="text-zinc-600"/>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* Custom format configurator */}
+            {formatMode === 'custom' && savedFormats.length === 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                <p className="text-[10px] font-black text-zinc-500 tracking-widest">CONFIGURE CUSTOM FORMAT</p>
+                {(['par3','par4','par5'] as const).map((parKey, pi) => {
+                  const label = ['PAR 3','PAR 4','PAR 5'][pi]
+                  const currentBalls = customFormatBalls[parKey]
+                  return (
+                    <div key={parKey} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-sm">{label}</span>
+                        <span className="text-zinc-500 text-[10px] font-black">
+                          {currentBalls.filter((b:any)=>b.type==='gross').length > 0
+                            ? `${currentBalls.filter((b:any)=>b.type==='gross').length}G + ${currentBalls.filter((b:any)=>b.type==='net').length}N`
+                            : `Best ${currentBalls.length} Net`}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        {[1,2,3,4].map(n => (
+                          <button key={n} onClick={() => setCustomFormatBalls(prev => ({
+                            ...prev,
+                            [parKey]: Array.from({length:n}, (_,i) => prev[parKey][i] || {type:'net'})
+                          }))}
+                            className={`w-10 h-10 rounded-xl font-black text-sm border-2 transition-all ${currentBalls.length===n?'bg-white text-black border-white':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {currentBalls.map((ball:any, i:number) => (
+                          <button key={i} onClick={() => setCustomFormatBalls(prev => {
+                            const updated = [...prev[parKey]]
+                            updated[i] = {type: updated[i].type === 'net' ? 'gross' : 'net'}
+                            return {...prev, [parKey]: updated}
+                          })}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-xs border-2 transition-all ${
+                              ball.type==='net'?'bg-emerald-500/20 border-emerald-500/50 text-emerald-400':'bg-rose-500/20 border-rose-500/50 text-rose-400'
+                            }`}>
+                            <span className="text-[9px] text-zinc-500">#{i+1}</span>
+                            {ball.type === 'net' ? 'NET' : 'GROSS'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
@@ -899,14 +1039,65 @@ export default function QuickMatch() {
                   </div>
                 )}
 
-                {/* Wheel amount */}
+                {/* Wheel options */}
                 {buildingType === 'Wheel' && (
-                  <div>
-                    <label className="text-[10px] font-black text-zinc-600 block mb-1.5">BET AMOUNT PER PAIR ($)</label>
-                    <input type="number" value={matchDraft.wheelAmount}
-                      onChange={e => setMatchDraft(d=>({...d,wheelAmount:Number(e.target.value)}))}
-                      className="w-full bg-black border border-zinc-700 p-3 rounded-xl font-black text-purple-400 outline-none text-center text-xl"
-                    />
+                  <div className="space-y-3">
+                    {/* Format */}
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-600 block mb-2">MATCH FORMAT PER PAIR</label>
+                      <div className="flex gap-2">
+                        <button onClick={() => setMatchDraft(d=>({...d,wheelFormat:'straight'}))}
+                          className={`flex-1 py-2.5 rounded-xl font-black text-xs border-2 transition-all ${matchDraft.wheelFormat==='straight'?'bg-purple-500 border-purple-400 text-white':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
+                          STRAIGHT 18
+                          <div className="text-[9px] opacity-70 mt-0.5 normal-case">One bet · total holes</div>
+                        </button>
+                        <button onClick={() => setMatchDraft(d=>({...d,wheelFormat:'nassau'}))}
+                          className={`flex-1 py-2.5 rounded-xl font-black text-xs border-2 transition-all ${matchDraft.wheelFormat==='nassau'?'bg-purple-500 border-purple-400 text-white':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
+                          NASSAU
+                          <div className="text-[9px] opacity-70 mt-0.5 normal-case">F9 · B9 · Total</div>
+                        </button>
+                      </div>
+                    </div>
+                    {/* Straight amount */}
+                    {matchDraft.wheelFormat === 'straight' && (
+                      <div>
+                        <label className="text-[10px] font-black text-zinc-600 block mb-1.5">BET AMOUNT PER PAIR ($)</label>
+                        <input type="number" value={matchDraft.wheelAmount}
+                          onChange={e => setMatchDraft(d=>({...d,wheelAmount:Number(e.target.value)}))}
+                          className="w-full bg-black border border-zinc-700 p-3 rounded-xl font-black text-purple-400 outline-none text-center text-xl"
+                        />
+                      </div>
+                    )}
+                    {/* Nassau options */}
+                    {matchDraft.wheelFormat === 'nassau' && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-black text-zinc-600 block mb-1.5">NASSAU ($)</label>
+                            <input type="number" value={matchDraft.wheelNassau}
+                              onChange={e => setMatchDraft(d=>({...d,wheelNassau:Number(e.target.value)}))}
+                              className="w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black text-purple-400 outline-none text-center"/>
+                          </div>
+                          <div>
+                            <label className={`text-[10px] font-black block mb-1.5 ${matchDraft.wheelAutoPress?'text-yellow-500':'text-zinc-600'}`}>PRESS ($)</label>
+                            <input type="number" value={matchDraft.wheelPress}
+                              onChange={e => setMatchDraft(d=>({...d,wheelPress:Number(e.target.value)}))}
+                              disabled={!matchDraft.wheelAutoPress}
+                              className={`w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black outline-none text-center ${matchDraft.wheelAutoPress?'text-yellow-400':'text-zinc-700'}`}/>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setMatchDraft(d=>({...d,wheelAutoPress:true}))}
+                            className={`flex-1 py-2 rounded-xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-all ${matchDraft.wheelAutoPress?'bg-yellow-500/20 border-yellow-500/60 text-yellow-400':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
+                            <Zap size={11}/> AUTO-PRESS
+                          </button>
+                          <button onClick={() => setMatchDraft(d=>({...d,wheelAutoPress:false}))}
+                            className={`flex-1 py-2 rounded-xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-all ${!matchDraft.wheelAutoPress?'bg-zinc-700 border-zinc-500 text-white':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
+                            <ZapOff size={11}/> NO PRESS
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
