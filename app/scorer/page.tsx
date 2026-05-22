@@ -80,14 +80,16 @@ export default function ScorerPage() {
 
   // Edit mode PIN gate
   const [editMode, setEditMode] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showPinModal, setShowPinModal] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
   const [showPin, setShowPin] = useState(false)
 
   useEffect(() => {
-    // Check session storage for edit mode
+    // Check session storage for edit mode and role
     if (sessionStorage.getItem('scorer-edit') === 'true') setEditMode(true)
+    setIsAdmin(sessionStorage.getItem('role') === 'admin')
     onValue(ref(db,'tournament/scores'), snap => snap.val() && setScores(snap.val()))
     onValue(ref(db,'tournament/course'), snap => snap.val() && setCourse(snap.val()))
     onValue(ref(db,'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
@@ -148,9 +150,19 @@ export default function ScorerPage() {
         </div>
         <div className="text-center pt-32 max-w-lg mx-auto px-6">
           <p className="text-5xl mb-4">⛳</p>
-          <h1 className="text-3xl font-black text-rose-500 mb-4">NO TEAMS BUILT</h1>
-          <p className="text-zinc-500 mb-10 font-black text-sm">Add players to the roster and assign them to teams first.</p>
-          <Link href="/setup/roster" className="bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black hover:bg-emerald-400 transition-colors">GO TO ROSTER →</Link>
+          <h1 className="text-3xl font-black text-rose-500 mb-4">NOT SET UP YET</h1>
+          {isAdmin ? (
+            <>
+              <p className="text-zinc-500 mb-10 font-black text-sm normal-case">Add players to the roster and assign them to teams first.</p>
+              <Link href="/setup/roster" className="bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black hover:bg-emerald-400 transition-colors">
+                GO TO ROSTER →
+              </Link>
+            </>
+          ) : (
+            <p className="text-zinc-500 font-black text-sm normal-case leading-relaxed">
+              The admin hasn't set up today's match yet. Check back soon or ask the admin to configure the round.
+            </p>
+          )}
         </div>
       </div>
     )
