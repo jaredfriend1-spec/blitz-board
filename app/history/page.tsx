@@ -356,293 +356,117 @@ export default function HistoryPage() {
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blitz Board — ${courseTitle} ${date}</title>
+<title>Blitz Board Export</title>
 <style>
- * { box-sizing: border-box; margin: 0; padding: 0; }
- body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; background: #000; color: #fff; padding: 24px; font-size: 13px; }
- @media print {
- -webkit-print-color-adjust: exact;
- print-color-adjust: exact;
- }
- @media print, screen {
- /* Force readable colors for both screen and print */
- }
- /* Override: use light theme for everything so print works */
- body { background: #fff !important; color: #111 !important; }
- .header-bar { background: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border-bottom-color: #10b981 !important; }
- .card { background: #fff !important; border-color: #e5e7eb !important; }
- .match-card { background: #fff !important; border-color: #e5e7eb !important; }
- .match-header { background: #f9fafb !important; border-bottom: 1px solid #e5e7eb; }
- .section-title { background: #f9fafb !important; color: #047857 !important; border-bottom-color: #e5e7eb !important; }
- .section-title.amber { color: #b45309 !important; }
- .section-title.blue { color: #1d4ed8 !important; }
- .section-body { background: #fff !important; }
- .leaderboard-row { border-bottom-color: #f3f4f6 !important; }
- .lb-name { color: #111 !important; }
- .lb-hcp { color: #6b7280 !important; }
- .lb-score { color: #111 !important; }
- .lb-pos { color: #6b7280 !important; }
- .lb-pos.gold { color: #d97706 !important; }
- .scorecard th { background: #f9fafb !important; color: #374151 !important; border-bottom-color: #e5e7eb !important; }
- .scorecard td { border-bottom-color: #f3f4f6 !important; color: #111 !important; }
- .scorecard tr:nth-child(even) td { background: #fafafa !important; }
- .par-sub { color: #9ca3af !important; }
- .sc { color: #111 !important; }
- .sc.par { background: #e5e7eb !important; color: #111 !important; }
- .sc.bogey { border-color: #9ca3af !important; color: #374151 !important; background: #fff !important; }
- .sc.double { border-color: #9ca3af !important; color: #374151 !important; background: #f9fafb !important; }
- .sc.birdie { border: 2px solid #dc2626 !important; border-radius: 50% !important; color: #dc2626 !important; background: #fff !important; }
- .sc.eagle { border: 2px solid #d97706 !important; border-radius: 50% !important; outline: 2px solid #d97706 !important; outline-offset: 2px !important; color: #d97706 !important; background: #fff !important; }
- .sc.empty { color: #d1d5db !important; }
- .player-name { color: #111 !important; }
- .side-a .player-name, .side-a .total { color: #059669 !important; }
- .side-b .player-name, .side-b .total { color: #2563eb !important; }
- .side-a-label { color: #059669 !important; }
- .side-b-label { color: #2563eb !important; }
- .hole-winner { color: #6b7280 !important; }
- .win-a { color: #059669 !important; }
- .win-b { color: #2563eb !important; }
- .tie { color: #9ca3af !important; }
- .winners-row td { background: #f9fafb !important; }
- .nine-label { color: #9ca3af !important; }
- .payout-block { background: #f9fafb !important; border-top-color: #e5e7eb !important; }
- .payout-row { color: #374151 !important; }
- .payout-row .pa { color: #059669 !important; }
- .payout-row .pb { color: #2563eb !important; }
- .payout-row .sep { color: #d1d5db !important; }
- .match-result { background: #f3f4f6 !important; color: #111 !important; }
- .skins-grid { background: #fff !important; }
- .skin-cell { border-color: #e5e7eb !important; background: #fff !important; }
- .skin-cell.won { border-color: #10b981 !important; background: #f0fdf4 !important; }
- .skin-hole { color: #9ca3af !important; }
- .skin-name { color: #059669 !important; }
- .skin-empty { color: #e5e7eb !important; }
- .skins-payouts { border-top-color: #e5e7eb !important; }
- .skins-payout-row { border-bottom-color: #f3f4f6 !important; }
- .sp-name { color: #111 !important; }
- .sp-count { color: #6b7280 !important; }
- .sp-amount { color: #059669 !important; }
- .team-row { border-bottom-color: #f3f4f6 !important; }
- .team-name { color: #111 !important; }
- .team-nine { color: #6b7280 !important; }
- .team-total { color: #2563eb !important; }
- .match-sides .vs-sep { color: #9ca3af !important; }
- .badge.net { background: #f0fdf4 !important; color: #059669 !important; }
- .badge.gross { background: #fef2f2 !important; color: #dc2626 !important; }
- .badge.type { background: #f9fafb !important; color: #374151 !important; border-color: #e5e7eb !important; }
- .pair-pill { background: #faf5ff !important; border-color: #c4b5fd !important; color: #7c3aed !important; }
- .pair-pill .vs { color: #9ca3af !important; }
- .wheel-pair-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid #f3f4f6; font-size:12px; }
- .wheel-pair-row:last-child { border-bottom:none; }
- .wp-name { flex:1; font-weight:600; color:#374151; }
- .wp-name.win-a { color:#059669; }
- .wp-result { color:#6b7280; font-size:11px; font-weight:600; min-width:40px; text-align:center; }
- .wp-amt { min-width:40px; text-align:right; font-weight:700; color:#059669; font-size:12px; }
- .wheel-net-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
- .wheel-net-cell { border:1px solid #e5e7eb; border-radius:8px; padding:8px; text-align:center; }
- .wheel-net-cell.pos { border-color:#10b981; background:#f0fdf4; }
- .wheel-net-cell.neg { border-color:#ef4444; background:#fef2f2; }
- .wheel-net-cell.even { background:#f9fafb; }
- .wn-name { font-size:11px; color:#6b7280; font-weight:600; margin-bottom:3px; }
- .wn-amt { font-size:15px; font-weight:700; }
- .wheel-net-cell.pos .wn-amt { color:#059669; }
- .wheel-net-cell.neg .wn-amt { color:#dc2626; }
- .wheel-net-cell.even .wn-amt { color:#9ca3af; }
- .footer { color: #9ca3af !important; border-top-color: #e5e7eb !important; }
- @media print {
- .no-print { display: none !important; }
- .card { break-inside: avoid; }
- }
- .header-bar { background: #000; border-bottom: 3px solid #10b981; padding: 20px 0 16px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-end; }
- .brand { font-size: 28px; font-weight: 900; letter-spacing: -1px; }
- .brand span { color: #10b981; }
- .header-meta { text-align: right; }
- .header-meta .course { font-size: 16px; font-weight: 700; color: #e5e7eb; }
- .header-meta .sub { font-size: 11px; color: #6b7280; margin-top: 3px; }
- .card { background: #111; border: 1px solid #27272a; border-radius: 16px; margin-bottom: 20px; overflow: hidden; }
- .section-title { font-size: 10px; font-weight: 700; letter-spacing: .15em; color: #10b981; padding: 12px 16px 10px; border-bottom: 1px solid #27272a; text-transform: uppercase; }
- .section-title.amber { color: #f59e0b; }
- .section-title.blue { color: #60a5fa; }
- .section-body { padding: 12px 16px; }
-
- /* Leaderboard */
- .leaderboard-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 4px; border-bottom: 1px solid #1f1f1f; }
- .leaderboard-row:last-child { border-bottom: none; }
- .lb-pos { width: 28px; font-weight: 700; color: #6b7280; font-size: 13px; }
- .lb-pos.gold { color: #f59e0b; }
- .lb-pos.silver { color: #9ca3af; }
- .lb-name { flex: 1; font-weight: 600; font-size: 14px; }
- .lb-hcp { color: #6b7280; font-size: 11px; margin-left: 8px; }
- .lb-score { font-weight: 700; font-size: 15px; }
- .lb-topar { font-size: 12px; font-weight: 600; margin-left: 10px; min-width: 36px; text-align: right; }
- .lb-topar.under { color: #10b981; }
- .lb-topar.over { color: #ef4444; }
- .lb-topar.even { color: #9ca3af; }
-
- /* Skins */
- .skins-grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 6px; padding: 12px 16px; }
- .skin-cell { border: 1px solid #27272a; border-radius: 8px; padding: 6px 4px; text-align: center; min-height: 52px; }
- .skin-cell.won { border-color: #10b981; background: rgba(16,185,129,.07); }
- .skin-hole { font-size: 9px; color: #4b5563; font-weight: 600; margin-bottom: 3px; }
- .skin-name { font-size: 9px; color: #10b981; font-weight: 700; line-height: 1.2; }
- .skin-empty { font-size: 9px; color: #27272a; }
- .skins-payouts { border-top: 1px solid #27272a; }
- .skins-payout-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid #1a1a1a; }
- .skins-payout-row:last-child { border-bottom: none; }
- .sp-name { font-weight: 600; font-size: 13px; }
- .sp-count { color: #6b7280; font-size: 11px; margin-left: 8px; }
- .sp-amount { font-weight: 700; color: #10b981; font-size: 14px; }
-
- /* Match cards */
- .match-card { border: 1px solid #27272a; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
- .match-header { background: #1a1a1a; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
- .match-sides { font-weight: 700; font-size: 14px; }
- .match-sides .side-a-label { color: #10b981; }
- .match-sides .side-b-label { color: #60a5fa; }
- .match-sides .vs-sep { color: #4b5563; margin: 0 8px; font-size: 11px; }
- .match-badges { display: flex; gap: 6px; }
- .badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
- .badge.net { background: rgba(16,185,129,.15); color: #10b981; }
- .badge.gross { background: rgba(239,68,68,.15); color: #ef4444; }
- .badge.type { background: #1f1f1f; color: #9ca3af; border: 1px solid #27272a; }
- .nine-label { font-size: 9px; font-weight: 700; letter-spacing: .12em; color: #6b7280; padding: 8px 14px 4px; text-transform: uppercase; }
- .scorecard { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
- .scorecard th { background: #f9fafb; padding: 5px 2px; text-align: center; font-weight: 700; color: #6b7280; font-size: 10px; border-bottom: 1px solid #e5e7eb; width: 28px; }
- .scorecard th:first-child { text-align: left; padding-left: 10px; width: 110px; }
- .scorecard th:last-child { width: 36px; }
- .scorecard td { padding: 5px 2px; text-align: center; border-bottom: 1px solid #f3f4f6; width: 28px; }
- .scorecard td:first-child { padding-left: 10px; width: 110px; }
- .scorecard td:last-child { width: 36px; }
- .par-sub { font-size: 8px; color: #9ca3af; font-weight: 400; margin-top: 1px; }
- .player-col { width: 110px; }
- .total-col { width: 36px; }
- .player-name { font-weight: 700; font-size: 12px; text-align: left !important; }
- .total { font-weight: 700; font-size: 13px; }
- .side-a .player-name, .side-a .total { color: #10b981; }
- .side-b .player-name, .side-b .total { color: #60a5fa; }
- .winners-row td { padding: 3px; }
- .hole-winner { font-weight: 700; font-size: 11px; }
- .win-a { color: #10b981; }
- .win-b { color: #60a5fa; }
- .tie { color: #6b7280; }
- .sc { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 4px; font-weight: 700; font-size: 11px; }
- .sc.birdie { border: 2px solid #dc2626; border-radius: 50%; color: #ef4444; }
- .sc.eagle { border: 2px solid #d97706; border-radius: 50%; outline: 2px solid #d97706; outline-offset: 2px; color: #f59e0b; }
- .sc.par { background: #1f1f1f; color: #e5e7eb; }
- .sc.bogey { border: 1px solid #4b5563; color: #9ca3af; }
- .sc.double { border: 2px solid #4b5563; color: #6b7280; }
- .sc.empty { color: #374151; }
- .payout-block { background: #0d0d0d; border-top: 1px solid #27272a; padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; }
- .payout-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #6b7280; }
- .payout-row .pl { flex: 1; }
- .payout-row .pa { color: #10b981; font-weight: 700; }
- .payout-row .sep { color: #374151; }
- .payout-row .pb { color: #60a5fa; font-weight: 700; }
- .match-result { margin-top: 6px; background: #1a1a1a; border-radius: 8px; padding: 8px 12px; font-weight: 700; font-size: 13px; color: #e5e7eb; }
- .pairs-grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
- .pair-pill { background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.3); color: #c084fc; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
- .pair-pill .vs { color: #6b7280; margin: 0 4px; }
-
- /* Team results */
- .team-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; border-bottom: 1px solid #1a1a1a; }
- .team-row:last-child { border-bottom: none; }
- .team-name { font-weight: 700; font-size: 14px; }
- .team-scores { display: flex; gap: 12px; align-items: center; }
- .team-nine { font-size: 11px; color: #6b7280; }
- .team-total { font-weight: 700; font-size: 15px; color: #60a5fa; }
-
- .print-btn { background: #10b981; color: #000; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; margin-bottom: 24px; }
- .footer { text-align: center; color: #374151; font-size: 10px; margin-top: 32px; padding-top: 16px; border-top: 1px solid #1a1a1a; }
+@page { size: A4 portrait; margin: 10mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 11px; max-width: 190mm; margin: 0 auto; }
+@media print { .no-print { display:none!important; } }
+.print-btn { background:#111; color:#fff; border:none; padding:8px 20px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; margin-bottom:14px; display:block; }
+.hdr { background:#111; color:#fff; border-radius:10px; padding:12px 16px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.hdr-brand { font-size:20px; font-weight:900; letter-spacing:-0.5px; }
+.hdr-brand span { color:#10b981; }
+.hdr-right { text-align:right; }
+.hdr-course { font-size:13px; font-weight:700; }
+.hdr-sub { font-size:10px; color:#9ca3af; margin-top:2px; }
+.section { margin-bottom:14px; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; page-break-inside:avoid; }
+.sh { padding:7px 12px; font-size:9px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; border-bottom:1px solid #e5e7eb; }
+.sh.g { background:#f0fdf4; color:#166534; }
+.sh.a { background:#fffbeb; color:#92400e; }
+.sh.b { background:#eff6ff; color:#1e40af; }
+table.lb { width:100%; border-collapse:collapse; }
+table.lb td { padding:5px 10px; border-bottom:1px solid #f3f4f6; font-size:11px; }
+table.lb tr:last-child td { border-bottom:none; }
+table.lb tr:nth-child(even) td { background:#f9fafb; }
+.sk-grid { display:grid; grid-template-columns:repeat(9,1fr); gap:4px; padding:8px 10px; }
+.sk { border:1px solid #e5e7eb; border-radius:5px; padding:3px 1px; text-align:center; }
+.sk.w { border-color:#10b981; background:#f0fdf4; }
+.sk-h { font-size:8px; color:#9ca3af; font-weight:600; }
+.sk-n { font-size:8px; color:#059669; font-weight:700; line-height:1.2; }
+table.st { width:100%; border-collapse:collapse; }
+table.st td { padding:4px 10px; border-bottom:1px solid #f3f4f6; font-size:11px; }
+.sc-hdr { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:#f9fafb; border-bottom:1px solid #e5e7eb; }
+.sc-a { color:#059669; font-weight:700; font-size:12px; }
+.sc-b { color:#2563eb; font-weight:700; font-size:12px; }
+.sc-sep { color:#9ca3af; margin:0 5px; font-size:10px; }
+.badges { display:flex; gap:4px; }
+.bdg { font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; }
+.bdg.net { background:#f0fdf4; color:#059669; }
+.bdg.gross { background:#fef2f2; color:#dc2626; }
+.bdg.t { background:#f3f4f6; color:#374151; }
+.nlbl { font-size:8px; font-weight:700; letter-spacing:.1em; color:#9ca3af; padding:5px 10px 2px; text-transform:uppercase; }
+table.sc { width:100%; border-collapse:collapse; table-layout:fixed; font-size:10px; }
+table.sc th { background:#f9fafb; text-align:center; padding:3px 1px; font-size:9px; color:#6b7280; font-weight:700; border-bottom:1px solid #e5e7eb; width:17px; }
+table.sc th.nc { text-align:left; padding-left:8px; width:90px; }
+table.sc th.tc { width:28px; }
+table.sc td { text-align:center; padding:3px 1px; border-bottom:1px solid #f9fafb; width:17px; color:#374151; font-weight:600; }
+table.sc td.nc { text-align:left; padding-left:8px; width:90px; font-weight:700; font-size:11px; }
+table.sc td.tc { width:28px; font-weight:700; font-size:12px; }
+.ra td.nc,.ra td.tc { color:#059669; }
+.rb td.nc,.rb td.tc { color:#2563eb; }
+.rw { background:#f9fafb; }
+.rw td { padding:2px 1px; font-size:9px; font-weight:700; }
+.wA { color:#059669; } .wB { color:#2563eb; } .wT { color:#9ca3af; }
+.pl { font-size:7px; color:#9ca3af; font-weight:400; display:block; }
+.sp { display:inline-block; background:#e5e7eb; border-radius:3px; width:15px; height:15px; line-height:15px; font-size:9px; }
+.sb { display:inline-block; border:1.5px solid #dc2626; border-radius:50%; width:15px; height:15px; line-height:12px; color:#dc2626; font-size:9px; }
+.se { display:inline-block; border:1.5px solid #d97706; border-radius:50%; outline:1.5px solid #d97706; outline-offset:1px; width:15px; height:15px; line-height:12px; color:#d97706; font-size:9px; }
+.sg { display:inline-block; border:1px solid #9ca3af; border-radius:2px; width:15px; height:15px; line-height:13px; color:#6b7280; font-size:9px; }
+.sd { display:inline-block; border:2px solid #9ca3af; border-radius:2px; width:15px; height:15px; line-height:11px; color:#6b7280; font-size:9px; }
+.em { color:#d1d5db; font-size:9px; }
+.pr { display:flex; gap:8px; padding:3px 10px; font-size:10px; border-bottom:1px solid #f9fafb; }
+.pr:last-child { border-bottom:none; }
+.pr .l { flex:1; color:#6b7280; }
+.pr .pa { color:#059669; font-weight:700; }
+.pr .s { color:#d1d5db; }
+.pr .pb { color:#2563eb; font-weight:700; }
+.mr { background:#f3f4f6; margin:5px 8px 8px; border-radius:6px; padding:6px 10px; display:flex; justify-content:space-between; }
+.mr .l { font-size:9px; color:#9ca3af; font-weight:600; }
+.mr .v { font-size:13px; font-weight:700; }
+.wp { display:flex; align-items:center; padding:4px 10px; border-bottom:1px solid #f9fafb; font-size:10px; gap:6px; }
+.wp .na { flex:1; font-weight:600; }
+.wp .na.w { color:#059669; }
+.wp .rs { color:#6b7280; min-width:36px; text-align:center; font-weight:600; font-size:9px; }
+.wp .nb { flex:1; font-weight:600; text-align:right; }
+.wp .nb.w { color:#059669; }
+.wp .am { min-width:32px; text-align:right; color:#059669; font-weight:700; }
+.wng { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; padding:7px 10px; }
+.wnc { border:1px solid #e5e7eb; border-radius:6px; padding:5px 4px; text-align:center; }
+.wnc.p { border-color:#10b981; background:#f0fdf4; }
+.wnc.n { border-color:#ef4444; background:#fef2f2; }
+.wnc .nm { font-size:9px; color:#6b7280; font-weight:600; }
+.wnc .am { font-size:12px; font-weight:700; }
+.wnc.p .am { color:#059669; }
+.wnc.n .am { color:#dc2626; }
+.wnc .am { color:#9ca3af; }
+table.tt { width:100%; border-collapse:collapse; }
+table.tt td { padding:5px 10px; border-bottom:1px solid #f3f4f6; font-size:11px; }
+table.tt tr:last-child td { border-bottom:none; }
+table.tt tr:nth-child(even) td { background:#f9fafb; }
+.ftr { text-align:center; color:#9ca3af; font-size:9px; margin-top:14px; padding-top:10px; border-top:1px solid #e5e7eb; }
 </style>
 </head>
 <body>
 <button class="print-btn no-print" onclick="window.print()">⬇ Save / Print PDF</button>
+<div class="hdr"><div class="hdr-brand">BLITZ <span>BOARD</span></div><div class="hdr-right"><div class="hdr-course">${courseTitle}</div><div class="hdr-sub">${subtitle ? subtitle+' · ' : ''}${date}</div></div></div>
 
-<div class="header-bar">
- <div class="brand">BLITZ <span>BOARD</span></div>
- <div class="header-meta">
- <div class="course">${courseTitle}</div>
- <div class="sub">${subtitle ? subtitle + ' · ' : ''}${date}</div>
- </div>
-</div>
+${recap.leaderboard.length > 0 ? '<div class="section"><div class="sh g">Leaderboard · '+recap.fieldSize+' Players</div><table class="lb">'+recap.leaderboard.map((p:any,i:number)=>{const tp=p.toPar===null?'—':p.toPar===0?'E':p.toPar>0?'+'+p.toPar:''+p.toPar;const tc=p.toPar===null||p.toPar===0?'#6b7280':p.toPar<0?'#059669':'#dc2626';const md=i===0?'🥇':i===1?'🥈':i===2?'🥉':''+(i+1);return '<tr><td style="width:28px">'+md+'</td><td><strong>'+p.name+'</strong> <span style="color:#9ca3af;font-size:10px">HCP '+(p.handicap??0)+'</span></td><td style="font-weight:700;text-align:right">'+(p.tot||'—')+'</td><td style="font-weight:700;color:'+tc+';text-align:right;width:36px">'+tp+'</td></tr>'}).join('')+'</table></div>' : ''}
 
-${recap.leaderboard.length > 0 ? `
-<div class="card">
- <div class="section-title">Leaderboard — ${recap.fieldSize} Players</div>
- <div class="section-body" style="padding:0">
- ${recap.leaderboard.map((p: any, i: number) => {
- const tp = p.toPar === null ? '—' : p.toPar === 0 ? 'E' : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`
- const tpClass = p.toPar === null || p.toPar === 0 ? 'even' : p.toPar < 0 ? 'under' : 'over'
- return `<div class="leaderboard-row">
- <span class="lb-pos ${i===0?'gold':i===1?'silver':''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
- <span class="lb-name">${p.name}<span class="lb-hcp">HCP ${p.handicap??0}</span></span>
- <span class="lb-score">${p.tot||'—'}</span>
- <span class="lb-topar ${tpClass}">${tp}</span>
- </div>`
- }).join('')}
- </div>
-</div>` : ''}
+${recap.skinsLeaders.length > 0 ? '<div class="section"><div class="sh a">Skins · Pot $'+recap.skinsPot+' · $'+recap.perSkin+'/skin · '+recap.totalSkinsWon+' won</div><div class="sk-grid">'+recap.skinsMap.map((w:any,i:number)=>'<div class="sk '+(w?'w':'')+'"><div class="sk-h">H'+(i+1)+'</div>'+(w?'<div class="sk-n">'+w.name+'</div>':'<div style="font-size:8px;color:#e5e7eb">—</div>')+'</div>').join('')+'</div><table class="st">'+recap.skinsLeaders.map((p:any)=>'<tr><td style="font-weight:600">'+p.name+'</td><td style="color:#6b7280">'+p.count+' skin'+(p.count>1?'s':'')+'</td><td style="color:#059669;font-weight:700;text-align:right">$'+p.winnings+'</td></tr>').join('')+'</table></div>' : ''}
 
-${recap.skinsLeaders.length > 0 ? `
-<div class="card">
- <div class="section-title amber">Skins · Pot $${recap.skinsPot} · $${recap.perSkin}/skin · ${recap.totalSkinsWon} won</div>
- <div class="skins-grid">
- ${recap.skinsMap.map((w: any, i: number) => `
- <div class="skin-cell ${w?'won':''}">
- <div class="skin-hole">H${i+1}</div>
- ${w ? `<div class="skin-name">${w.name}</div>` : '<div class="skin-empty">—</div>'}
- </div>`).join('')}
- </div>
- <div class="skins-payouts">
- ${recap.skinsLeaders.map((p: any) => `
- <div class="skins-payout-row">
- <span class="sp-name">${p.name}<span class="sp-count">${p.count} skin${p.count>1?'s':''}</span></span>
- <span class="sp-amount">$${p.winnings}</span>
- </div>`).join('')}
- </div>
-</div>` : ''}
+${recap.matchResults.filter(Boolean).length > 0 ? (()=>{
+const sc=(s:number,par:number)=>{if(!s)return '<span class="em">—</span>';const d=s-par;if(d<=-2)return '<span class="se">'+s+'</span>';if(d===-1)return '<span class="sb">'+s+'</span>';if(d===0)return '<span class="sp">'+s+'</span>';if(d===1)return '<span class="sg">'+s+'</span>';return '<span class="sd">'+s+'</span>'}
+const nine=(m:any,start:number,lbl:string,ws:string[])=>{const hs=Array.from({length:9},(_,i)=>start+i);const tA=hs.reduce((acc,i)=>acc+(m.sA?.[i]||0),0);const tB=hs.reduce((acc,i)=>acc+(m.sB?.[i]||0),0);return '<div class="nlbl">'+lbl+'</div><table class="sc"><thead><tr><th class="nc">Player</th>'+hs.map(i=>'<th>'+( i+1)+'<span class="pl">p'+(pars[i]||4)+'</span></th>').join('')+'<th class="tc">'+(start===0?'OUT':'IN')+'</th></tr></thead><tbody><tr class="ra"><td class="nc">'+m.sideA+'</td>'+hs.map(i=>'<td>'+sc(m.sA?.[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tA||'—')+'</td></tr><tr class="rb"><td class="nc">'+m.sideB+'</td>'+hs.map(i=>'<td>'+sc(m.sB?.[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tB||'—')+'</td></tr><tr class="rw"><td class="nc" style="color:#9ca3af;font-size:9px">Hole</td>'+ws.map(w=>'<td class="'+(w==='A'?'wA':w==='B'?'wB':'wT')+'">'+(w==='·'||!w?'':w)+'</td>').join('')+'<td></td></tr></tbody></table>'}
+return '<div class="section"><div class="sh a">Match Results</div>'+recap.matchResults.filter(Boolean).map((m:any)=>{
+if(m.type==='Wheel'){const ph=(m.wheelPairs||[]).map((p:any)=>'<div class="wp"><span class="na '+(p.winner===p.playerA?'w':'')+'">'+p.playerA+'</span><span class="rs">'+(p.winner==='tie'?'TIE':p.aWins+'–'+p.bWins)+'</span><span class="nb '+(p.winner===p.playerB?'w':'')+'">'+p.playerB+'</span><span class="am">'+(p.winner==='tie'?'':'$'+p.amount)+'</span></div>').join('');const ng=Object.entries(m.netWinnings||{}).map(([n,v]:any)=>'<div class="wnc '+(v>0?'p':v<0?'n':'')+'"><div class="nm">'+n+'</div><div class="am">'+(v===0?'EVEN':v>0?'+$'+v:'-$'+Math.abs(v))+'</div></div>').join('');return '<div style="border-bottom:1px solid #e5e7eb"><div class="sc-hdr"><span style="color:#7c3aed;font-weight:700;font-size:12px">WHEEL BET</span><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">$'+m.wheelAmount+'/pair</span></div></div>'+ph+'<div class="wng">'+ng+'</div></div>'}
+const res=m.net===0?'EVEN':m.net>0?m.sideB+' owes $'+Math.abs(m.net):m.sideA+' owes $'+Math.abs(m.net)
+return '<div style="border-bottom:1px solid #e5e7eb"><div class="sc-hdr"><div><span class="sc-a">'+m.sideA+'</span><span class="sc-sep">VS</span><span class="sc-b">'+(m.sideB||'')+'</span></div><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">'+m.type+'</span></div></div><div style="padding:4px 8px 0">'+nine(m,0,'FRONT 9',m.f9?.holeWinners||[])+nine(m,9,'BACK 9',m.b9?.holeWinners||[])+'</div><div style="padding:2px 0"><div class="pr"><span class="l">Front 9</span><span class="pa">$'+(m.f9?.payA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.f9?.payB||0)+'</span></div><div class="pr"><span class="l">Back 9</span><span class="pa">$'+(m.b9?.payA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.b9?.payB||0)+'</span></div><div class="pr"><span class="l">Birdies</span><span class="pa">$'+(m.birdieA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.birdieB||0)+'</span></div></div><div class="mr"><span class="l">MATCH RESULT</span><span class="v">'+res+'</span></div></div>'
+}).join('')+'</div>'
+})() : ''}
 
-${recap.matchResults.length > 0 ? `
-<div class="card">
- <div class="section-title amber">Match Results</div>
- <div class="section-body">
- ${recap.matchResults.filter(Boolean).map((m: any) => `
- <div class="match-card">
- <div class="match-header">
- <div class="match-sides">
- <span class="side-a-label">${m.sideA}</span>
- <span class="vs-sep">VS</span>
- <span class="side-b-label">${m.sideB || ''}</span>
- </div>
- <div class="match-badges">
- <span class="badge ${m.scoringType==='GROSS'?'gross':'net'}">${m.scoringType||'NET'}</span>
- <span class="badge type">${m.type}</span>
- </div>
- </div>
- ${buildScorecardHTML(m)}
- </div>`).join('')}
- </div>
-</div>` : ''}
+${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div class="sh b">Team Standings</div><table class="tt">'+recap.teamResults.filter((t:any)=>t.tot>0).map((t:any,i:number)=>{const md=i===0?'🥇':i===1?'🥈':i===2?'🥉':''+(i+1);return '<tr><td style="width:28px">'+md+'</td><td style="font-weight:600">'+t.name+'</td><td style="color:#6b7280">F9: '+t.f9+' &nbsp; B9: '+t.b9+'</td><td style="font-weight:700;color:#2563eb;text-align:right">'+t.tot+'</td></tr>'}).join('')+'</table></div>':''}
 
-${recap.teamResults.filter((t: any) => t.tot > 0).length > 0 ? `
-<div class="card">
- <div class="section-title blue">Team Standings</div>
- <div style="padding:0">
- ${recap.teamResults.filter((t: any) => t.tot > 0).map((t: any, i: number) => `
- <div class="team-row">
- <span class="lb-pos ${i===0?'gold':i===1?'silver':''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
- <span class="team-name">${t.name}</span>
- <div class="team-scores">
- <span class="team-nine">F9: ${t.f9}</span>
- <span class="team-nine">B9: ${t.b9}</span>
- <span class="team-total">${t.tot}</span>
- </div>
- </div>`).join('')}
- </div>
-</div>` : ''}
-
-<div class="footer">Generated by Blitz Board &nbsp;·&nbsp; ${new Date().toLocaleDateString()}</div>
+<div class="ftr">Generated by Blitz Board · ${new Date().toLocaleDateString()}</div>
 </body>
 </html>`
 
