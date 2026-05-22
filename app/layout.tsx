@@ -1,6 +1,8 @@
 import './globals.css'
 import BottomNav from '@/components/BottomNav'
 import type { Metadata, Viewport } from 'next'
+import { GeistSans } from 'geist/font/sans'
+import { GeistMono } from 'geist/font/mono'
 
 export const metadata: Metadata = {
   title: 'Blitz Board',
@@ -37,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <head>
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -47,63 +49,51 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Register service worker
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js')
-                    .then(function(reg) { console.log('SW registered:', reg.scope); })
-                    .catch(function(err) { console.log('SW failed:', err); });
+                    .then(function(reg) { console.log('SW registered'); })
+                    .catch(function(err) { console.log('SW failed: ', err); });
                 });
               }
 
-              // Catch and immediately show the install prompt
               let deferredPrompt;
               window.addEventListener('beforeinstallprompt', function(e) {
                 e.preventDefault();
                 deferredPrompt = e;
-
-                // Show our custom install banner
                 var banner = document.getElementById('pwa-install-banner');
                 if (banner) banner.style.display = 'flex';
               });
 
-              // Handle install button click
               window.addEventListener('DOMContentLoaded', function() {
                 var btn = document.getElementById('pwa-install-btn');
                 var banner = document.getElementById('pwa-install-banner');
                 var dismiss = document.getElementById('pwa-install-dismiss');
-
                 if (btn) {
                   btn.addEventListener('click', function() {
                     if (deferredPrompt) {
                       deferredPrompt.prompt();
-                      deferredPrompt.userChoice.then(function(result) {
+                      deferredPrompt.userChoice.then(function() {
                         deferredPrompt = null;
                         if (banner) banner.style.display = 'none';
                       });
                     }
                   });
                 }
-
                 if (dismiss) {
                   dismiss.addEventListener('click', function() {
                     if (banner) banner.style.display = 'none';
                     sessionStorage.setItem('pwa-dismissed', 'true');
                   });
                 }
-
-                // Don't show if already dismissed this session or already installed
                 if (sessionStorage.getItem('pwa-dismissed') === 'true') {
                   if (banner) banner.style.display = 'none';
                 }
-
-                // Hide if already running as PWA
                 if (window.matchMedia('(display-mode: standalone)').matches) {
                   if (banner) banner.style.display = 'none';
                 }
               });
 
-              // Hide banner after successful install
               window.addEventListener('appinstalled', function() {
                 var banner = document.getElementById('pwa-install-banner');
                 if (banner) banner.style.display = 'none';
@@ -114,6 +104,7 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-black text-white antialiased pb-20">
+
         {/* PWA Install Banner */}
         <div
           id="pwa-install-banner"
@@ -135,42 +126,29 @@ export default function RootLayout({
         >
           <img src="/icon-192.png" alt="Blitz Board" style={{width:'44px',height:'44px',borderRadius:'10px',flexShrink:0}}/>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:900,fontSize:'14px',color:'#fff',fontStyle:'italic',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+            <div style={{fontWeight:700,fontSize:'14px',color:'#fff',letterSpacing:'0.01em'}}>
               Install Blitz Board
             </div>
-            <div style={{fontSize:'11px',color:'#71717a',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginTop:'2px'}}>
+            <div style={{fontSize:'11px',color:'#71717a',fontWeight:500,marginTop:'2px'}}>
               Add to home screen
             </div>
           </div>
           <button
             id="pwa-install-btn"
             style={{
-              background:'#10b981',
-              color:'#000',
-              border:'none',
-              borderRadius:'12px',
-              padding:'8px 16px',
-              fontWeight:900,
-              fontSize:'12px',
-              textTransform:'uppercase',
-              letterSpacing:'0.05em',
-              cursor:'pointer',
-              flexShrink:0,
+              background:'#10b981',color:'#000',border:'none',
+              borderRadius:'12px',padding:'8px 16px',
+              fontWeight:700,fontSize:'12px',cursor:'pointer',flexShrink:0,
             }}
           >
-            INSTALL
+            Install
           </button>
           <button
             id="pwa-install-dismiss"
             style={{
-              background:'none',
-              border:'none',
-              color:'#52525b',
-              fontSize:'20px',
-              cursor:'pointer',
-              padding:'0 4px',
-              flexShrink:0,
-              lineHeight:1,
+              background:'none',border:'none',color:'#52525b',
+              fontSize:'20px',cursor:'pointer',padding:'0 4px',
+              flexShrink:0,lineHeight:1,
             }}
           >
             ×
