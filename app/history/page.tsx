@@ -859,7 +859,7 @@ return (
  const baseHcp = allHcps.length ? Math.min(...allHcps) : 0
  const getStr = (hcp: number, i: number) => {
  if (isGross) return 0
- const hr = Number(course.holes?.[i]?.hcp) || (i+1)
+ const hr = Number(arch.course?.holes?.[i]?.hcp) || (i+1)
  const diff = Math.max(0, hcp - baseHcp)
  let s = Math.floor(diff/18); if (hr <= (diff%18)) s++; return s
  }
@@ -908,7 +908,7 @@ return (
  <th className="py-2 px-2 text-left text-[9px] text-zinc-600 font-semibold" style={{width:'90px'}}>Player</th>
  {Array.from({length:9},(_,i)=>start+i).map(i=>(
  <th key={i} className="py-2 text-[9px] text-zinc-500 font-semibold" style={{width:'18px'}}>
- <div>{i+1}</div><div className="text-[8px] text-zinc-700">p{pars[i]}</div>
+ <div>{i+1}</div><div className="text-[8px] text-zinc-700">p{(arch.course?.pars?.[i])||4}</div>
  </th>
  ))}
  <th className="py-2 text-[9px] font-semibold text-blue-400" style={{width:'28px'}}>{start===0?'OUT':'IN'}</th>
@@ -925,7 +925,7 @@ return (
  <tr key={side.name} className="border-t border-zinc-900">
  <td className={`py-2 px-2 text-left font-semibold text-[10px] truncate ${side.color}`}>{side.name}</td>
  {nineScores.map((s:number,i:number) => {
- const par = pars[start+i]||4
+ const par = (arch.course?.pars?.[start+i]) || 4
  const diff = s>0?s-par:null
  let cls = 'w-5 h-5 rounded flex items-center justify-center mx-auto text-[9px] font-semibold '
  if(diff===null) cls+='text-zinc-700'
