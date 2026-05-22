@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue } from 'firebase/database'
-import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff } from 'lucide-react'
+import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive } from 'lucide-react'
 import Link from 'next/link'
 
 const ADMIN_PIN = "jeff"
