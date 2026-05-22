@@ -843,19 +843,42 @@ export default function QuickMatch() {
                             <span className="font-black text-sm">{t.name}</span>
                             <span className="text-zinc-600 text-[10px] font-black">{members.length} PLAYERS</span>
                           </div>
-                          <div className="p-3 space-y-1.5">
-                            {members.map((p:any) => (
-                              <div key={p.id} className="flex items-center justify-between bg-black rounded-xl px-3 py-2">
-                                <span className="font-black text-sm">{p.name} <span className="text-zinc-600 text-[10px]">HCP {p.handicap}</span></span>
-                                <button onClick={() => assignPlayer(p.id, t.id)} className="text-zinc-600 hover:text-rose-500 transition-colors"><X size={14}/></button>
+                          <div className="p-3 space-y-3">
+                            {/* Current members */}
+                            {members.length > 0 && (
+                              <div className="space-y-1.5">
+                                {members.map((p:any) => (
+                                  <div key={p.id} className="flex items-center justify-between bg-black rounded-xl px-3 py-2.5 border border-zinc-800">
+                                    <div>
+                                      <span className="font-black text-sm text-white">{p.name}</span>
+                                      <span className="text-zinc-500 text-[10px] font-black ml-2">HCP {p.handicap ?? 0}</span>
+                                    </div>
+                                    <button onClick={() => assignPlayer(p.id, t.id)}
+                                      className="text-zinc-600 hover:text-rose-500 transition-colors p-1">
+                                      <X size={14}/>
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
+                            {/* Unassigned player pills — tap to add */}
                             {unassigned.length > 0 && (
-                              <select value="" onChange={e => e.target.value && assignPlayer(e.target.value, t.id)}
-                                className="w-full bg-zinc-900/50 border border-dashed border-zinc-700 hover:border-blue-500 text-zinc-500 text-xs font-black p-2 rounded-xl outline-none transition-colors">
-                                <option value="">+ ADD PLAYER TO {t.name.toUpperCase()}</option>
-                                {unassigned.map(p => <option key={p.id} value={p.id}>{p.name} (HCP {p.handicap})</option>)}
-                              </select>
+                              <div>
+                                <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TAP TO ADD</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {unassigned.map(p => (
+                                    <button key={p.id}
+                                      onClick={() => assignPlayer(p.id, t.id)}
+                                      className="flex items-center gap-2 bg-zinc-800 hover:bg-blue-600 border border-zinc-700 hover:border-blue-500 text-white hover:text-white px-3 py-2 rounded-xl font-black text-sm transition-all">
+                                      <span>{p.name}</span>
+                                      <span className="text-[10px] text-zinc-400 hover:text-blue-200">HCP {p.handicap ?? 0}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {members.length === 0 && unassigned.length === 0 && (
+                              <p className="text-zinc-700 text-[10px] font-black text-center py-2">NO PLAYERS AVAILABLE</p>
                             )}
                           </div>
                         </div>
