@@ -81,6 +81,7 @@ export default function ScorerPage() {
  // Edit mode PIN gate
  const [editMode, setEditMode] = useState(false)
  const [isAdmin, setIsAdmin] = useState(false)
+ const [activeMode, setActiveMode] = useState('')
  const [showPinModal, setShowPinModal] = useState(false)
  const [pinInput, setPinInput] = useState('')
  const [pinError, setPinError] = useState(false)
@@ -313,6 +314,47 @@ export default function ScorerPage() {
  </div>
  )
  })}
+ </div>
+
+ {/* ── BOTTOM ACTION BAR ── */}
+ <div className="max-w-7xl mx-auto px-4 pt-6 pb-2 space-y-3">
+ {editMode && (
+ <button
+ onClick={() => { setEditMode(false); sessionStorage.removeItem('scorer-edit') }}
+ className="w-full flex items-center justify-center gap-3 bg-emerald-500/10 hover:bg-emerald-500/20 border-2 border-emerald-500/40 hover:border-emerald-500 text-emerald-400 py-4 rounded-2xl font-bold text-sm transition-all"
+ >
+ <Lock size={18}/> Lock Scorer
+ </button>
+ )}
+ {!editMode && (
+ <button
+ onClick={() => setShowPinModal(true)}
+ className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 py-4 rounded-2xl font-bold text-sm transition-all"
+ >
+ <Unlock size={18}/> Unlock to Edit Scores
+ </button>
+ )}
+ {activeMode === 'match' && (
+ <button
+ onClick={async () => {
+ if (!window.confirm('Archive this match to History and close it?')) return
+ const { ref: fbRef, set: fbSet, get: fbGet } = await import('firebase/database')
+ const snap = await fbGet(fbRef(db, 'tournament'))
+ if (snap.exists()) {
+ const { ref: fbRef2, set: fbSet2, push: fbPush } = await import('firebase/database')
+ await fbSet(fbRef(db, `history/${Date.now()}`), {
+ ...snap.val(),
+ _meta: { mode: 'match', dayLabel: 'Quick Match', archivedAt: Date.now(), courseName: snap.val().course?.name || '' }
+ })
+ }
+ await fbSet(fbRef(db, 'tournament'), null)
+ window.location.href = '/history'
+ }}
+ className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-amber-500 text-zinc-500 hover:text-amber-400 py-4 rounded-2xl font-bold text-sm transition-all"
+ >
+ <Archive size={18}/> Archive Match to History
+ </button>
+ )}
  </div>
 
  {/* PIN MODAL */}
