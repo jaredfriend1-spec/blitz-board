@@ -273,12 +273,12 @@ export default function LandingPage() {
  </Link>
 
  {/* Switch role */}
- <div className="flex justify-center">
- <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
- className="text-zinc-700 hover:text-zinc-500 transition-colors tracking-widest font-black text-[10px]">
- SWITCH ROLE →
+ <button
+ onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
+ className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-600 px-5 py-3.5 rounded-2xl transition-all group"
+ >
+ <span className="text-zinc-500 group-hover:text-zinc-300 transition-colors text-sm font-semibold">Switch Role</span>
  </button>
- </div>
  </div>
  </div>
  )
@@ -459,12 +459,12 @@ export default function LandingPage() {
  </Link>
 
  {/* Switch role */}
- <div className="flex justify-center">
- <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
- className="text-zinc-700 hover:text-zinc-500 transition-colors tracking-widest font-black text-[10px]">
- SWITCH ROLE →
+ <button
+ onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
+ className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-600 px-5 py-3.5 rounded-2xl transition-all group"
+ >
+ <span className="text-zinc-500 group-hover:text-zinc-300 transition-colors text-sm font-semibold">Switch Role</span>
  </button>
- </div>
  </div>
  </div>
  )

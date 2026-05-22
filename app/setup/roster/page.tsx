@@ -27,13 +27,42 @@ export default function RosterManager() {
  const [teamNames, setTeamNames] = useState(['Team 1', 'Team 2'])
 
  const [toast, setToast] = useState<string|null>(null)
+ const [globalRoster, setGlobalRoster] = useState<any[]>([])
+ const [showRosterPicker, setShowRosterPicker] = useState(false)
 
  useEffect(() => {
  onValue(ref(db,'tournament/roster'), snap => setPlayers(snap.val() ? Object.values(snap.val()) : []))
  onValue(ref(db,'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
+ onValue(ref(db,'globalRoster'), snap => {
+ if (snap.val()) setGlobalRoster(Object.values(snap.val()) as any[])
+ else setGlobalRoster([])
+ })
  }, [])
 
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(null), 2500) }
+
+ // ── LOAD FROM GLOBAL ROSTER ──────────────────────────────────
+ const loadFromGlobalRoster = (rp: any) => {
+ const already = players.find(p => p.name === rp.name)
+ if (already) return showToast(`${rp.name} already in roster`)
+ const pRef = push(ref(db,'tournament/roster'))
+ set(pRef, { id: pRef.key, name: rp.name, handicap: rp.handicap || 0 })
+ showToast(`✓ Added ${rp.name}`)
+ }
+
+ const loadAllFromGlobalRoster = () => {
+ let added = 0
+ globalRoster.forEach(rp => {
+ const already = players.find(p => p.name === rp.name)
+ if (!already) {
+ const pRef = push(ref(db,'tournament/roster'))
+ set(pRef, { id: pRef.key, name: rp.name, handicap: rp.handicap || 0 })
+ added++
+ }
+ })
+ setShowRosterPicker(false)
+ showToast(`✓ Added ${added} player${added !== 1 ? 's' : ''} from roster`)
+ }
 
  // ── PLAYERS ───────────────────────────────────────────────────
  const addPlayer = () => {
@@ -173,6 +202,44 @@ export default function RosterManager() {
  </button>
  </div>
  </div>
+
+ {/* Load from global roster */}
+ {globalRoster.length > 0 && (
+ <div>
+ <button onClick={() => setShowRosterPicker(!showRosterPicker)}
+ className="w-full flex items-center justify-between bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500 px-4 py-3 rounded-2xl transition-all group">
+ <span className="flex items-center gap-2 text-zinc-500 group-hover:text-emerald-400 transition-colors text-sm font-semibold">
+ <Users size={15}/> Load from Roster ({globalRoster.length} saved)
+ </span>
+ <span className="text-zinc-700 text-xs">{showRosterPicker ? '▲' : '▼'}</span>
+ </button>
+ {showRosterPicker && (
+ <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 mt-1 space-y-2">
+ <button onClick={loadAllFromGlobalRoster}
+ className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+ <Users size={14}/> Add All from Roster
+ </button>
+ <div className="border-t border-zinc-800 pt-2 space-y-1">
+ {globalRoster.map((rp: any) => {
+ const alreadyAdded = players.some(p => p.name === rp.name)
+ return (
+ <button key={rp.id} onClick={() => !alreadyAdded && loadFromGlobalRoster(rp)}
+ disabled={alreadyAdded}
+ className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all ${
+ alreadyAdded ? 'text-zinc-700 cursor-not-allowed' : 'text-white hover:bg-zinc-800 hover:text-emerald-400'
+ }`}>
+ <span className="font-semibold">{rp.name}</span>
+ <span className={`text-xs font-semibold ${alreadyAdded ? 'text-zinc-700' : 'text-emerald-500'}`}>
+ {alreadyAdded ? '✓ Added' : `HCP ${rp.handicap ?? 0}`}
+ </span>
+ </button>
+ )
+ })}
+ </div>
+ </div>
+ )}
+ </div>
+ )}
 
  {/* Player list */}
  <div className="space-y-2">
