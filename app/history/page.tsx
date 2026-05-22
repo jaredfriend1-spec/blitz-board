@@ -144,7 +144,46 @@ function buildRecap(arch: any) {
  pA = activePlayers.filter(p => p.name === m.sideA || p.name === m.sideA2)
  pB = activePlayers.filter(p => p.name === m.sideB || p.name === m.sideB2)
  } else if (m.type === 'Wheel') {
- return { type: 'Wheel', id: m.id, wheelPlayers: m.wheelPlayers, wheelAmount: m.wheelAmount, scoringType: m.scoringType || 'NET', wheelFormat: m.wheelFormat || 'straight', wheelNassau: m.wheelNassau, wheelPress: m.wheelPress, wheelAutoPress: m.wheelAutoPress, sideA: 'Wheel', sideB: '', winner: '' }
+ // Calculate wheel pair results
+ const wp = m.wheelPlayers || []
+ const isGrossW = m.scoringType === 'GROSS'
+ const wpHcps = isGrossW ? [0] : wp.map((name: string) => {
+ const p = activePlayers.find((pl:any) => pl.name === name)
+ return Number(p?.handicap) || 0
+ })
+ const baseHcpW = Math.min(...wpHcps)
+ const netScoresW: Record<string, number[]> = {}
+ wp.forEach((name: string) => {
+ const p = activePlayers.find((pl:any) => pl.name === name)
+ if (!p) return
+ netScoresW[name] = pars.map((par, i) => {
+ const g = scores[p.id]?.[i] || 0
+ if (!g) return 0
+ const hcpR = Number(course.holes?.[i]?.hcp) || (i+1)
+ const diff = Math.max(0, (Number(p.handicap)||0) - baseHcpW)
+ let s = Math.floor(diff/18); if (hcpR <= (diff%18)) s++
+ return isGrossW ? g : g - s
+ })
+ })
+ const wheelPairs: any[] = []
+ const netWinnings: Record<string, number> = {}
+ wp.forEach((n: string) => { netWinnings[n] = 0 })
+ for (let a = 0; a < wp.length; a++) {
+ for (let b = a+1; b < wp.length; b++) {
+ const na = wp[a], nb = wp[b]
+ let aW = 0, bW = 0
+ for (let i = 0; i < 18; i++) {
+ const sa = netScoresW[na]?.[i]||0, sb = netScoresW[nb]?.[i]||0
+ if (sa>0&&sb>0) { if(sa<sb) aW++; else if(sb<sa) bW++ }
+ }
+ const amt = m.wheelAmount || 10
+ const winner = aW>bW?na:bW>aW?nb:'tie'
+ if (winner===na) { netWinnings[na]+=amt; netWinnings[nb]-=amt }
+ else if (winner===nb) { netWinnings[nb]+=amt; netWinnings[na]-=amt }
+ wheelPairs.push({ playerA:na, playerB:nb, aWins:aW, bWins:bW, winner, amount:amt })
+ }
+ }
+ return { type:'Wheel', id:m.id, wheelPlayers:wp, wheelAmount:m.wheelAmount, scoringType:m.scoringType||'NET', sideA:'Wheel', sideB:'', winner:'', wheelPairs, netWinnings }
  } else {
  pA = activePlayers.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id))
  pB = activePlayers.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id))
@@ -394,6 +433,22 @@ export default function HistoryPage() {
  .badge.type { background: #f9fafb !important; color: #374151 !important; border-color: #e5e7eb !important; }
  .pair-pill { background: #faf5ff !important; border-color: #c4b5fd !important; color: #7c3aed !important; }
  .pair-pill .vs { color: #9ca3af !important; }
+ .wheel-pair-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid #f3f4f6; font-size:12px; }
+ .wheel-pair-row:last-child { border-bottom:none; }
+ .wp-name { flex:1; font-weight:600; color:#374151; }
+ .wp-name.win-a { color:#059669; }
+ .wp-result { color:#6b7280; font-size:11px; font-weight:600; min-width:40px; text-align:center; }
+ .wp-amt { min-width:40px; text-align:right; font-weight:700; color:#059669; font-size:12px; }
+ .wheel-net-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+ .wheel-net-cell { border:1px solid #e5e7eb; border-radius:8px; padding:8px; text-align:center; }
+ .wheel-net-cell.pos { border-color:#10b981; background:#f0fdf4; }
+ .wheel-net-cell.neg { border-color:#ef4444; background:#fef2f2; }
+ .wheel-net-cell.even { background:#f9fafb; }
+ .wn-name { font-size:11px; color:#6b7280; font-weight:600; margin-bottom:3px; }
+ .wn-amt { font-size:15px; font-weight:700; }
+ .wheel-net-cell.pos .wn-amt { color:#059669; }
+ .wheel-net-cell.neg .wn-amt { color:#dc2626; }
+ .wheel-net-cell.even .wn-amt { color:#9ca3af; }
  .footer { color: #9ca3af !important; border-top-color: #e5e7eb !important; }
  @media print {
  .no-print { display: none !important; }
@@ -452,14 +507,16 @@ export default function HistoryPage() {
  .badge.gross { background: rgba(239,68,68,.15); color: #ef4444; }
  .badge.type { background: #1f1f1f; color: #9ca3af; border: 1px solid #27272a; }
  .nine-label { font-size: 9px; font-weight: 700; letter-spacing: .12em; color: #6b7280; padding: 8px 14px 4px; text-transform: uppercase; }
- .scorecard { width: 100%; border-collapse: collapse; font-size: 11px; }
- .scorecard th { background: #0d0d0d; padding: 5px 3px; text-align: center; font-weight: 700; color: #6b7280; font-size: 10px; border-bottom: 1px solid #27272a; }
- .scorecard th:first-child { text-align: left; padding-left: 14px; min-width: 80px; }
- .scorecard td { padding: 5px 3px; text-align: center; border-bottom: 1px solid #111; }
- .scorecard td:first-child { padding-left: 14px; }
- .par-sub { font-size: 8px; color: #374151; font-weight: 400; margin-top: 1px; }
- .player-col { min-width: 80px; }
- .total-col { min-width: 36px; }
+ .scorecard { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+ .scorecard th { background: #f9fafb; padding: 5px 2px; text-align: center; font-weight: 700; color: #6b7280; font-size: 10px; border-bottom: 1px solid #e5e7eb; width: 28px; }
+ .scorecard th:first-child { text-align: left; padding-left: 10px; width: 110px; }
+ .scorecard th:last-child { width: 36px; }
+ .scorecard td { padding: 5px 2px; text-align: center; border-bottom: 1px solid #f3f4f6; width: 28px; }
+ .scorecard td:first-child { padding-left: 10px; width: 110px; }
+ .scorecard td:last-child { width: 36px; }
+ .par-sub { font-size: 8px; color: #9ca3af; font-weight: 400; margin-top: 1px; }
+ .player-col { width: 110px; }
+ .total-col { width: 36px; }
  .player-name { font-weight: 700; font-size: 12px; text-align: left !important; }
  .total { font-weight: 700; font-size: 13px; }
  .side-a .player-name, .side-a .total { color: #10b981; }
@@ -932,23 +989,47 @@ return (
 
  {/* Wheel expanded */}
  {isOpen && isWheel && (
- <div className="border-t border-zinc-800 p-4 bg-black/20">
- <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-3">WHEEL PAIRS · {(m.wheelPlayers||[]).join(' · ')}</p>
- <div className="space-y-2">
- {(()=>{
- const wp = m.wheelPlayers||[]
- const pairs = []
- for(let a=0;a<wp.length;a++) for(let b=a+1;b<wp.length;b++) pairs.push({a:wp[a],b:wp[b]})
- return pairs.map((pair,pi) => (
- <div key={pi} className="flex items-center justify-between bg-black rounded-xl px-4 py-2.5 border border-zinc-800">
- <span className="text-purple-400 font-black text-xs">{pair.a}</span>
- <span className="text-zinc-600 font-black text-[9px]">vs</span>
- <span className="text-purple-400 font-black text-xs">{pair.b}</span>
+ <div className="border-t border-zinc-800 p-4 bg-black/20 space-y-3">
+ <p className="text-[9px] font-semibold text-zinc-500 tracking-widest">
+ WHEEL · {m.scoringType||'NET'} · ${m.wheelAmount}/PAIR · {(m.wheelPlayers||[]).join(' · ')}
+ </p>
+ {/* Pair results */}
+ <div className="space-y-1.5">
+ {(m.wheelPairs||[]).map((pair: any, pi: number) => (
+ <div key={pi} className={`flex items-center justify-between rounded-xl px-4 py-2.5 border ${
+ pair.winner==='tie'?'bg-zinc-900 border-zinc-800':'bg-emerald-950/20 border-emerald-500/20'
+ }`}>
+ <span className={`font-semibold text-sm ${pair.winner===pair.playerA?'text-emerald-400':'text-zinc-400'}`}>{pair.playerA}</span>
+ <div className="text-center">
+ <div className={`text-xs font-semibold ${pair.winner==='tie'?'text-zinc-500':'text-emerald-400'}`}>
+ {pair.winner==='tie'?'TIE':`${pair.aWins}–${pair.bWins}`}
  </div>
- ))
- })()}
+ {pair.winner!=='tie' && <div className="text-[9px] text-zinc-500">${pair.amount}</div>}
  </div>
- <p className="text-zinc-700 text-[9px] font-black normal-case mt-3">Full wheel scorecard available in current payouts page for active matches.</p>
+ <span className={`font-semibold text-sm ${pair.winner===pair.playerB?'text-emerald-400':'text-zinc-400'}`}>{pair.playerB}</span>
+ </div>
+ ))}
+ </div>
+ {/* Net per player */}
+ {m.netWinnings && Object.keys(m.netWinnings).length > 0 && (
+ <div>
+ <p className="text-[9px] font-semibold text-zinc-600 tracking-widest mb-2">NET PER PLAYER</p>
+ <div className="grid grid-cols-2 gap-2">
+ {Object.entries(m.netWinnings).map(([name, net]: [string, any]) => (
+ <div key={name} className={`rounded-xl p-3 border text-center ${
+ net>0?'border-emerald-500/30 bg-emerald-950/20':
+ net<0?'border-rose-500/30 bg-rose-950/20':
+ 'border-zinc-800 bg-zinc-900'
+ }`}>
+ <div className="text-zinc-400 text-xs font-semibold mb-0.5">{name}</div>
+ <div className={`font-bold text-base ${net>0?'text-emerald-400':net<0?'text-rose-400':'text-zinc-500'}`}>
+ {net===0?'EVEN':net>0?`+$${net}`:`-$${Math.abs(net)}`}
+ </div>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
  </div>
  )}
  </div>
