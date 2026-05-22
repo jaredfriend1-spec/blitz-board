@@ -177,6 +177,7 @@ function calculateWheel(
 
 export default function PayoutsPage() {
   const [scores, setScores] = useState<Record<string, number[]>>({})
+  const [expandedWheelPair, setExpandedWheelPair] = useState<string|null>(null)
   const [matches, setMatches] = useState<any[]>([])
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
@@ -497,35 +498,160 @@ export default function PayoutsPage() {
 
                 {/* Pair results */}
                 <div className="p-6 sm:p-8">
-                  <p className="text-[10px] font-black text-zinc-600 tracking-widest mb-4">PAIR RESULTS — STRAIGHT 18</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                  <p className="text-[10px] font-black text-zinc-600 tracking-widest mb-4">
+                    PAIR RESULTS — TAP TO SEE SCORECARD
+                  </p>
+                  <div className="space-y-3 mb-6">
                     {wheelRes.pairs.map((pair: any, i: number) => {
                       const isNassau = pair.format === 'nassau'
                       const aNet = isNassau ? pair.pairNetA : (pair.winner===pair.playerA?pair.amount:pair.winner==='tie'?0:-pair.amount)
+                      const pairKey = `${m.id}-${i}`
+                      const isExpanded = expandedWheelPair === pairKey
+
+                      // Build per-hole data for this pair
+                      const pA = players.find(p => p.name === pair.playerA)
+                      const pB = players.find(p => p.name === pair.playerB)
+                      const allHcps = m.scoringType==='GROSS' ? [0] : [pA,pB].filter(Boolean).map((p:any)=>Number(p.handicap)||0)
+                      const baseHcp = Math.min(...allHcps)
+                      const getStrokes = (playerHcp: number, holeIdx: number) => {
+                        if (m.scoringType==='GROSS') return 0
+                        const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx+1)
+                        const diff = Math.max(0, playerHcp - baseHcp)
+                        let s = Math.floor(diff/18)
+                        if (hcpRating <= (diff%18)) s++
+                        return s
+                      }
+                      const pars = course.pars || Array(18).fill(4)
+                      const makeHoleData = (p: any) => {
+                        if (!p) return Array(18).fill({gross:0,net:0,strokes:0})
+                        const g = scores[p.id] || Array(18).fill(0)
+                        return g.map((gross:number, i:number) => {
+                          const strokes = getStrokes(Number(p.handicap)||0, i)
+                          return { gross, net: gross>0 ? gross-strokes : 0, strokes }
+                        })
+                      }
+                      const holeDataA = pA ? makeHoleData(pA) : null
+                      const holeDataB = pB ? makeHoleData(pB) : null
+
                       return (
-                        <div key={i} className={`rounded-2xl border p-4 ${
-                          isNassau ? (pair.pairNetA > 0 ? 'bg-emerald-950/20 border-emerald-500/20' : pair.pairNetA < 0 ? 'bg-blue-950/20 border-blue-500/20' : 'bg-zinc-900 border-zinc-800')
-                          : pair.winner==='tie' ? 'bg-zinc-900 border-zinc-800' : pair.winner===pair.playerA ? 'bg-emerald-950/30 border-emerald-500/30' : 'bg-blue-950/30 border-blue-500/30'
+                        <div key={i} className={`rounded-2xl border overflow-hidden transition-all ${
+                          isExpanded ? 'border-purple-500/60' :
+                          isNassau ? (pair.pairNetA > 0 ? 'border-emerald-500/30' : pair.pairNetA < 0 ? 'border-blue-500/30' : 'border-zinc-800')
+                          : pair.winner==='tie' ? 'border-zinc-800' : pair.winner===pair.playerA ? 'border-emerald-500/30' : 'border-blue-500/30'
                         }`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={`font-black text-sm ${aNet>0?'text-emerald-400':'text-zinc-400'}`}>{pair.playerA}</span>
-                            <span className={`font-black text-sm px-3 ${aNet===0?'text-zinc-500':aNet>0?'text-emerald-400':'text-blue-400'}`}>
-                              {aNet===0?'EVEN':aNet>0?`+$${aNet}`:`-$${Math.abs(aNet)}`}
-                            </span>
-                            <span className={`font-black text-sm ${aNet<0?'text-emerald-400':'text-zinc-400'}`}>{pair.playerB}</span>
-                          </div>
-                          {isNassau && (
-                            <div className="flex gap-2 text-[9px] font-black text-zinc-600">
-                              <span>F9: {pair.f9.payA>pair.f9.payB?pair.playerA:pair.f9.payB>pair.f9.payA?pair.playerB:'TIE'}</span>
-                              <span>·</span>
-                              <span>B9: {pair.b9.payA>pair.b9.payB?pair.playerA:pair.b9.payB>pair.b9.payA?pair.playerB:'TIE'}</span>
-                              <span>·</span>
-                              <span>TOT: {pair.totalWinner==='A'?pair.playerA:pair.totalWinner==='B'?pair.playerB:'TIE'}</span>
+                          {/* Pair pill — always visible, tap to expand */}
+                          <button
+                            onClick={() => setExpandedWheelPair(isExpanded ? null : pairKey)}
+                            className={`w-full p-4 flex items-center justify-between transition-all ${
+                              isExpanded ? 'bg-purple-950/20' :
+                              isNassau ? (pair.pairNetA > 0 ? 'bg-emerald-950/20' : pair.pairNetA < 0 ? 'bg-blue-950/20' : 'bg-zinc-900')
+                              : pair.winner==='tie' ? 'bg-zinc-900' : pair.winner===pair.playerA ? 'bg-emerald-950/20' : 'bg-blue-950/20'
+                            } hover:opacity-90`}
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <span className={`font-black text-sm truncate ${aNet>0?'text-emerald-400':aNet<0?'text-zinc-400':'text-zinc-300'}`}>
+                                {pair.playerA}
+                              </span>
+                              <span className={`font-black text-sm flex-shrink-0 ${aNet===0?'text-zinc-500':aNet>0?'text-emerald-400':'text-blue-400'}`}>
+                                {aNet===0?'EVEN':aNet>0?`+$${aNet}`:`-$${Math.abs(aNet)}`}
+                              </span>
+                              <span className={`font-black text-sm truncate text-right ${aNet<0?'text-emerald-400':aNet>0?'text-zinc-400':'text-zinc-300'}`}>
+                                {pair.playerB}
+                              </span>
                             </div>
-                          )}
-                          {!isNassau && (
-                            <div className="text-[9px] font-black text-zinc-600">
-                              {pair.aWins} vs {pair.bWins} holes
+                            <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                              {!isNassau && (
+                                <span className="text-[9px] font-black text-zinc-600">
+                                  {pair.aWins}–{pair.bWins}
+                                </span>
+                              )}
+                              {isNassau && (
+                                <span className="text-[9px] font-black text-zinc-600">
+                                  F:{pair.f9.payA>pair.f9.payB?'A':pair.f9.payB>pair.f9.payA?'B':'T'} B:{pair.b9.payA>pair.b9.payB?'A':pair.b9.payB>pair.b9.payA?'B':'T'}
+                                </span>
+                              )}
+                              <span className="text-[9px] font-black text-purple-400">
+                                {isExpanded ? '▲' : '▼ CARD'}
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* Expanded scorecard */}
+                          {isExpanded && holeDataA && holeDataB && (
+                            <div className="border-t border-purple-500/20 bg-black overflow-x-auto">
+                              {[{start:0,label:'FRONT 9'},{start:9,label:'BACK 9'}].map(({start,label}) => (
+                                <div key={label} className="mb-1">
+                                  <div className="px-4 py-1.5 bg-zinc-900/60 border-b border-zinc-800">
+                                    <span className="text-[9px] font-black text-zinc-600 tracking-widest">{label}</span>
+                                  </div>
+                                  <table className="w-full text-center" style={{minWidth:'520px'}}>
+                                    <thead>
+                                      <tr className="bg-zinc-950">
+                                        <th className="py-2 px-3 text-left text-[10px] text-zinc-600 font-black w-28">PLAYER</th>
+                                        {Array.from({length:9},(_,i)=>start+i).map(i=>(
+                                          <th key={i} className="py-2 px-0.5 w-9">
+                                            <div className="text-[10px] text-zinc-500 font-black">{i+1}</div>
+                                            <div className="text-[9px] text-zinc-700 font-black">p{pars[i]}</div>
+                                          </th>
+                                        ))}
+                                        <th className="py-2 px-2 text-[10px] text-zinc-500 font-black">{start===0?'OUT':'IN'}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {[{player:pA,data:holeDataA,color:'text-emerald-400'},{player:pB,data:holeDataB,color:'text-blue-400'}].map(({player,data,color})=>(
+                                        <tr key={(player as any)?.id} className="border-t border-zinc-900">
+                                          <td className={`py-2 px-3 text-left font-black text-xs truncate ${color}`}>{(player as any)?.name}</td>
+                                          {Array.from({length:9},(_,i)=>start+i).map(i=>{
+                                            const h = (data as any[])[i]
+                                            const diff = h.net > 0 ? h.net - pars[i] : null
+                                            let cellClass = 'w-8 h-8 rounded flex items-center justify-center mx-auto text-xs font-black'
+                                            if (diff === null) cellClass += ' text-zinc-700'
+                                            else if (diff <= -2) cellClass += ' rounded-full border-2 border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+                                            else if (diff === -1) cellClass += ' rounded-full border-2 border-red-500 text-red-400'
+                                            else if (diff === 0) cellClass += ' bg-zinc-800 text-white'
+                                            else if (diff === 1) cellClass += ' border border-zinc-500 text-zinc-300'
+                                            else cellClass += ' border-2 border-zinc-500 text-zinc-400'
+                                            return (
+                                              <td key={i} className="py-1.5 px-0.5">
+                                                <div className={cellClass}>{h.net||'—'}</div>
+                                                {h.strokes > 0 && (
+                                                  <div className="flex justify-center mt-0.5 gap-px">
+                                                    {Array.from({length:Math.min(h.strokes,3)}).map((_,si)=>(
+                                                      <div key={si} className="w-1 h-1 bg-yellow-500 rounded-full"/>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </td>
+                                            )
+                                          })}
+                                          <td className={`py-2 px-2 font-black text-sm ${color}`}>
+                                            {Array.from({length:9},(_,i)=>start+i).reduce((acc,i)=>acc+((data as any[])[i].net||0),0)||'—'}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                      {/* Hole winner row */}
+                                      <tr className="border-t border-zinc-800 bg-zinc-900/40">
+                                        <td className="py-1.5 px-3 text-[10px] font-black text-zinc-600 text-left">HOLE</td>
+                                        {Array.from({length:9},(_,i)=>start+i).map(i=>{
+                                          const na = (holeDataA as any[])[i].net
+                                          const nb = (holeDataB as any[])[i].net
+                                          const winner = na>0&&nb>0 ? na<nb?'A':nb<na?'B':'T' : null
+                                          return (
+                                            <td key={i} className="py-1.5 px-0.5 text-center">
+                                              <span className={`text-xs font-black ${
+                                                winner==='A'?'text-emerald-400':winner==='B'?'text-blue-400':winner==='T'?'text-zinc-500':'text-zinc-800'
+                                              }`}>
+                                                {winner==='T'?'½':winner||'·'}
+                                              </span>
+                                            </td>
+                                          )
+                                        })}
+                                        <td/>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, onValue } from 'firebase/database'
+import { ref, onValue, get, set, push } from 'firebase/database'
 import {
   Trophy, Settings, Target, DollarSign, Flag,
   ChevronRight, History, BookOpen, ShieldAlert,
@@ -18,6 +18,9 @@ export default function LandingPage() {
   const [tripName, setTripName] = useState('')
   const [currentDay, setCurrentDay] = useState('')
   const [isMock, setIsMock] = useState(false)
+  const [activeMode, setActiveMode] = useState<string>('')
+  const [archiving, setArchiving] = useState(false)
+  const [archiveSuccess, setArchiveSuccess] = useState(false)
 
   // PIN state
   const [showPinModal, setShowPinModal] = useState(false)
@@ -40,6 +43,7 @@ export default function LandingPage() {
       setTripName(m.tripName || '')
       setCurrentDay(m.currentDay || '')
       setIsMock(!!m.isMock)
+      setActiveMode(m.mode || '')
     })
   }, [])
 
@@ -64,6 +68,34 @@ export default function LandingPage() {
       setPin('')
       setTimeout(() => setPinError(false), 2000)
     }
+  }
+
+  const archiveMatch = async () => {
+    if (!window.confirm('Archive this match to History and close it?')) return
+    setArchiving(true)
+    try {
+      const snap = await get(ref(db, 'tournament'))
+      if (snap.exists()) {
+        const data = snap.val()
+        const histRef = ref(db, `history/${Date.now()}`)
+        await set(histRef, {
+          ...data,
+          _meta: {
+            mode: 'match',
+            dayLabel: 'Quick Match',
+            archivedAt: Date.now(),
+            courseName: data.course?.name || 'Quick Match'
+          }
+        })
+      }
+      await set(ref(db, 'tournament'), null)
+      setArchiveSuccess(true)
+      setActiveMode('')
+      setTimeout(() => setArchiveSuccess(false), 3000)
+    } catch (e) {
+      alert('Archive failed — check connection')
+    }
+    setArchiving(false)
   }
 
   // ── ROLE SELECTION SCREEN ──────────────────────────────────────
@@ -322,7 +354,9 @@ export default function LandingPage() {
 
         {/* Quick Match pill */}
         <Link href="/match"
-          className="group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 border-amber-500/20 hover:border-amber-500 transition-all active:scale-95 flex items-center gap-4 shadow-xl mb-4 relative overflow-hidden">
+          className={`group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 transition-all active:scale-95 flex items-center gap-4 shadow-xl mb-4 relative overflow-hidden ${
+            activeMode === 'match' ? 'border-amber-500/60 bg-amber-950/10' : 'border-amber-500/20 hover:border-amber-500'
+          }`}>
           <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
             <Zap size={80} className="text-amber-400"/>
           </div>
@@ -331,12 +365,39 @@ export default function LandingPage() {
           </div>
           <div className="relative z-10 flex-1">
             <h2 className="text-xl font-black italic leading-tight group-hover:text-amber-400 transition-colors">Quick Match</h2>
-            <p className="text-[10px] font-bold text-zinc-500 tracking-widest">Casual round · No entry fees · Just bets</p>
+            <p className="text-[10px] font-bold text-zinc-500 tracking-widest">
+              {activeMode === 'match'
+                ? <span className="text-amber-400">⚡ MATCH IN PROGRESS · {courseName || 'TAP TO CONTINUE'}</span>
+                : 'Casual round · No entry fees · Just bets'
+              }
+            </p>
           </div>
           <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-black transition-all flex-shrink-0">
             <ChevronRight size={16}/>
           </div>
         </Link>
+
+        {/* Active match — archive/close button */}
+        {activeMode === 'match' && !isMock && (
+          <div className="mb-4">
+            {archiveSuccess && (
+              <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 px-4 py-3 rounded-2xl font-black text-xs flex items-center gap-2 mb-2">
+                <Archive size={14}/> MATCH ARCHIVED TO HISTORY
+              </div>
+            )}
+            <button
+              onClick={archiveMatch}
+              disabled={archiving}
+              className="w-full flex items-center justify-between bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-emerald-500 px-5 py-3.5 rounded-2xl font-black text-sm transition-all group"
+            >
+              <span className="flex items-center gap-2 text-zinc-400 group-hover:text-emerald-400 transition-colors">
+                <Archive size={16}/>
+                {archiving ? 'ARCHIVING...' : 'ARCHIVE MATCH TO HISTORY'}
+              </span>
+              <span className="text-[9px] font-black text-zinc-600 tracking-widest">CLOSES MATCH · SAVES RESULTS</span>
+            </button>
+          </div>
+        )}
 
         {/* Main items grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">

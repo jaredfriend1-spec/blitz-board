@@ -38,16 +38,16 @@ export default function BottomNav() {
   const playerLinks = [
     { href: '/', icon: <Home size={20}/>, label: 'Home' },
     { href: '/scorer', icon: <Target size={20}/>, label: 'Scorer' },
-    { href: '/results', icon: <Trophy size={20}/>, label: 'Results' },
     { href: '/payouts', icon: <DollarSign size={20}/>, label: 'Payouts' },
+    { href: '/results', icon: <Trophy size={20}/>, label: 'Results' },
     { href: '/history', icon: <History size={20}/>, label: 'History' },
   ]
 
   const adminLinks = [
     { href: '/', icon: <Home size={20}/>, label: 'Home' },
     { href: '/scorer', icon: <Target size={20}/>, label: 'Scorer' },
-    { href: '/results', icon: <Trophy size={20}/>, label: 'Results' },
     { href: '/payouts', icon: <DollarSign size={20}/>, label: 'Payouts' },
+    { href: '/results', icon: <Trophy size={20}/>, label: 'Results' },
     { href: '/setup', icon: <Settings size={20}/>, label: 'Setup' },
   ]
 
