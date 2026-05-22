@@ -97,13 +97,18 @@ function calculateWheel(
  if (sa === 0 || sb === 0) continue
  const delta = sa < sb ? 1 : sb < sa ? -1 : 0
  if (delta !== 0) {
+ let newPressCount = 0
  bets.forEach(b => {
  b.score += delta
- if (autoPress && Math.abs(b.score) >= 2 && !b.pressed) { b.pressed = true; totalPresses++ }
+ if (autoPress && Math.abs(b.score) >= 2 && !b.pressed) {
+ b.pressed = true
+ newPressCount++
+ totalPresses++
+ }
  })
- if (autoPress) {
- const newPresses = bets.filter(b => b.pressed && !bets.some(bb => bb !== b && !bb.isBase)).length
- // simplified: add press when score hits ±2
+ // Add new press bets — this is the part that was missing
+ for (let p = 0; p < newPressCount; p++) {
+ bets.push({ score: 0, pressed: false, isBase: false })
  }
  }
  }
