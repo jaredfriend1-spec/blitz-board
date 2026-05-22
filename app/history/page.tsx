@@ -244,6 +244,7 @@ export default function HistoryPage() {
  const [expandedId, setExpandedId] = useState<string | null>(null)
  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
  const [exportingId, setExportingId] = useState<string | null>(null)
+ const [expandedWheelPairHistKey, setExpandedWheelPairHistKey] = useState<string | null>(null)
 
  useEffect(() => {
  onValue(ref(db, 'history'), snap => {
@@ -458,7 +459,33 @@ ${recap.matchResults.filter(Boolean).length > 0 ? (()=>{
 const sc=(s:number,par:number)=>{if(!s)return '<span class="em">—</span>';const d=s-par;if(d<=-2)return '<span class="se">'+s+'</span>';if(d===-1)return '<span class="sb">'+s+'</span>';if(d===0)return '<span class="sp">'+s+'</span>';if(d===1)return '<span class="sg">'+s+'</span>';return '<span class="sd">'+s+'</span>'}
 const nine=(m:any,start:number,lbl:string,ws:string[])=>{const hs=Array.from({length:9},(_,i)=>start+i);const tA=hs.reduce((acc,i)=>acc+(m.sA?.[i]||0),0);const tB=hs.reduce((acc,i)=>acc+(m.sB?.[i]||0),0);return '<div class="nlbl">'+lbl+'</div><table class="sc"><thead><tr><th class="nc">Player</th>'+hs.map(i=>'<th>'+( i+1)+'<span class="pl">p'+(pars[i]||4)+'</span></th>').join('')+'<th class="tc">'+(start===0?'OUT':'IN')+'</th></tr></thead><tbody><tr class="ra"><td class="nc">'+m.sideA+'</td>'+hs.map(i=>'<td>'+sc(m.sA?.[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tA||'—')+'</td></tr><tr class="rb"><td class="nc">'+m.sideB+'</td>'+hs.map(i=>'<td>'+sc(m.sB?.[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tB||'—')+'</td></tr><tr class="rw"><td class="nc" style="color:#9ca3af;font-size:9px">Hole</td>'+ws.map(w=>'<td class="'+(w==='A'?'wA':w==='B'?'wB':'wT')+'">'+(w==='·'||!w?'':w)+'</td>').join('')+'<td></td></tr></tbody></table>'}
 return '<div class="section"><div class="sh a">Match Results</div>'+recap.matchResults.filter(Boolean).map((m:any)=>{
-if(m.type==='Wheel'){const ph=(m.wheelPairs||[]).map((p:any)=>'<div class="wp"><span class="na '+(p.winner===p.playerA?'w':'')+'">'+p.playerA+'</span><span class="rs">'+(p.winner==='tie'?'TIE':p.aWins+'–'+p.bWins)+'</span><span class="nb '+(p.winner===p.playerB?'w':'')+'">'+p.playerB+'</span><span class="am">'+(p.winner==='tie'?'':'$'+p.amount)+'</span></div>').join('');const ng=Object.entries(m.netWinnings||{}).map(([n,v]:any)=>'<div class="wnc '+(v>0?'p':v<0?'n':'')+'"><div class="nm">'+n+'</div><div class="am">'+(v===0?'EVEN':v>0?'+$'+v:'-$'+Math.abs(v))+'</div></div>').join('');return '<div style="border-bottom:1px solid #e5e7eb"><div class="sc-hdr"><span style="color:#7c3aed;font-weight:700;font-size:12px">WHEEL BET</span><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">$'+m.wheelAmount+'/pair</span></div></div>'+ph+'<div class="wng">'+ng+'</div></div>'}
+if(m.type==='Wheel'){
+// Build per-hole net scores for each wheel player
+const isGrossW = m.scoringType==='GROSS'
+const wp = m.wheelPlayers||[]
+const allWHcps = isGrossW?[0]:wp.map((name:string)=>{const p=activePlayers.find((pl:any)=>pl.name===name);return Number(p?.handicap)||0})
+const baseWHcp = Math.min(...allWHcps)
+const getWStr = (name:string,i:number)=>{if(isGrossW)return 0;const p=activePlayers.find((pl:any)=>pl.name===name);const hr=Number(arch.course?.holes?.[i]?.hcp)||(i+1);const diff=Math.max(0,(Number(p?.handicap)||0)-baseWHcp);let s=Math.floor(diff/18);if(hr<=(diff%18))s++;return s}
+const wNetScores:Record<string,number[]>={}
+wp.forEach((name:string)=>{const p=activePlayers.find((pl:any)=>pl.name===name);if(!p)return;wNetScores[name]=(arch.scores?.[p.id]||Array(18).fill(0)).map((g:number,i:number)=>g>0?g-getWStr(name,i):0)})
+// Build scorecard for each pair
+const pairSCs = (m.wheelPairs||[]).map((pair:any)=>{
+const netA=wNetScores[pair.playerA]||Array(18).fill(0)
+const netB=wNetScores[pair.playerB]||Array(18).fill(0)
+const nineHtml=(start:number,lbl:string)=>{
+const hs=Array.from({length:9},(_,i)=>start+i)
+const tA=hs.reduce((acc,i)=>acc+(netA[i]||0),0)
+const tB=hs.reduce((acc,i)=>acc+(netB[i]||0),0)
+const winners=hs.map(i=>{const a=netA[i],b=netB[i];if(!a||!b)return '';return a<b?'A':b<a?'B':'½'})
+return '<div class="nlbl">'+lbl+'</div><table class="sc"><thead><tr><th class="nc">Player</th>'+hs.map(i=>'<th>'+(i+1)+'<span class="pl">p'+(pars[i]||4)+'</span></th>').join('')+'<th class="tc">'+(start===0?'OUT':'IN')+'</th></tr></thead><tbody><tr class="ra"><td class="nc">'+pair.playerA+'</td>'+hs.map(i=>'<td>'+sc(netA[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tA||'—')+'</td></tr><tr class="rb"><td class="nc">'+pair.playerB+'</td>'+hs.map(i=>'<td>'+sc(netB[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tB||'—')+'</td></tr><tr class="rw"><td class="nc" style="color:#9ca3af;font-size:9px">Hole</td>'+winners.map(w=>'<td class="'+(w==='A'?'wA':w==='B'?'wB':'wT')+'">'+( w||'')+'</td>').join('')+'<td></td></tr></tbody></table>'
+}
+const winStr=pair.winner==='tie'?'TIE':(pair.winner===pair.playerA?pair.playerA:pair.playerB)+' wins'
+const amtStr=pair.winner==='tie'?'EVEN':'$'+pair.amount
+return '<div style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:10px;overflow:hidden;page-break-inside:avoid"><div style="background:#faf5ff;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5e7eb"><div><span style="color:#7c3aed;font-weight:700">'+pair.playerA+'</span><span style="color:#9ca3af;margin:0 6px;font-size:10px">VS</span><span style="color:#7c3aed;font-weight:700">'+pair.playerB+'</span></div><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;font-weight:600;color:'+(pair.winner==='tie'?'#6b7280':'#059669')+'">'+winStr+'</span><span style="font-weight:700;color:#059669;font-size:11px">'+amtStr+'</span></div></div><div style="padding:2px 8px 0">'+nineHtml(0,'FRONT 9')+nineHtml(9,'BACK 9')+'</div></div>'
+}).join('')
+const ng=Object.entries(m.netWinnings||{}).map(([n,v]:any)=>'<div class="wnc '+(v>0?'p':v<0?'n':'')+'"><div class="nm">'+n+'</div><div class="am">'+(v===0?'EVEN':v>0?'+$'+v:'-$'+Math.abs(v))+'</div></div>').join('')
+return '<div style="border-bottom:1px solid #e5e7eb;padding-bottom:4px"><div class="sc-hdr"><span style="color:#7c3aed;font-weight:700;font-size:12px">WHEEL BET</span><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">$'+m.wheelAmount+'/pair · '+wp.join(' · ')+'</span></div></div><div style="padding:8px 10px">'+pairSCs+'</div><div style="padding:4px 10px 0"><div style="font-size:9px;font-weight:700;letter-spacing:.1em;color:#6b21a8;margin-bottom:6px;text-transform:uppercase">Net Per Player</div><div class="wng">'+ng+'</div></div></div>'
+}
 const res=m.net===0?'EVEN':m.net>0?m.sideB+' owes $'+Math.abs(m.net):m.sideA+' owes $'+Math.abs(m.net)
 return '<div style="border-bottom:1px solid #e5e7eb"><div class="sc-hdr"><div><span class="sc-a">'+m.sideA+'</span><span class="sc-sep">VS</span><span class="sc-b">'+(m.sideB||'')+'</span></div><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">'+m.type+'</span></div></div><div style="padding:4px 8px 0">'+nine(m,0,'FRONT 9',m.f9?.holeWinners||[])+nine(m,9,'BACK 9',m.b9?.holeWinners||[])+'</div><div style="padding:2px 0"><div class="pr"><span class="l">Front 9</span><span class="pa">$'+(m.f9?.payA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.f9?.payB||0)+'</span></div><div class="pr"><span class="l">Back 9</span><span class="pa">$'+(m.b9?.payA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.b9?.payB||0)+'</span></div><div class="pr"><span class="l">Birdies</span><span class="pa">$'+(m.birdieA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.birdieB||0)+'</span></div></div><div class="mr"><span class="l">MATCH RESULT</span><span class="v">'+res+'</span></div></div>'
 }).join('')+'</div>'
@@ -817,22 +844,125 @@ return (
  <p className="text-[9px] font-semibold text-zinc-500 tracking-widest">
  WHEEL · {m.scoringType||'NET'} · ${m.wheelAmount}/PAIR · {(m.wheelPlayers||[]).join(' · ')}
  </p>
- {/* Pair results */}
+ {/* Pair results — tappable for scorecard */}
  <div className="space-y-1.5">
- {(m.wheelPairs||[]).map((pair: any, pi: number) => (
- <div key={pi} className={`flex items-center justify-between rounded-xl px-4 py-2.5 border ${
- pair.winner==='tie'?'bg-zinc-900 border-zinc-800':'bg-emerald-950/20 border-emerald-500/20'
+ {(m.wheelPairs||[]).map((pair: any, pi: number) => {
+ const pairKey = `${arch.id}-wheel-${pi}`
+ const isPairOpen = expandedWheelPairHistKey === pairKey
+ // Build per-hole net scores for this pair from archived data
+ const isGross = m.scoringType === 'GROSS'
+ const pAObj = activePlayers.find((p:any) => p.name === pair.playerA)
+ const pBObj = activePlayers.find((p:any) => p.name === pair.playerB)
+ const allHcps = isGross ? [0] : [pAObj,pBObj].filter(Boolean).map((p:any)=>Number(p.handicap)||0)
+ const baseHcp = allHcps.length ? Math.min(...allHcps) : 0
+ const getStr = (hcp: number, i: number) => {
+ if (isGross) return 0
+ const hr = Number(course.holes?.[i]?.hcp) || (i+1)
+ const diff = Math.max(0, hcp - baseHcp)
+ let s = Math.floor(diff/18); if (hr <= (diff%18)) s++; return s
+ }
+ const makeNet = (p: any) => {
+ if (!p) return Array(18).fill(0)
+ const g = scores[p.id] || Array(18).fill(0)
+ return g.map((sc:number,i:number) => sc>0 ? sc - getStr(Number(p.handicap)||0, i) : 0)
+ }
+ const netA = makeNet(pAObj)
+ const netB = makeNet(pBObj)
+
+ return (
+ <div key={pi} className={`rounded-2xl border overflow-hidden transition-all ${
+ isPairOpen ? 'border-purple-500/50' :
+ pair.winner==='tie'?'border-zinc-800':'border-emerald-500/20'
+ }`}>
+ {/* Pair pill */}
+ <button
+ onClick={() => setExpandedWheelPairHistKey(isPairOpen ? null : pairKey)}
+ className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors ${
+ isPairOpen?'bg-purple-950/20':pair.winner==='tie'?'bg-zinc-900 hover:bg-zinc-800':'bg-emerald-950/20 hover:bg-emerald-950/30'
  }`}>
  <span className={`font-semibold text-sm ${pair.winner===pair.playerA?'text-emerald-400':'text-zinc-400'}`}>{pair.playerA}</span>
  <div className="text-center">
  <div className={`text-xs font-semibold ${pair.winner==='tie'?'text-zinc-500':'text-emerald-400'}`}>
  {pair.winner==='tie'?'TIE':`${pair.aWins}–${pair.bWins}`}
  </div>
- {pair.winner!=='tie' && <div className="text-[9px] text-zinc-500">${pair.amount}</div>}
+ {pair.winner!=='tie' && <div className="text-[9px] text-zinc-600">${pair.amount}</div>}
  </div>
+ <div className="flex items-center gap-2">
  <span className={`font-semibold text-sm ${pair.winner===pair.playerB?'text-emerald-400':'text-zinc-400'}`}>{pair.playerB}</span>
+ <span className="text-[9px] text-purple-400 ml-1">{isPairOpen?'▲':'▼'}</span>
+ </div>
+ </button>
+ {/* Expanded scorecard */}
+ {isPairOpen && (
+ <div className="border-t border-zinc-800 bg-black/30 overflow-x-auto">
+ {[{start:0,label:'FRONT 9'},{start:9,label:'BACK 9'}].map(({start,label}) => (
+ <div key={label}>
+ <div className="px-4 py-1.5 bg-zinc-900/60 border-b border-zinc-800">
+ <span className="text-[9px] font-semibold text-zinc-500 tracking-widest">{label}</span>
+ </div>
+ <table className="w-full text-center" style={{minWidth:'480px',tableLayout:'fixed' as any}}>
+ <thead>
+ <tr className="bg-zinc-950">
+ <th className="py-2 px-2 text-left text-[9px] text-zinc-600 font-semibold" style={{width:'90px'}}>Player</th>
+ {Array.from({length:9},(_,i)=>start+i).map(i=>(
+ <th key={i} className="py-2 text-[9px] text-zinc-500 font-semibold" style={{width:'18px'}}>
+ <div>{i+1}</div><div className="text-[8px] text-zinc-700">p{pars[i]}</div>
+ </th>
+ ))}
+ <th className="py-2 text-[9px] font-semibold text-blue-400" style={{width:'28px'}}>{start===0?'OUT':'IN'}</th>
+ </tr>
+ </thead>
+ <tbody>
+ {[
+ {name:pair.playerA,net:netA,color:'text-emerald-400'},
+ {name:pair.playerB,net:netB,color:'text-blue-400'}
+ ].map(side => {
+ const nineScores = side.net.slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={side.name} className="border-t border-zinc-900">
+ <td className={`py-2 px-2 text-left font-semibold text-[10px] truncate ${side.color}`}>{side.name}</td>
+ {nineScores.map((s:number,i:number) => {
+ const par = pars[start+i]||4
+ const diff = s>0?s-par:null
+ let cls = 'w-5 h-5 rounded flex items-center justify-center mx-auto text-[9px] font-semibold '
+ if(diff===null) cls+='text-zinc-700'
+ else if(diff<=-2) cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1) cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0) cls+='bg-zinc-800 text-white'
+ else if(diff===1) cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className={`py-2 font-bold text-sm ${side.color}`}>{total||'—'}</td>
+ </tr>
+ )
+ })}
+ {/* Hole winner row */}
+ <tr className="border-t border-zinc-800 bg-zinc-900/40">
+ <td className="py-1.5 px-2 text-[9px] font-semibold text-zinc-600 text-left">Hole</td>
+ {Array.from({length:9},(_,i)=>start+i).map(i => {
+ const na = netA[i], nb = netB[i]
+ const w = na>0&&nb>0 ? na<nb?'A':nb<na?'B':'½' : null
+ return (
+ <td key={i} className="py-1 text-center">
+ <span className={`text-[9px] font-semibold ${w==='A'?'text-emerald-400':w==='B'?'text-blue-400':w==='½'?'text-zinc-500':'text-zinc-800'}`}>
+ {w||'·'}
+ </span>
+ </td>
+ )
+ })}
+ <td/>
+ </tr>
+ </tbody>
+ </table>
  </div>
  ))}
+ </div>
+ )}
+ </div>
+ )
+ })}
  </div>
  {/* Net per player */}
  {m.netWinnings && Object.keys(m.netWinnings).length > 0 && (
