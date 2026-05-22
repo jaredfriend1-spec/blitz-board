@@ -310,6 +310,14 @@ export default function LandingPage() {
       color:"border-blue-800/20 hover:border-blue-600",
       accent:"text-blue-400"
     },
+    {
+      title:"Roster Manager",
+      desc:"Your permanent player list",
+      path:"/roster",
+      icon:<Users className="text-emerald-400" size={28}/>,
+      color:"border-emerald-800/20 hover:border-emerald-600",
+      accent:"text-emerald-400"
+    },
   ]
 
   const setupItem = adminItems[0]

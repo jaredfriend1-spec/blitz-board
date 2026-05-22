@@ -42,6 +42,8 @@ export default function QuickMatch() {
   const [players, setPlayers] = useState<{id:string, name:string, handicap:number}[]>([])
   const [newName, setNewName] = useState('')
   const [newHcp, setNewHcp] = useState('')
+  const [globalRoster, setGlobalRoster] = useState<any[]>([])
+  const [showRosterPicker, setShowRosterPicker] = useState(false)
   const [editingHcp, setEditingHcp] = useState<string|null>(null)
   const [editingHcpVal, setEditingHcpVal] = useState(0)
 
@@ -157,6 +159,13 @@ export default function QuickMatch() {
         // Don't auto-load — just make it available in library
       }
     })
+    // Load global roster
+    onValue(ref(db,'globalRoster'), snap => {
+      if (snap.val()) {
+        const list = Object.values(snap.val()) as any[]
+        setGlobalRoster(list.sort((a:any,b:any) => a.name.localeCompare(b.name)))
+      }
+    })
     // Load saved formats
     onValue(ref(db,'savedFormats'), snap => {
       if (snap.val()) setSavedFormats(Object.values(snap.val()) as any[])
@@ -222,6 +231,28 @@ export default function QuickMatch() {
     const id = `p_${Date.now()}`
     setPlayers(prev => [...prev, { id, name: newName.trim().toUpperCase(), handicap: Number(newHcp)||0 }])
     setNewName(''); setNewHcp('')
+  }
+
+  const loadFromRoster = (rosterPlayer: any) => {
+    const already = players.find(p => p.name === rosterPlayer.name)
+    if (already) return showToast(`${rosterPlayer.name} already added`)
+    const id = `p_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    setPlayers(prev => [...prev, { id, name: rosterPlayer.name, handicap: rosterPlayer.handicap || 0 }])
+    showToast(`✓ Added ${rosterPlayer.name}`)
+  }
+
+  const loadAllFromRoster = () => {
+    let added = 0
+    globalRoster.forEach(rp => {
+      const already = players.find(p => p.name === rp.name)
+      if (!already) {
+        const id = `p_${Date.now()}_${Math.random().toString(36).slice(2)}_${added}`
+        setPlayers(prev => [...prev, { id, name: rp.name, handicap: rp.handicap || 0 }])
+        added++
+      }
+    })
+    setShowRosterPicker(false)
+    showToast(`✓ Added ${added} player${added !== 1 ? 's' : ''} from roster`)
   }
 
   const removePlayer = (id: string) => {
@@ -667,6 +698,46 @@ export default function QuickMatch() {
                 </button>
               </div>
             </div>
+
+            {/* Load from global roster */}
+            {globalRoster.length > 0 && (
+              <div>
+                <button onClick={() => setShowRosterPicker(!showRosterPicker)}
+                  className="w-full flex items-center justify-between bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500 px-4 py-3 rounded-2xl font-black text-sm transition-all group">
+                  <span className="flex items-center gap-2 text-zinc-500 group-hover:text-emerald-400 transition-colors">
+                    <Users size={16}/> LOAD FROM ROSTER ({globalRoster.length} saved)
+                  </span>
+                  <span className="text-[10px] font-black text-zinc-700">{showRosterPicker ? '▲' : '▼'}</span>
+                </button>
+                {showRosterPicker && (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 mt-1 space-y-2">
+                    <button onClick={loadAllFromRoster}
+                      className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-2.5 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-2">
+                      <Users size={14}/> ADD ALL FROM ROSTER
+                    </button>
+                    <div className="border-t border-zinc-800 pt-2 space-y-1.5">
+                      {globalRoster.map(rp => {
+                        const alreadyAdded = players.some(p => p.name === rp.name)
+                        return (
+                          <button key={rp.id} onClick={() => !alreadyAdded && loadFromRoster(rp)}
+                            disabled={alreadyAdded}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-black text-sm transition-all ${
+                              alreadyAdded
+                                ? 'text-zinc-700 cursor-not-allowed'
+                                : 'text-white hover:bg-zinc-800 hover:text-emerald-400'
+                            }`}>
+                            <span>{rp.name}</span>
+                            <span className={`text-[10px] font-black ${alreadyAdded ? 'text-zinc-700' : 'text-emerald-500'}`}>
+                              {alreadyAdded ? '✓ ADDED' : `HCP ${rp.handicap ?? 0}`}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               {players.length === 0 && (
