@@ -118,7 +118,13 @@ function calculateWheel(
  if (b.score > 0) payA += amt
  else if (b.score < 0) payB += amt
  })
- return {payA, payB, totalPresses}
+ const holeWinners: string[] = []
+ for (let i = start; i <= end; i++) {
+ const sa = scA[i], sb = scB[i]
+ if (!sa || !sb) { holeWinners.push('·'); continue }
+ holeWinners.push(sa < sb ? 'A' : sb < sa ? 'B' : '½')
+ }
+ return {payA, payB, totalPresses, holeWinners}
  }
 
  const pairResults = pairs.map(({a, b}) => {
@@ -146,8 +152,8 @@ function calculateWheel(
  playerA: resolved[a].name,
  playerB: resolved[b].name,
  format: 'nassau',
- f9: {payA: f9.payA, payB: f9.payB},
- b9: {payA: b9.payA, payB: b9.payB},
+ f9: {payA: f9.payA, payB: f9.payB, holeWinners: f9.holeWinners, totalPresses: f9.totalPresses},
+ b9: {payA: b9.payA, payB: b9.payB, holeWinners: b9.holeWinners, totalPresses: b9.totalPresses},
  totalWinner,
  nassau: wheelNassau,
  pairNetA,
@@ -155,18 +161,20 @@ function calculateWheel(
  } else {
  // Straight 18
  let aWins = 0, bWins = 0
+ const holeWinnersS: string[] = []
  for (let i = 0; i < 18; i++) {
  const sa = scA[i], sb = scB[i]
- if (sa === 0 || sb === 0) continue
- if (sa < sb) aWins++
- else if (sb < sa) bWins++
+ if (sa === 0 || sb === 0) { holeWinnersS.push('·'); continue }
+ if (sa < sb) { aWins++; holeWinnersS.push('A') }
+ else if (sb < sa) { bWins++; holeWinnersS.push('B') }
+ else holeWinnersS.push('½')
  }
  const winner = aWins > bWins ? a : bWins > aWins ? b : -1
  if (winner === a) { netWinnings[a] += wheelAmount; netWinnings[b] -= wheelAmount }
  else if (winner === b) { netWinnings[b] += wheelAmount; netWinnings[a] -= wheelAmount }
  return {
  playerA: resolved[a].name, playerB: resolved[b].name,
- format: 'straight', aWins, bWins,
+ format: 'straight', aWins, bWins, holeWinners: holeWinnersS,
  winner: winner === -1 ? 'tie' : resolved[winner].name,
  amount: wheelAmount
  }
@@ -634,20 +642,31 @@ export default function PayoutsPage() {
  </td>
  </tr>
  ))}
- {/* Hole winner row */}
+ {/* Hole winner row with press indicator */}
  <tr className="border-t border-zinc-800 bg-zinc-900/40">
  <td className="py-1.5 px-3 text-[10px] font-black text-zinc-600 text-left">HOLE</td>
  {Array.from({length:9},(_,i)=>start+i).map(i=>{
  const na = (holeDataA as any[])[i].net
  const nb = (holeDataB as any[])[i].net
+ const ga = (holeDataA as any[])[i].gross
+ const gb = (holeDataB as any[])[i].gross
+ const par = pars[start+i] || 4
  const winner = na>0&&nb>0 ? na<nb?'A':nb<na?'B':'T' : null
+ const aBirdie = ga>0 && ga < par
+ const bBirdie = gb>0 && gb < par
  return (
- <td key={i} className="py-1.5 px-0.5 text-center">
- <span className={`text-xs font-black ${
+ <td key={i} className="py-1 px-0.5 text-center">
+ <span className={`text-xs font-black block ${
  winner==='A'?'text-emerald-400':winner==='B'?'text-blue-400':winner==='T'?'text-zinc-500':'text-zinc-800'
  }`}>
  {winner==='T'?'½':winner||'·'}
  </span>
+ {(aBirdie||bBirdie) && (
+ <div className="flex justify-center gap-px mt-0.5">
+ {aBirdie && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>}
+ {bBirdie && <div className="w-1.5 h-1.5 rounded-full bg-blue-400"/>}
+ </div>
+ )}
  </td>
  )
  })}
