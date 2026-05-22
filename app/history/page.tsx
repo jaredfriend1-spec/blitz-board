@@ -323,23 +323,81 @@ export default function HistoryPage() {
  * { box-sizing: border-box; margin: 0; padding: 0; }
  body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; background: #000; color: #fff; padding: 24px; font-size: 13px; }
  @media print {
- body { background: #fff; color: #000; padding: 16px; }
- .no-print { display: none !important; }
- .card { border-color: #ddd !important; background: #fff !important; break-inside: avoid; }
- .header-bar { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
- .section-title { color: #000 !important; border-color: #10b981 !important; }
- .scorecard th, .scorecard td { border-color: #ddd !important; }
- .sc.birdie { border-color: #dc2626 !important; color: #dc2626 !important; }
- .sc.eagle { border-color: #d97706 !important; color: #d97706 !important; }
+ -webkit-print-color-adjust: exact;
+ print-color-adjust: exact;
+ }
+ @media print, screen {
+ /* Force readable colors for both screen and print */
+ }
+ /* Override: use light theme for everything so print works */
+ body { background: #fff !important; color: #111 !important; }
+ .header-bar { background: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border-bottom-color: #10b981 !important; }
+ .card { background: #fff !important; border-color: #e5e7eb !important; }
+ .match-card { background: #fff !important; border-color: #e5e7eb !important; }
+ .match-header { background: #f9fafb !important; border-bottom: 1px solid #e5e7eb; }
+ .section-title { background: #f9fafb !important; color: #047857 !important; border-bottom-color: #e5e7eb !important; }
+ .section-title.amber { color: #b45309 !important; }
+ .section-title.blue { color: #1d4ed8 !important; }
+ .section-body { background: #fff !important; }
+ .leaderboard-row { border-bottom-color: #f3f4f6 !important; }
+ .lb-name { color: #111 !important; }
+ .lb-hcp { color: #6b7280 !important; }
+ .lb-score { color: #111 !important; }
+ .lb-pos { color: #6b7280 !important; }
+ .lb-pos.gold { color: #d97706 !important; }
+ .scorecard th { background: #f9fafb !important; color: #374151 !important; border-bottom-color: #e5e7eb !important; }
+ .scorecard td { border-bottom-color: #f3f4f6 !important; color: #111 !important; }
+ .scorecard tr:nth-child(even) td { background: #fafafa !important; }
+ .par-sub { color: #9ca3af !important; }
+ .sc { color: #111 !important; }
+ .sc.par { background: #e5e7eb !important; color: #111 !important; }
+ .sc.bogey { border-color: #9ca3af !important; color: #374151 !important; background: #fff !important; }
+ .sc.double { border-color: #9ca3af !important; color: #374151 !important; background: #f9fafb !important; }
+ .sc.birdie { border: 2px solid #dc2626 !important; border-radius: 50% !important; color: #dc2626 !important; background: #fff !important; }
+ .sc.eagle { border: 2px solid #d97706 !important; border-radius: 50% !important; outline: 2px solid #d97706 !important; outline-offset: 2px !important; color: #d97706 !important; background: #fff !important; }
+ .sc.empty { color: #d1d5db !important; }
+ .player-name { color: #111 !important; }
  .side-a .player-name, .side-a .total { color: #059669 !important; }
  .side-b .player-name, .side-b .total { color: #2563eb !important; }
+ .side-a-label { color: #059669 !important; }
+ .side-b-label { color: #2563eb !important; }
+ .hole-winner { color: #6b7280 !important; }
  .win-a { color: #059669 !important; }
  .win-b { color: #2563eb !important; }
- .match-result { color: #000 !important; background: #f3f4f6 !important; }
- .emerald { color: #059669 !important; }
- .blue { color: #2563eb !important; }
- .amber { color: #d97706 !important; }
- .leaderboard-row:nth-child(even) { background: #f9fafb !important; }
+ .tie { color: #9ca3af !important; }
+ .winners-row td { background: #f9fafb !important; }
+ .nine-label { color: #9ca3af !important; }
+ .payout-block { background: #f9fafb !important; border-top-color: #e5e7eb !important; }
+ .payout-row { color: #374151 !important; }
+ .payout-row .pa { color: #059669 !important; }
+ .payout-row .pb { color: #2563eb !important; }
+ .payout-row .sep { color: #d1d5db !important; }
+ .match-result { background: #f3f4f6 !important; color: #111 !important; }
+ .skins-grid { background: #fff !important; }
+ .skin-cell { border-color: #e5e7eb !important; background: #fff !important; }
+ .skin-cell.won { border-color: #10b981 !important; background: #f0fdf4 !important; }
+ .skin-hole { color: #9ca3af !important; }
+ .skin-name { color: #059669 !important; }
+ .skin-empty { color: #e5e7eb !important; }
+ .skins-payouts { border-top-color: #e5e7eb !important; }
+ .skins-payout-row { border-bottom-color: #f3f4f6 !important; }
+ .sp-name { color: #111 !important; }
+ .sp-count { color: #6b7280 !important; }
+ .sp-amount { color: #059669 !important; }
+ .team-row { border-bottom-color: #f3f4f6 !important; }
+ .team-name { color: #111 !important; }
+ .team-nine { color: #6b7280 !important; }
+ .team-total { color: #2563eb !important; }
+ .match-sides .vs-sep { color: #9ca3af !important; }
+ .badge.net { background: #f0fdf4 !important; color: #059669 !important; }
+ .badge.gross { background: #fef2f2 !important; color: #dc2626 !important; }
+ .badge.type { background: #f9fafb !important; color: #374151 !important; border-color: #e5e7eb !important; }
+ .pair-pill { background: #faf5ff !important; border-color: #c4b5fd !important; color: #7c3aed !important; }
+ .pair-pill .vs { color: #9ca3af !important; }
+ .footer { color: #9ca3af !important; border-top-color: #e5e7eb !important; }
+ @media print {
+ .no-print { display: none !important; }
+ .card { break-inside: avoid; }
  }
  .header-bar { background: #000; border-bottom: 3px solid #10b981; padding: 20px 0 16px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-end; }
  .brand { font-size: 28px; font-weight: 900; letter-spacing: -1px; }
