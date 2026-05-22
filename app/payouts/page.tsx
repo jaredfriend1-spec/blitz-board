@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { ArrowLeft, Zap, ZapOff, DollarSign, Target, Settings } from 'lucide-react'
+import { ArrowLeft, Zap, ZapOff, DollarSign, Target, Settings, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 
 // ── TYPES ──────────────────────────────────────────────────────────
@@ -45,6 +45,134 @@ function getBestTeamScore(players: PlayerHoleScore[], balls: Ball[]): number {
     }
   }
   return best === Infinity ? 0 : best
+}
+
+
+// ── WHEEL MATCH CALCULATOR ────────────────────────────────────────
+function calculateWheel(
+  wheelPlayers: string[],
+  players: any[],
+  scores: Record<string, number[]>,
+  course: any,
+  scoringType: string,
+  wheelAmount: number,
+  wheelFormat: string = 'straight',
+  wheelNassau: number = 5,
+  wheelPress: number = 5,
+  wheelAutoPress: boolean = true,
+) {
+  const isGross = scoringType === 'GROSS'
+  const resolved = wheelPlayers.map(name => players.find(p => p.name === name)).filter(Boolean)
+  if (resolved.length !== 4) return null
+
+  const allHcps = isGross ? [0] : resolved.map(p => Number(p.handicap) || 0)
+  const baseHcp = Math.min(...allHcps)
+
+  const getStrokes = (playerHcp: number, holeIdx: number) => {
+    if (isGross) return 0
+    const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx + 1)
+    const diff = Math.max(0, playerHcp - baseHcp)
+    let s = Math.floor(diff / 18)
+    if (hcpRating <= (diff % 18)) s++
+    return s
+  }
+
+  const playerNetScores = resolved.map(p => {
+    const gross = scores[p.id] || Array(18).fill(0)
+    return gross.map((g: number, i: number) => g > 0 ? g - getStrokes(Number(p.handicap)||0, i) : 0)
+  })
+
+  const pairs: {a:number, b:number}[] = []
+  for (let a = 0; a < 4; a++)
+    for (let b = a+1; b < 4; b++)
+      pairs.push({a, b})
+
+  const netWinnings = [0, 0, 0, 0]
+
+  const runNine = (scA: number[], scB: number[], start: number, end: number, nassau: number, press: number, autoPress: boolean) => {
+    let bets = [{score:0, pressed:false, isBase:true}]
+    let totalPresses = 0
+    for (let i = start; i <= end; i++) {
+      const sa = scA[i], sb = scB[i]
+      if (sa === 0 || sb === 0) continue
+      const delta = sa < sb ? 1 : sb < sa ? -1 : 0
+      if (delta !== 0) {
+        bets.forEach(b => {
+          b.score += delta
+          if (autoPress && Math.abs(b.score) >= 2 && !b.pressed) { b.pressed = true; totalPresses++ }
+        })
+        if (autoPress) {
+          const newPresses = bets.filter(b => b.pressed && !bets.some(bb => bb !== b && !bb.isBase)).length
+          // simplified: add press when score hits ±2
+        }
+      }
+    }
+    let payA = 0, payB = 0
+    bets.forEach(b => {
+      const amt = b.isBase ? nassau : press
+      if (b.score > 0) payA += amt
+      else if (b.score < 0) payB += amt
+    })
+    return {payA, payB, totalPresses}
+  }
+
+  const pairResults = pairs.map(({a, b}) => {
+    const scA = playerNetScores[a]
+    const scB = playerNetScores[b]
+
+    if (wheelFormat === 'nassau') {
+      // Run F9, B9, Total as separate bets
+      const f9 = runNine(scA, scB, 0, 8, wheelNassau, wheelPress, wheelAutoPress)
+      const b9 = runNine(scA, scB, 9, 17, wheelNassau, wheelPress, wheelAutoPress)
+      // Total 18
+      let aTotal = 0, bTotal = 0
+      for (let i = 0; i < 18; i++) {
+        const sa = scA[i], sb = scB[i]
+        if (sa === 0 || sb === 0) continue
+        if (sa < sb) aTotal++
+        else if (sb < sa) bTotal++
+      }
+      const totalWinner = aTotal > bTotal ? 'A' : bTotal > aTotal ? 'B' : 'T'
+      const totalPay = totalWinner === 'A' ? wheelNassau : totalWinner === 'B' ? -wheelNassau : 0
+      const pairNetA = (f9.payA - f9.payB) + (b9.payA - b9.payB) + totalPay
+      netWinnings[a] += pairNetA
+      netWinnings[b] -= pairNetA
+      return {
+        playerA: resolved[a].name,
+        playerB: resolved[b].name,
+        format: 'nassau',
+        f9: {payA: f9.payA, payB: f9.payB},
+        b9: {payA: b9.payA, payB: b9.payB},
+        totalWinner,
+        nassau: wheelNassau,
+        pairNetA,
+      }
+    } else {
+      // Straight 18
+      let aWins = 0, bWins = 0
+      for (let i = 0; i < 18; i++) {
+        const sa = scA[i], sb = scB[i]
+        if (sa === 0 || sb === 0) continue
+        if (sa < sb) aWins++
+        else if (sb < sa) bWins++
+      }
+      const winner = aWins > bWins ? a : bWins > aWins ? b : -1
+      if (winner === a) { netWinnings[a] += wheelAmount; netWinnings[b] -= wheelAmount }
+      else if (winner === b) { netWinnings[b] += wheelAmount; netWinnings[a] -= wheelAmount }
+      return {
+        playerA: resolved[a].name, playerB: resolved[b].name,
+        format: 'straight', aWins, bWins,
+        winner: winner === -1 ? 'tie' : resolved[winner].name,
+        amount: wheelAmount
+      }
+    }
+  })
+
+  return {
+    players: resolved.map((p, i) => ({ name: p.name, net: netWinnings[i] })),
+    pairs: pairResults,
+    format: wheelFormat,
+  }
 }
 
 export default function PayoutsPage() {
@@ -343,6 +471,99 @@ export default function PayoutsPage() {
 
       <div className="max-w-4xl mx-auto space-y-12">
         {matches.map(m => {
+          // ── WHEEL MATCH RENDERING ──
+          if (m.type === 'Wheel') {
+            const wheelRes = calculateWheel(
+              m.wheelPlayers || [],
+              players, scores, course,
+              m.scoringType || 'NET',
+              m.wheelAmount || 10,
+              m.wheelFormat || 'straight',
+              m.wheelNassau || 5,
+              m.wheelPress || 5,
+              m.wheelAutoPress !== false,
+            )
+            if (!wheelRes) return null
+            return (
+              <div key={m.id} className="bg-zinc-950 rounded-[3rem] border-2 border-purple-500/40 shadow-2xl overflow-hidden">
+                <div className="p-6 sm:p-8 border-b-2 border-zinc-900">
+                  <div className="flex items-center gap-3 mb-3">
+                    <RefreshCw size={24} className="text-purple-400"/>
+                    <h2 className="text-2xl font-black text-purple-400">WHEEL BET</h2>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(m.wheelPlayers||[]).map((p:string) => (
+                      <span key={p} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-xl text-xs font-black">{p}</span>
+                    ))}
+                    <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-xl text-xs font-black">{m.wheelFormat==='nassau'?`N:$${m.wheelNassau}`:`$${m.wheelAmount}`}/PAIR · {m.scoringType||'NET'} · {m.wheelFormat==='nassau'?'NASSAU':'STRAIGHT 18'}</span>
+                  </div>
+                </div>
+
+                {/* Pair results */}
+                <div className="p-6 sm:p-8">
+                  <p className="text-[10px] font-black text-zinc-600 tracking-widest mb-4">PAIR RESULTS — STRAIGHT 18</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                    {wheelRes.pairs.map((pair: any, i: number) => {
+                      const isNassau = pair.format === 'nassau'
+                      const aNet = isNassau ? pair.pairNetA : (pair.winner===pair.playerA?pair.amount:pair.winner==='tie'?0:-pair.amount)
+                      return (
+                        <div key={i} className={`rounded-2xl border p-4 ${
+                          isNassau ? (pair.pairNetA > 0 ? 'bg-emerald-950/20 border-emerald-500/20' : pair.pairNetA < 0 ? 'bg-blue-950/20 border-blue-500/20' : 'bg-zinc-900 border-zinc-800')
+                          : pair.winner==='tie' ? 'bg-zinc-900 border-zinc-800' : pair.winner===pair.playerA ? 'bg-emerald-950/30 border-emerald-500/30' : 'bg-blue-950/30 border-blue-500/30'
+                        }`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`font-black text-sm ${aNet>0?'text-emerald-400':'text-zinc-400'}`}>{pair.playerA}</span>
+                            <span className={`font-black text-sm px-3 ${aNet===0?'text-zinc-500':aNet>0?'text-emerald-400':'text-blue-400'}`}>
+                              {aNet===0?'EVEN':aNet>0?`+$${aNet}`:`-$${Math.abs(aNet)}`}
+                            </span>
+                            <span className={`font-black text-sm ${aNet<0?'text-emerald-400':'text-zinc-400'}`}>{pair.playerB}</span>
+                          </div>
+                          {isNassau && (
+                            <div className="flex gap-2 text-[9px] font-black text-zinc-600">
+                              <span>F9: {pair.f9.payA>pair.f9.payB?pair.playerA:pair.f9.payB>pair.f9.payA?pair.playerB:'TIE'}</span>
+                              <span>·</span>
+                              <span>B9: {pair.b9.payA>pair.b9.payB?pair.playerA:pair.b9.payB>pair.b9.payA?pair.playerB:'TIE'}</span>
+                              <span>·</span>
+                              <span>TOT: {pair.totalWinner==='A'?pair.playerA:pair.totalWinner==='B'?pair.playerB:'TIE'}</span>
+                            </div>
+                          )}
+                          {!isNassau && (
+                            <div className="text-[9px] font-black text-zinc-600">
+                              {pair.aWins} vs {pair.bWins} holes
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Net per player */}
+                  <p className="text-[10px] font-black text-zinc-600 tracking-widest mb-3">NET RESULT PER PLAYER</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {wheelRes.players.map(p => (
+                      <div key={p.name} className={`rounded-2xl p-4 border text-center ${
+                        p.net > 0 ? 'bg-emerald-950/40 border-emerald-500/40' :
+                        p.net < 0 ? 'bg-rose-950/40 border-rose-500/40' :
+                        'bg-zinc-900 border-zinc-800'
+                      }`}>
+                        <div className="font-black text-xs text-zinc-400 mb-1">{p.name}</div>
+                        <div className={`font-black text-2xl ${p.net>0?'text-emerald-400':p.net<0?'text-rose-400':'text-zinc-500'}`}>
+                          {p.net>0?'+':''}{p.net===0?'EVEN':`$${Math.abs(p.net)}`}
+                        </div>
+                        {p.net !== 0 && (
+                          <div className="text-[9px] font-black text-zinc-600 mt-1 normal-case">
+                            {p.net > 0 ? 'collect' : 'owes'}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          // ── REGULAR MATCH RENDERING ──
           const res = calculateMatch(m)
           if (!res) return null
 
