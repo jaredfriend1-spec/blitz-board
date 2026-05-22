@@ -6,7 +6,7 @@ import { ref, onValue } from 'firebase/database'
 import {
   Trophy, Settings, Target, DollarSign, Flag,
   ChevronRight, History, BookOpen, ShieldAlert,
-  User, Users, Lock, Eye, EyeOff, Zap, Archive
+  User, Users, Lock, Eye, EyeOff, Zap, Archive, RefreshCw
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -316,6 +316,24 @@ export default function LandingPage() {
             <p className="text-[10px] font-bold text-zinc-500 tracking-widest">{setupItem.desc}</p>
           </div>
           <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-rose-500 group-hover:text-white transition-all flex-shrink-0">
+            <ChevronRight size={16}/>
+          </div>
+        </Link>
+
+        {/* Quick Match pill */}
+        <Link href="/match"
+          className="group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 border-amber-500/20 hover:border-amber-500 transition-all active:scale-95 flex items-center gap-4 shadow-xl mb-4 relative overflow-hidden">
+          <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Zap size={80} className="text-amber-400"/>
+          </div>
+          <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+            <Zap size={22} className="text-amber-400"/>
+          </div>
+          <div className="relative z-10 flex-1">
+            <h2 className="text-xl font-black italic leading-tight group-hover:text-amber-400 transition-colors">Quick Match</h2>
+            <p className="text-[10px] font-bold text-zinc-500 tracking-widest">Casual round · No entry fees · Just bets</p>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-black transition-all flex-shrink-0">
             <ChevronRight size={16}/>
           </div>
         </Link>
