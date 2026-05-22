@@ -319,7 +319,22 @@ export default function QuickMatch() {
  if (players.length === 0) return showToast('Add at least 2 players')
  setLoading(true)
 
- // Write to Firebase
+ // If adding matches to an existing scored round — only update matchups
+ const existingScoresSnap = await get(ref(db, 'tournament/scores'))
+ const hasExistingScores = existingScoresSnap.exists() && Object.keys(existingScoresSnap.val()||{}).length > 0
+ if (hasExistingScores) {
+ await set(ref(db, 'tournament/matchups'), null)
+ for (const m of matches) {
+ const mRef = push(ref(db,'tournament/matchups'))
+ await set(mRef, { id:mRef.key, ...m })
+ }
+ showToast('✓ Matches updated — scores preserved')
+ setLoading(false)
+ router.push('/scorer')
+ return
+ }
+
+ // Fresh start — wipe and rebuild everything
  await set(ref(db,'tournament'), null)
  await set(ref(db,'tournament/meta'), { isMock:false, mode:'match', currentDay:'Match Day', totalDays:1 })
  await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par) })
