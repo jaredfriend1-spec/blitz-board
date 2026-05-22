@@ -44,6 +44,19 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
         <meta name="apple-mobile-web-app-title" content="Blitz Board"/>
         <link rel="apple-touch-icon" href="/icon-180.png"/>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(function(reg) { console.log('SW registered'); })
+                    .catch(function(err) { console.log('SW failed: ', err); });
+                });
+              }
+            `,
+          }}
+        />
       </head>
       <body className="bg-black text-white antialiased pb-20">
         {children}
