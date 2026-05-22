@@ -207,139 +207,184 @@ export default function FormatPage() {
         <div className="space-y-3">
 
           {/* Jeff's Blitz */}
-          <button onClick={() => setMode(mode==='blitz' ? null : 'blitz')}
-            className={`w-full p-5 rounded-[1.75rem] border-2 text-left transition-all flex items-center justify-between ${
-              mode==='blitz' ? 'border-emerald-500/60 bg-emerald-950/30' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-600'
-            }`}>
-            <div className="flex items-center gap-4">
-              <span className="text-2xl">⭐</span>
-              <div>
-                <div className={`font-black text-sm ${mode==='blitz'?'text-emerald-400':'text-zinc-300'}`}>Jeff's Blitz</div>
-                <div className="text-[10px] font-black text-zinc-600 normal-case mt-0.5">Best 2 Net / Best 3 Net on par 3s</div>
-              </div>
-            </div>
-            {mode==='blitz' && <CheckCircle2 size={18} className="text-emerald-400 flex-shrink-0"/>}
-          </button>
-
-          {/* Custom */}
-          <button onClick={() => setMode(mode==='custom' ? null : 'custom')}
-            className={`w-full p-5 rounded-[1.75rem] border-2 text-left transition-all flex items-center justify-between ${
-              mode==='custom' ? 'border-purple-500/60 bg-purple-950/20' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-600'
-            }`}>
-            <div className="flex items-center gap-4">
-              <span className="text-2xl">⚙️</span>
-              <div>
-                <div className={`font-black text-sm ${mode==='custom'?'text-purple-400':'text-zinc-300'}`}>Configure Custom</div>
-                <div className="text-[10px] font-black text-zinc-600 normal-case mt-0.5">Set your own ball count and types per par</div>
-              </div>
-            </div>
-            {mode==='custom' && <CheckCircle2 size={18} className="text-purple-400 flex-shrink-0"/>}
-          </button>
-
-          {/* Library */}
-          <button onClick={() => setShowLibrary(!showLibrary)}
-            className={`w-full p-5 rounded-[1.75rem] border-2 text-left transition-all flex items-center justify-between ${
-              showLibrary ? 'border-blue-500/40 bg-blue-950/10' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-600'
-            }`}>
-            <div className="flex items-center gap-4">
-              <span className="text-2xl">📚</span>
-              <div>
-                <div className={`font-black text-sm ${showLibrary?'text-blue-400':'text-zinc-300'}`}>Format Library</div>
-                <div className="text-[10px] font-black text-zinc-600 normal-case mt-0.5">
-                  {savedFormats.length > 0 ? `${savedFormats.length} saved format${savedFormats.length > 1 ? 's' : ''} — tap to load` : 'No saved formats yet'}
+          <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${
+            mode==='blitz' ? 'border-emerald-500/60' : 'border-zinc-800'
+          }`}>
+            <button onClick={() => setMode(mode==='blitz' ? null : 'blitz')}
+              className={`w-full p-5 text-left flex items-center justify-between transition-all ${
+                mode==='blitz' ? 'bg-emerald-950/30' : 'bg-zinc-900 hover:bg-zinc-800'
+              }`}>
+              <div className="flex items-center gap-4">
+                <span className="text-2xl">⭐</span>
+                <div>
+                  <div className={`font-black text-sm ${mode==='blitz'?'text-emerald-400':'text-zinc-300'}`}>Jeff's Blitz</div>
+                  <div className="text-[10px] font-black text-zinc-600 normal-case mt-0.5">Best 2 Net / Best 3 Net on par 3s</div>
                 </div>
               </div>
-            </div>
-            {showLibrary ? <ChevronUp size={18} className="text-zinc-500 flex-shrink-0"/> : <ChevronDown size={18} className="text-zinc-500 flex-shrink-0"/>}
-          </button>
+              <CheckCircle2 size={18} className={`flex-shrink-0 transition-opacity ${mode==='blitz'?'text-emerald-400 opacity-100':'opacity-0'}`}/>
+            </button>
+            {/* Jeff's Blitz detail inline */}
+            {mode === 'blitz' && (
+              <div className="border-t border-emerald-500/20 bg-emerald-950/10 px-5 py-4 space-y-2">
+                {[
+                  { label:'Par 3', desc:'Best 3 Net scores', warn: warnPar3 },
+                  { label:'Par 4', desc:'Best 2 Net scores', warn: warnPar4 },
+                  { label:'Par 5', desc:'Best 2 Net scores', warn: warnPar5 },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center text-sm font-black">
+                    <span className="flex items-center gap-2 text-zinc-500">
+                      {row.warn && <AlertTriangle size={12} className="text-amber-400"/>}
+                      {row.label}
+                    </span>
+                    <span className={row.warn?'text-amber-400':'text-emerald-400'}>{row.desc}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Library panel */}
-          {showLibrary && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-2">
-              {savedFormats.length === 0 ? (
-                <p className="text-zinc-600 text-xs font-black text-center py-4 normal-case">
-                  No saved formats yet. Configure a custom format and save it — it'll appear here.
-                </p>
-              ) : (
-                savedFormats.map(f => (
-                  <button key={f.id} onClick={() => loadFromLibrary(f)}
-                    className="w-full flex items-center justify-between bg-black border border-zinc-800 hover:border-blue-500 p-4 rounded-xl transition-all group">
-                    <div className="text-left">
-                      <div className="font-black text-sm text-white group-hover:text-blue-400 transition-colors">{f.name}</div>
-                      <div className="text-[9px] text-zinc-600 font-black mt-0.5 normal-case">
-                        P3: {formatSummary(f.par3)} · P4: {formatSummary(f.par4)} · P5: {formatSummary(f.par5)}
+          {/* Configure Custom — expands inline */}
+          <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${
+            mode==='custom' ? 'border-purple-500/60' : 'border-zinc-800'
+          }`}>
+            <button onClick={() => setMode(mode==='custom' ? null : 'custom')}
+              className={`w-full p-5 text-left flex items-center justify-between transition-all ${
+                mode==='custom' ? 'bg-purple-950/20' : 'bg-zinc-900 hover:bg-zinc-800'
+              }`}>
+              <div className="flex items-center gap-4">
+                <span className="text-2xl">⚙️</span>
+                <div>
+                  <div className={`font-black text-sm ${mode==='custom'?'text-purple-400':'text-zinc-300'}`}>Configure Custom</div>
+                  <div className="text-[10px] font-black text-zinc-600 normal-case mt-0.5">
+                    {mode==='custom' ? 'Set ball count and type per par below ↓' : 'Set your own ball count and types per par'}
+                  </div>
+                </div>
+              </div>
+              <CheckCircle2 size={18} className={`flex-shrink-0 transition-opacity ${mode==='custom'?'text-purple-400 opacity-100':'opacity-0'}`}/>
+            </button>
+
+            {/* Custom configurator — expands inside the card */}
+            {mode === 'custom' && (
+              <div className="border-t border-purple-500/20 bg-purple-950/10 p-5 space-y-4">
+
+                {/* Name */}
+                <div>
+                  <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-2">FORMAT NAME</label>
+                  <input value={customFormat.name}
+                    onChange={e => setCustomFormat(prev => ({...prev, name: e.target.value}))}
+                    className="w-full bg-black border-2 border-zinc-700 focus:border-purple-500 p-3 rounded-2xl font-black text-white outline-none transition-colors"
+                    placeholder="E.G. 1 GROSS 2 NET"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Load from library if any saved */}
+                {savedFormats.length > 0 && (
+                  <div>
+                    <button onClick={() => setShowLibrary(!showLibrary)}
+                      className="text-blue-400 text-[10px] font-black hover:text-blue-300 transition-colors flex items-center gap-1.5 mb-2">
+                      <BookOpen size={11}/> LOAD FROM LIBRARY ({savedFormats.length}) {showLibrary?'▲':'▼'}
+                    </button>
+                    {showLibrary && (
+                      <div className="bg-black rounded-2xl border border-zinc-800 p-3 space-y-2">
+                        {savedFormats.map(f => (
+                          <button key={f.id} onClick={() => loadFromLibrary(f)}
+                            className="w-full flex items-center justify-between hover:bg-zinc-900 p-3 rounded-xl transition-all group">
+                            <div className="text-left">
+                              <div className="font-black text-sm text-white group-hover:text-blue-400 transition-colors">{f.name}</div>
+                              <div className="text-[9px] text-zinc-600 font-black mt-0.5 normal-case">
+                                P3: {formatSummary(f.par3)} · P4: {formatSummary(f.par4)} · P5: {formatSummary(f.par5)}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="text-[9px] text-blue-500 font-black opacity-0 group-hover:opacity-100">LOAD</span>
+                              <button onClick={e => deleteFromLibrary(f.id, e)} className="text-zinc-700 hover:text-rose-500 transition-colors p-1">
+                                <Trash2 size={12}/>
+                              </button>
+                            </div>
+                          </button>
+                        ))}
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {hasTeamSizeWarning && (
+                  <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/40 rounded-2xl p-3">
+                    <AlertTriangle size={14} className="text-amber-400 flex-shrink-0 mt-0.5"/>
+                    <p className="text-amber-300/70 text-xs font-black normal-case">
+                      Format needs <strong>{maxBallsNeeded} balls</strong> but smallest team has <strong>{minTeamSize} players</strong>.
+                    </p>
+                  </div>
+                )}
+
+                <ParSection label="PAR 3" balls={customFormat.par3} warning={warnPar3}
+                  onChange={balls => setCustomFormat(prev => ({...prev, par3: balls}))}/>
+                <ParSection label="PAR 4" balls={customFormat.par4} warning={warnPar4}
+                  onChange={balls => setCustomFormat(prev => ({...prev, par4: balls}))}/>
+                <ParSection label="PAR 5" balls={customFormat.par5} warning={warnPar5}
+                  onChange={balls => setCustomFormat(prev => ({...prev, par5: balls}))}/>
+
+                <div className="flex gap-2 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3">
+                  <Info size={12} className="text-blue-400 flex-shrink-0 mt-0.5"/>
+                  <p className="text-blue-300 text-[10px] font-black normal-case leading-relaxed">
+                    Each player counts once per hole. Engine finds the best combination automatically. This format saves to the Library when you save.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Library — standalone (when not in custom mode) */}
+          {mode !== 'custom' && (
+            <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${
+              showLibrary ? 'border-blue-500/40' : 'border-zinc-800'
+            }`}>
+              <button onClick={() => setShowLibrary(!showLibrary)}
+                className={`w-full p-5 text-left flex items-center justify-between transition-all ${
+                  showLibrary ? 'bg-blue-950/10' : 'bg-zinc-900 hover:bg-zinc-800'
+                }`}>
+                <div className="flex items-center gap-4">
+                  <span className="text-2xl">📚</span>
+                  <div>
+                    <div className={`font-black text-sm ${showLibrary?'text-blue-400':'text-zinc-300'}`}>Format Library</div>
+                    <div className="text-[10px] font-black text-zinc-600 normal-case mt-0.5">
+                      {savedFormats.length > 0 ? `${savedFormats.length} saved format${savedFormats.length > 1 ? 's' : ''} — tap to load` : 'No saved formats yet'}
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                      <span className="text-[9px] font-black text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">LOAD</span>
-                      <button onClick={e => deleteFromLibrary(f.id, e)}
-                        className="text-zinc-700 hover:text-rose-500 transition-colors p-1"
-                        title="Delete from library">
-                        <Trash2 size={14}/>
+                  </div>
+                </div>
+                {showLibrary ? <ChevronUp size={18} className="text-zinc-500 flex-shrink-0"/> : <ChevronDown size={18} className="text-zinc-500 flex-shrink-0"/>}
+              </button>
+              {showLibrary && (
+                <div className="border-t border-zinc-800 bg-black/30 p-4 space-y-2">
+                  {savedFormats.length === 0 ? (
+                    <p className="text-zinc-600 text-xs font-black text-center py-4 normal-case">
+                      No saved formats yet — configure a custom format and save it.
+                    </p>
+                  ) : (
+                    savedFormats.map(f => (
+                      <button key={f.id} onClick={() => loadFromLibrary(f)}
+                        className="w-full flex items-center justify-between bg-black hover:bg-zinc-900 border border-zinc-800 hover:border-blue-500 p-4 rounded-xl transition-all group">
+                        <div className="text-left">
+                          <div className="font-black text-sm text-white group-hover:text-blue-400 transition-colors">{f.name}</div>
+                          <div className="text-[9px] text-zinc-600 font-black mt-0.5 normal-case">
+                            P3: {formatSummary(f.par3)} · P4: {formatSummary(f.par4)} · P5: {formatSummary(f.par5)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          <span className="text-[9px] font-black text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">LOAD</span>
+                          <button onClick={e => deleteFromLibrary(f.id, e)} className="text-zinc-700 hover:text-rose-500 transition-colors p-1">
+                            <Trash2 size={14}/>
+                          </button>
+                        </div>
                       </button>
-                    </div>
-                  </button>
-                ))
+                    ))
+                  )}
+                </div>
               )}
             </div>
           )}
         </div>
-
-        {/* Jeff's Blitz detail */}
-        {mode === 'blitz' && (
-          <div className="border border-zinc-800 bg-zinc-900 rounded-2xl p-5 space-y-2">
-            <p className="text-[10px] font-black text-zinc-600 tracking-widest mb-3">FORMAT DETAIL</p>
-            {[
-              { label:'Par 3', desc:'Best 3 Net scores', warn: warnPar3 },
-              { label:'Par 4', desc:'Best 2 Net scores', warn: warnPar4 },
-              { label:'Par 5', desc:'Best 2 Net scores', warn: warnPar5 },
-            ].map(row => (
-              <div key={row.label} className="flex justify-between items-center text-sm font-black">
-                <span className="flex items-center gap-2 text-zinc-500">
-                  {row.warn && <AlertTriangle size={12} className="text-amber-400"/>}
-                  {row.label}
-                </span>
-                <span className={row.warn?'text-amber-400':'text-white'}>{row.desc}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Custom configurator */}
-        {mode === 'custom' && (
-          <div className="space-y-4">
-            <div>
-              <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-2">FORMAT NAME</label>
-              <input value={customFormat.name}
-                onChange={e => setCustomFormat(prev => ({...prev, name: e.target.value}))}
-                className="w-full bg-zinc-900 border-2 border-zinc-700 focus:border-purple-500 p-4 rounded-2xl font-black text-white text-lg outline-none transition-colors"
-                placeholder="E.G. 1 GROSS 2 NET"/>
-            </div>
-
-            {hasTeamSizeWarning && (
-              <div className="flex items-start gap-3 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4">
-                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5"/>
-                <p className="text-amber-300/70 text-xs font-black normal-case leading-relaxed">
-                  Format needs <strong>{maxBallsNeeded} balls</strong> but smallest team has <strong>{minTeamSize} players</strong>.
-                </p>
-              </div>
-            )}
-
-            <ParSection label="PAR 3" balls={customFormat.par3} warning={warnPar3}
-              onChange={balls => setCustomFormat(prev => ({...prev, par3: balls}))}/>
-            <ParSection label="PAR 4" balls={customFormat.par4} warning={warnPar4}
-              onChange={balls => setCustomFormat(prev => ({...prev, par4: balls}))}/>
-            <ParSection label="PAR 5" balls={customFormat.par5} warning={warnPar5}
-              onChange={balls => setCustomFormat(prev => ({...prev, par5: balls}))}/>
-
-            <div className="flex gap-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
-              <Info size={14} className="text-blue-400 flex-shrink-0 mt-0.5"/>
-              <p className="text-blue-300 text-xs font-black normal-case leading-relaxed">
-                Each player counts once per hole — not both net and gross. Engine finds the best combination automatically. Saved formats appear in the Library for reuse.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Save button — only when a mode is selected */}
         {mode && (
