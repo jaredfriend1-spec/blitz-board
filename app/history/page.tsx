@@ -463,11 +463,12 @@ if(m.type==='Wheel'){
 // Build per-hole net scores for each wheel player
 const isGrossW = m.scoringType==='GROSS'
 const wp = m.wheelPlayers||[]
-const allWHcps = isGrossW?[0]:wp.map((name:string)=>{const p=activePlayers.find((pl:any)=>pl.name===name);return Number(p?.handicap)||0})
+const archRoster:any[] = arch.roster ? Object.values(arch.roster) : []
+const allWHcps = isGrossW?[0]:wp.map((name:string)=>{const p=archRoster.find((pl:any)=>pl.name===name);return Number(p?.handicap)||0})
 const baseWHcp = Math.min(...allWHcps)
-const getWStr = (name:string,i:number)=>{if(isGrossW)return 0;const p=activePlayers.find((pl:any)=>pl.name===name);const hr=Number(arch.course?.holes?.[i]?.hcp)||(i+1);const diff=Math.max(0,(Number(p?.handicap)||0)-baseWHcp);let s=Math.floor(diff/18);if(hr<=(diff%18))s++;return s}
+const getWStr = (name:string,i:number)=>{if(isGrossW)return 0;const p=archRoster.find((pl:any)=>pl.name===name);const hr=Number(arch.course?.holes?.[i]?.hcp)||(i+1);const diff=Math.max(0,(Number(p?.handicap)||0)-baseWHcp);let s=Math.floor(diff/18);if(hr<=(diff%18))s++;return s}
 const wNetScores:Record<string,number[]>={}
-wp.forEach((name:string)=>{const p=activePlayers.find((pl:any)=>pl.name===name);if(!p)return;wNetScores[name]=(arch.scores?.[p.id]||Array(18).fill(0)).map((g:number,i:number)=>g>0?g-getWStr(name,i):0)})
+wp.forEach((name:string)=>{const p=archRoster.find((pl:any)=>pl.name===name);if(!p)return;wNetScores[name]=(arch.scores?.[p.id]||Array(18).fill(0)).map((g:number,i:number)=>g>0?g-getWStr(name,i):0)})
 // Build scorecard for each pair
 const pairSCs = (m.wheelPairs||[]).map((pair:any)=>{
 const netA=wNetScores[pair.playerA]||Array(18).fill(0)
