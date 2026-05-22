@@ -852,8 +852,9 @@ return (
  const isPairOpen = expandedWheelPairHistKey === pairKey
  // Build per-hole net scores for this pair from archived data
  const isGross = m.scoringType === 'GROSS'
- const pAObj = activePlayers.find((p:any) => p.name === pair.playerA)
- const pBObj = activePlayers.find((p:any) => p.name === pair.playerB)
+ const archRosterInline:any[] = arch.roster ? Object.values(arch.roster) : []
+ const pAObj = archRosterInline.find((p:any) => p.name === pair.playerA)
+ const pBObj = archRosterInline.find((p:any) => p.name === pair.playerB)
  const allHcps = isGross ? [0] : [pAObj,pBObj].filter(Boolean).map((p:any)=>Number(p.handicap)||0)
  const baseHcp = allHcps.length ? Math.min(...allHcps) : 0
  const getStr = (hcp: number, i: number) => {
@@ -864,7 +865,7 @@ return (
  }
  const makeNet = (p: any) => {
  if (!p) return Array(18).fill(0)
- const g = scores[p.id] || Array(18).fill(0)
+ const g = (arch.scores?.[p.id]) || Array(18).fill(0)
  return g.map((sc:number,i:number) => sc>0 ? sc - getStr(Number(p.handicap)||0, i) : 0)
  }
  const netA = makeNet(pAObj)
