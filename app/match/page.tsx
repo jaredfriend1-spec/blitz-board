@@ -130,6 +130,7 @@ export default function QuickMatch() {
 
  const [existingMatchMode, setExistingMatchMode] = useState(false)
 
+ const [addingToExisting, setAddingToExisting] = useState(false)
  useEffect(() => {
  // Check for existing tournament data
  get(ref(db,'tournament/meta')).then(async snap => {
@@ -175,6 +176,7 @@ export default function QuickMatch() {
  // ── CONTINUE EXISTING QUICK MATCH ───────────────────────────────
  const continueExistingMatch = async () => {
  setLoading(true)
+  setAddingToExisting(true)
  // Pre-load course
  const courseSnap = await get(ref(db,'tournament/course'))
  if (courseSnap.val()) {
@@ -319,10 +321,8 @@ export default function QuickMatch() {
  if (players.length === 0) return showToast('Add at least 2 players')
  setLoading(true)
 
- // If adding matches to an existing scored round — only update matchups
- const existingScoresSnap = await get(ref(db, 'tournament/scores'))
- const hasExistingScores = existingScoresSnap.exists() && Object.keys(existingScoresSnap.val()||{}).length > 0
- if (hasExistingScores) {
+ // If adding to existing round — ONLY update matchups, preserve all scores
+ if (addingToExisting) {
  await set(ref(db, 'tournament/matchups'), null)
  for (const m of matches) {
  const mRef = push(ref(db,'tournament/matchups'))
