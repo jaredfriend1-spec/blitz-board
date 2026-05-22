@@ -5,7 +5,7 @@ import { ref, set, get, push, onValue } from 'firebase/database'
 import {
   ArrowLeft, ArrowRight, Flag, Users, Layers, Sword, Play,
   Check, X, Plus, Trash2, Zap, ZapOff, ChevronRight,
-  AlertTriangle, Loader2, User, RefreshCw, Pencil
+  AlertTriangle, Loader2, User, RefreshCw, Pencil, Camera, Save
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -30,8 +30,13 @@ export default function QuickMatch() {
 
   // Course
   const [courseName, setCourseName] = useState('')
+  const [holes, setHoles] = useState(Array.from({length:18}, (_, i) => ({ par: 4, hcp: i + 1 })))
   const [savedCourses, setSavedCourses] = useState<any[]>([])
   const [showCourseLibrary, setShowCourseLibrary] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
+  const [scanPreview, setScanPreview] = useState<any[]|null>(null)
+  const [scanError, setScanError] = useState('')
+  const fileInputRef = typeof window !== 'undefined' ? { current: null as HTMLInputElement|null } : { current: null as HTMLInputElement|null }
 
   // Players
   const [players, setPlayers] = useState<{id:string, name:string, handicap:number}[]>([])
@@ -69,6 +74,52 @@ export default function QuickMatch() {
   const [toast, setToast] = useState<string|null>(null)
   const showToast = (msg:string) => { setToast(msg); setTimeout(()=>setToast(null),2500) }
 
+  const updateHole = (index: number, field: 'par'|'hcp', value: number) => {
+    setHoles(prev => { const n=[...prev]; n[index]={...n[index],[field]:value}; return n })
+  }
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise(resolve => {
+      const reader = new FileReader()
+      reader.onload = e => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const scale = Math.min(1000/img.width, 1)
+          canvas.width = img.width*scale; canvas.height = img.height*scale
+          canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
+          resolve(canvas.toDataURL('image/jpeg', 0.7))
+        }
+        img.src = e.target?.result as string
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsScanning(true); setScanError('')
+    try {
+      const base64 = await compressImage(file)
+      const res = await fetch('/api/scan-scorecard', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({imageBase64:base64}) })
+      const data = await res.json()
+      if (res.ok && data.success && data.holes?.length === 18) {
+        setScanPreview(data.holes)
+      } else {
+        setScanError(data.error || 'Could not parse scorecard')
+      }
+    } catch { setScanError('Network error — check connection') }
+    finally { setIsScanning(false); if(e.target) e.target.value='' }
+  }
+
+  const acceptScan = () => {
+    if (!scanPreview) return
+    setHoles(scanPreview)
+    setScanPreview(null)
+    showToast('✓ Scorecard accepted')
+  }
+
   useEffect(() => {
     // Check for existing tournament data
     get(ref(db,'tournament/meta')).then(snap => {
@@ -79,11 +130,17 @@ export default function QuickMatch() {
       }
       setCheckingExisting(false)
     })
-    // Load course history
+    // Load course history (shared with tournament)
     onValue(ref(db,'courseHistory'), snap => {
       if (snap.val()) {
         const list = Object.values(snap.val()) as any[]
         setSavedCourses(list.sort((a,b) => (b.savedAt||0)-(a.savedAt||0)))
+      }
+    })
+    // Also try to pre-load current tournament course
+    get(ref(db,'tournament/course')).then(snap => {
+      if (snap.val()?.name) {
+        // Don't auto-load — just make it available in library
       }
     })
     // Load saved formats
@@ -182,7 +239,7 @@ export default function QuickMatch() {
     // Write to Firebase
     await set(ref(db,'tournament'), null)
     await set(ref(db,'tournament/meta'), { isMock:false, mode:'match', currentDay:'Match Day', totalDays:1 })
-    await set(ref(db,'tournament/course'), { name:courseName.trim(), holes:Array.from({length:18},(_,i)=>({par:4,hcp:i+1})), pars:Array(18).fill(4) })
+    await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par) })
 
     // Players
     const pidMap: Record<string,string> = {}
@@ -309,11 +366,54 @@ export default function QuickMatch() {
         {/* ── STEP 0: COURSE ── */}
         {step === 0 && (
           <div className="space-y-5">
-            <div>
-              <h2 className="text-3xl font-black tracking-tight mb-1">Course</h2>
-              <p className="text-zinc-600 text-xs font-black tracking-widest normal-case">Where are you playing today?</p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight mb-1">Course</h2>
+                <p className="text-zinc-600 text-xs font-black tracking-widest normal-case">Where are you playing today?</p>
+              </div>
+              {/* Scan button */}
+              <div>
+                <input type="file" accept="image/*" capture="environment"
+                  ref={el => { if(fileInputRef) fileInputRef.current = el }}
+                  onChange={handleScan} className="hidden"/>
+                <button onClick={() => fileInputRef.current?.click()} disabled={isScanning}
+                  className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 px-4 py-2.5 rounded-xl font-black text-xs transition-all disabled:opacity-50">
+                  {isScanning ? <Loader2 size={14} className="animate-spin"/> : <Camera size={14}/>}
+                  {isScanning ? 'SCANNING...' : 'SCAN CARD'}
+                </button>
+              </div>
             </div>
 
+            {/* Scan error */}
+            {scanError && (
+              <div className="bg-rose-500/20 border border-rose-500/40 text-rose-400 p-3 rounded-xl font-black text-xs flex items-center gap-2">
+                <AlertTriangle size={14}/> {scanError}
+              </div>
+            )}
+
+            {/* Scan preview */}
+            {scanPreview && (
+              <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3">
+                <p className="text-amber-400 font-black text-xs tracking-widest">SCAN RESULT — REVIEW BEFORE ACCEPTING</p>
+                <div className="grid grid-cols-9 gap-1 text-center text-[10px]">
+                  {scanPreview.map((h:any, i:number) => (
+                    <div key={i} className="bg-black rounded-lg p-1.5">
+                      <div className="text-zinc-600 font-black">{i+1}</div>
+                      <div className="text-emerald-400 font-black">{h.par}</div>
+                      <div className="text-zinc-500 font-black text-[9px]">{h.hcp}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setScanPreview(null)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl font-black text-xs transition-colors">DISCARD</button>
+                  <button onClick={acceptScan} className="flex-1 bg-amber-500 hover:bg-amber-400 text-black py-2.5 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
+                    <Check size={14}/> ACCEPT
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Course name */}
             <input
               value={courseName}
               onChange={e => setCourseName(e.target.value)}
@@ -322,22 +422,30 @@ export default function QuickMatch() {
               autoFocus
             />
 
+            {/* Saved courses */}
             {savedCourses.length > 0 && (
               <div>
                 <button onClick={() => setShowCourseLibrary(!showCourseLibrary)}
-                  className="text-emerald-500 text-xs font-black hover:text-emerald-400 transition-colors flex items-center gap-1">
-                  <Flag size={12}/> LOAD FROM SAVED COURSES ({savedCourses.length})
+                  className="text-emerald-500 text-xs font-black hover:text-emerald-400 transition-colors flex items-center gap-1.5 mb-2">
+                  <Flag size={12}/> LOAD SAVED COURSE ({savedCourses.length} available)
                 </button>
                 {showCourseLibrary && (
-                  <div className="mt-3 space-y-2">
+                  <div className="space-y-2">
                     {savedCourses.map((c:any) => (
-                      <button key={c.id} onClick={() => { setCourseName(c.name); setShowCourseLibrary(false) }}
+                      <button key={c.id} onClick={() => {
+                        setCourseName(c.name)
+                        if (c.holes?.length === 18) setHoles(c.holes)
+                        setShowCourseLibrary(false)
+                        showToast(`✓ Loaded ${c.name}`)
+                      }}
                         className="w-full flex items-center justify-between bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-emerald-500 p-4 rounded-2xl transition-all text-left">
                         <div>
                           <div className="font-black text-sm">{c.name}</div>
-                          <div className="text-zinc-600 text-[10px] font-black normal-case">Par {(c.pars||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes</div>
+                          <div className="text-zinc-600 text-[10px] font-black normal-case">
+                            Par {(c.pars||c.holes?.map((h:any)=>h.par)||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes
+                          </div>
                         </div>
-                        <ChevronRight size={16} className="text-zinc-600"/>
+                        <span className="text-emerald-500 text-[10px] font-black">LOAD →</span>
                       </button>
                     ))}
                   </div>
@@ -345,10 +453,93 @@ export default function QuickMatch() {
               </div>
             )}
 
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
-              <p className="text-zinc-600 text-[10px] font-black normal-case leading-relaxed">
-                💡 For a quick match, just enter the course name. You can set up par and handicap index per hole in the full Course Setup if needed.
-              </p>
+            {/* Scorecard table */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-black text-zinc-500 tracking-widest">SCORECARD — PAR & HCP INDEX</p>
+              {/* Front 9 */}
+              <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+                <div className="px-3 py-2 bg-zinc-800/50 border-b border-zinc-700">
+                  <span className="text-[10px] font-black text-zinc-500 tracking-widest">FRONT 9</span>
+                  <span className="text-[10px] font-black text-zinc-600 ml-3">OUT: {holes.slice(0,9).reduce((a,h)=>a+h.par,0)}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-center" style={{minWidth:'500px'}}>
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <td className="py-2 px-2 text-[10px] font-black text-zinc-600 text-left w-12">HOLE</td>
+                        {holes.slice(0,9).map((_,i)=><td key={i} className="py-2 px-1 text-[10px] font-black text-zinc-500 w-10">{i+1}</td>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-zinc-800">
+                        <td className="py-2 px-2 text-[10px] font-black text-emerald-600 text-left">PAR</td>
+                        {holes.slice(0,9).map((h,i)=>(
+                          <td key={i} className="py-1.5 px-0.5">
+                            <select value={h.par} onChange={e=>updateHole(i,'par',Number(e.target.value))}
+                              className="w-full bg-zinc-800 text-emerald-400 font-black text-xs rounded-lg outline-none border border-zinc-700 text-center py-1">
+                              <option value={3}>3</option><option value={4}>4</option><option value={5}>5</option>
+                            </select>
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-2 text-[10px] font-black text-zinc-600 text-left">HCP</td>
+                        {holes.slice(0,9).map((h,i)=>(
+                          <td key={i} className="py-1.5 px-0.5">
+                            <input type="number" value={h.hcp} onChange={e=>updateHole(i,'hcp',Number(e.target.value))}
+                              className="w-full bg-zinc-800 text-zinc-400 font-black text-xs rounded-lg outline-none border border-zinc-700 text-center py-1"
+                              min={1} max={18}/>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {/* Back 9 */}
+              <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+                <div className="px-3 py-2 bg-zinc-800/50 border-b border-zinc-700">
+                  <span className="text-[10px] font-black text-zinc-500 tracking-widest">BACK 9</span>
+                  <span className="text-[10px] font-black text-zinc-600 ml-3">IN: {holes.slice(9,18).reduce((a,h)=>a+h.par,0)}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-center" style={{minWidth:'500px'}}>
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <td className="py-2 px-2 text-[10px] font-black text-zinc-600 text-left w-12">HOLE</td>
+                        {holes.slice(9,18).map((_,i)=><td key={i} className="py-2 px-1 text-[10px] font-black text-zinc-500 w-10">{i+10}</td>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-zinc-800">
+                        <td className="py-2 px-2 text-[10px] font-black text-emerald-600 text-left">PAR</td>
+                        {holes.slice(9,18).map((h,i)=>(
+                          <td key={i} className="py-1.5 px-0.5">
+                            <select value={h.par} onChange={e=>updateHole(i+9,'par',Number(e.target.value))}
+                              className="w-full bg-zinc-800 text-emerald-400 font-black text-xs rounded-lg outline-none border border-zinc-700 text-center py-1">
+                              <option value={3}>3</option><option value={4}>4</option><option value={5}>5</option>
+                            </select>
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-2 text-[10px] font-black text-zinc-600 text-left">HCP</td>
+                        {holes.slice(9,18).map((h,i)=>(
+                          <td key={i} className="py-1.5 px-0.5">
+                            <input type="number" value={h.hcp} onChange={e=>updateHole(i+9,'hcp',Number(e.target.value))}
+                              className="w-full bg-zinc-800 text-zinc-400 font-black text-xs rounded-lg outline-none border border-zinc-700 text-center py-1"
+                              min={1} max={18}/>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] font-black text-zinc-600 px-1">
+                <span>TOTAL PAR: {holes.reduce((a,h)=>a+h.par,0)}</span>
+                <span className="text-zinc-700 normal-case">Tap any value to edit</span>
+              </div>
             </div>
           </div>
         )}
