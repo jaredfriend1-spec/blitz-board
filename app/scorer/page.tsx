@@ -161,17 +161,17 @@ export default function ScorerPage() {
  </div>
  <div className="text-center pt-32 max-w-lg mx-auto px-6">
  <p className="text-5xl mb-4">⛳</p>
- <h1 className="text-3xl font-black text-rose-500 mb-4">NOT SET UP YET</h1>
+ <h1 className="text-3xl font-black text-zinc-500 mb-4">No Match Active</h1>
  {isAdmin ? (
  <>
- <p className="text-zinc-500 mb-10 font-black text-sm normal-case">Add players to the roster and assign them to teams first.</p>
- <Link href="/setup/roster"className="bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black hover:bg-emerald-400 transition-colors">
- GO TO ROSTER →
+ <p className="text-zinc-600 mb-10 font-medium text-sm normal-case">Set up a Quick Match or Tournament to start scoring.</p>
+ <Link href="/match" className="bg-emerald-500 text-black px-8 py-4 rounded-2xl font-bold hover:bg-emerald-400 transition-colors">
+ Start a Quick Match →
  </Link>
  </>
  ) : (
- <p className="text-zinc-500 font-black text-sm normal-case leading-relaxed">
- The admin hasn't set up today's match yet. Check back soon or ask the admin to configure the round.
+ <p className="text-zinc-600 font-medium text-sm normal-case leading-relaxed">
+ No match is active yet. Ask the admin to set one up.
  </p>
  )}
  </div>
