@@ -344,25 +344,20 @@ export default function LandingPage() {
  )}
 
 
- {/* Player nav grid */}
- <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+ {/* Player nav — uniform pill style */}
+ <div className="space-y-3 mb-6">
  {playerItems.map(item => (
  <Link key={item.title} href={item.path}
- className={`group bg-zinc-900/40 p-6 rounded-[2rem] border-2 ${item.color} transition-all active:scale-95 flex flex-col justify-between min-h-[140px] shadow-xl relative overflow-hidden`}>
- <div className="absolute -right-3 -bottom-3 opacity-5 group-hover:opacity-10 transition-opacity">
- {React.cloneElement(item.icon, { size: 100 })}
+ className={`group w-full bg-zinc-900/40 p-4 rounded-2xl border ${item.color} transition-all active:scale-[0.99] flex items-center gap-4`}>
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ {React.cloneElement(item.icon, { size: 20 })}
  </div>
- <div className="relative z-10">
- <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 mb-4 group-hover:scale-110 transition-transform">
- {item.icon}
+ <div className="flex-1 min-w-0">
+ <h2 className={`text-base font-bold leading-tight group-hover:${item.accent} transition-colors`}>{item.title}</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">{item.desc}</p>
  </div>
- <h2 className={`text-xl font-black leading-tight mb-1 group-hover:${item.accent} transition-colors`}>{item.title}</h2>
- <p className="text-[10px] font-bold text-zinc-500 tracking-widest">{item.desc}</p>
- </div>
- <div className="relative z-10 flex justify-end mt-3">
- <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-black transition-all">
- <ChevronRight size={16}/>
- </div>
+ <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:border-zinc-600 transition-all flex-shrink-0">
+ <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
  </Link>
  ))}
@@ -399,7 +394,7 @@ export default function LandingPage() {
  desc:"Full tournament · Multi-day · Skins",
  path:"/setup",
  icon:<ShieldAlert className="text-rose-400"size={28}/>,
- color:"border-rose-500/30 hover:border-rose-500",
+ color:"border-rose-500/30 hover:border-rose-500/80",
  accent:"text-rose-400",
  pill: true
  },
@@ -533,24 +528,19 @@ export default function LandingPage() {
  )}
 
  {/* Main items grid */}
- <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+ <div className="space-y-3 mb-6">
  {mainItems.map(item => (
  <Link key={item.title} href={item.path}
- className={`group bg-zinc-900/40 p-6 rounded-[2rem] border-2 ${item.color} transition-all active:scale-95 flex flex-col justify-between min-h-[140px] shadow-xl relative overflow-hidden`}>
- <div className="absolute -right-3 -bottom-3 opacity-5 group-hover:opacity-10 transition-opacity">
- {React.cloneElement(item.icon, { size: 100 })}
+ className={`group w-full bg-zinc-900/40 p-4 rounded-2xl border ${item.color} transition-all active:scale-[0.99] flex items-center gap-4`}>
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ {React.cloneElement(item.icon, { size: 20 })}
  </div>
- <div className="relative z-10">
- <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 mb-4 group-hover:scale-110 transition-transform">
- {item.icon}
+ <div className="flex-1 min-w-0">
+ <h2 className={`text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors`}>{item.title}</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">{item.desc}</p>
  </div>
- <h2 className="text-xl font-black leading-tight mb-1 group-hover:text-emerald-400 transition-colors">{item.title}</h2>
- <p className="text-[10px] font-bold text-zinc-500 tracking-widest">{item.desc}</p>
- </div>
- <div className="relative z-10 flex justify-end mt-3">
- <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-black transition-all">
- <ChevronRight size={16}/>
- </div>
+ <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:border-zinc-600 transition-all flex-shrink-0">
+ <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
  </Link>
  ))}

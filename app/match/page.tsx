@@ -970,31 +970,6 @@ export default function QuickMatch() {
  {formatMode === 'custom' && (
  <div className="border-t border-purple-500/20 bg-purple-950/10 p-5 space-y-4">
 
- {/* Library starting point */}
- {savedFormats.length > 0 && (
- <div>
- <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-2">LOAD FROM LIBRARY</p>
- <div className="space-y-2">
- {savedFormats.map((f:any) => (
- <button key={f.id} onClick={() => {
- setCustomFormatBalls({par3:f.par3||[],par4:f.par4||[],par5:f.par5||[]})
- setSelectedSavedFormat(f)
- showToast(`✓ Loaded ${f.name}`)
- }}
- className={`w-full flex items-center justify-between bg-black border hover:border-purple-500 p-3 rounded-xl transition-all ${selectedSavedFormat?.id===f.id?'border-purple-500':'border-zinc-800'}`}>
- <div>
- <div className="font-black text-sm">{f.name}</div>
- <div className="text-zinc-600 text-[10px] font-black normal-case">P3:{f.par3?.length}B · P4:{f.par4?.length}B · P5:{f.par5?.length}B</div>
- </div>
- {selectedSavedFormat?.id===f.id ? <Check size={14} className="text-purple-400"/> : <ChevronRight size={14} className="text-zinc-600"/>}
- </button>
- ))}
- </div>
- <div className="border-t border-zinc-800 my-4"/>
- <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-3">OR BUILD FROM SCRATCH</p>
- </div>
- )}
-
  {/* Par sections */}
  {(['par3','par4','par5'] as const).map((parKey, pi) => {
  const label = ['PAR 3','PAR 4','PAR 5'][pi]
