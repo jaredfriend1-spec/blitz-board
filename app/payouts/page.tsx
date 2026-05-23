@@ -160,24 +160,27 @@ function calculateWheel(
  pairNetA,
  }
  } else {
- // Straight (9 or 18)
- let aWins = 0, bWins = 0
+ // Straight (9 or 18) — with optional press
+ const totalHoles = scA.filter((s,i) => s > 0 && scB[i] > 0).length || 18
+ const straightResult = runNine(scA, scB, 0, totalHoles - 1, wheelAmount, wheelPress, wheelAutoPress)
+ const netA = straightResult.payA - straightResult.payB
+ if (netA > 0) { netWinnings[a] += netA; netWinnings[b] -= netA }
+ else if (netA < 0) { netWinnings[b] += Math.abs(netA); netWinnings[a] -= Math.abs(netA) }
  const holeWinnersS: string[] = []
  for (let i = 0; i < 18; i++) {
  const sa = scA[i], sb = scB[i]
- if (sa === 0 || sb === 0) { holeWinnersS.push('·'); continue }
- if (sa < sb) { aWins++; holeWinnersS.push('A') }
- else if (sb < sa) { bWins++; holeWinnersS.push('B') }
- else holeWinnersS.push('½')
+ if (!sa || !sb) { holeWinnersS.push('·'); continue }
+ holeWinnersS.push(sa < sb ? 'A' : sb < sa ? 'B' : '½')
  }
- const winner = aWins > bWins ? a : bWins > aWins ? b : -1
- if (winner === a) { netWinnings[a] += wheelAmount; netWinnings[b] -= wheelAmount }
- else if (winner === b) { netWinnings[b] += wheelAmount; netWinnings[a] -= wheelAmount }
+ const winner = straightResult.payA > straightResult.payB ? a : straightResult.payB > straightResult.payA ? b : -1
+ const aWins = holeWinnersS.filter(w => w === 'A').length
+ const bWins = holeWinnersS.filter(w => w === 'B').length
  return {
  playerA: resolved[a].name, playerB: resolved[b].name,
  format: 'straight', aWins, bWins, holeWinners: holeWinnersS,
+ pressHoles: straightResult.pressHoles, totalPresses: straightResult.totalPresses,
  winner: winner === -1 ? 'tie' : resolved[winner].name,
- amount: wheelAmount
+ amount: Math.abs(netA) || wheelAmount
  }
  }
  })

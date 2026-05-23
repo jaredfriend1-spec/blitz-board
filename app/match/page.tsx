@@ -1335,12 +1335,34 @@ export default function QuickMatch() {
  </div>
  {/* Straight amount */}
  {matchDraft.wheelFormat === 'straight' && (
+ <div className="space-y-3">
  <div>
  <label className="text-[10px] font-black text-zinc-600 block mb-1.5">BET AMOUNT PER PAIR ($)</label>
- <input type="number"value={matchDraft.wheelAmount}
+ <input type="number" value={matchDraft.wheelAmount}
  onChange={e => setMatchDraft(d=>({...d,wheelAmount:Number(e.target.value)}))}
  className="w-full bg-black border border-zinc-700 p-3 rounded-xl font-black text-purple-400 outline-none text-center text-xl"
  />
+ </div>
+ {/* Press options for straight format */}
+ <div className="grid grid-cols-2 gap-3">
+ <div>
+ <label className={`text-[10px] font-black block mb-1.5 ${matchDraft.wheelAutoPress?'text-yellow-500':'text-zinc-600'}`}>PRESS ($)</label>
+ <input type="number" value={matchDraft.wheelPress}
+ onChange={e => setMatchDraft(d=>({...d,wheelPress:Number(e.target.value)}))}
+ disabled={!matchDraft.wheelAutoPress}
+ className={`w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black outline-none text-center ${matchDraft.wheelAutoPress?'text-yellow-400':'text-zinc-700'}`}/>
+ </div>
+ </div>
+ <div className="flex gap-2">
+ <button onClick={() => setMatchDraft(d=>({...d,wheelAutoPress:true}))}
+ className={`flex-1 py-2 rounded-xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-all ${matchDraft.wheelAutoPress?'bg-yellow-500/20 border-yellow-500/60 text-yellow-400':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
+ <Zap size={11}/> AUTO-PRESS
+ </button>
+ <button onClick={() => setMatchDraft(d=>({...d,wheelAutoPress:false}))}
+ className={`flex-1 py-2 rounded-xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-all ${!matchDraft.wheelAutoPress?'bg-zinc-700 border-zinc-500 text-white':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
+ <ZapOff size={11}/> NO PRESS
+ </button>
+ </div>
  </div>
  )}
  {/* Nassau options */}

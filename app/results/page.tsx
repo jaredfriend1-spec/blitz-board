@@ -11,12 +11,14 @@ export default function ResultsPage() {
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
   const [money, setMoney] = useState({ entryFee: 25, skinsAllocation: 10 })
+  const [course, setCourse] = useState<any>({})
   const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
 
   useEffect(() => {
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
+    onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
     onValue(ref(db, 'tournament/money'), snap => snap.val() && setMoney(snap.val()))
     onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
   }, [])
@@ -31,23 +33,31 @@ export default function ResultsPage() {
       : players
     const activeFieldSize = activePlayers.length
 
+    const nineHoleLocal = !!course.nineHole
+    const offsetLocal = nineHoleLocal && course.nineHoleStart === 'back' ? 9 : 0
     const list = activePlayers.map(p => {
       const s = scores[p.id] || Array(18).fill(0)
-      const f9 = s.slice(0, 9).reduce((a, b) => a + (Number(b) || 0), 0)
-      const b9 = s.slice(9, 18).reduce((a, b) => a + (Number(b) || 0), 0)
+      const f9 = nineHoleLocal
+        ? s.slice(offsetLocal, offsetLocal + 9).reduce((a, b) => a + (Number(b) || 0), 0)
+        : s.slice(0, 9).reduce((a, b) => a + (Number(b) || 0), 0)
+      const b9 = nineHoleLocal ? 0 : s.slice(9, 18).reduce((a, b) => a + (Number(b) || 0), 0)
       return { ...p, f9, b9, hasPlayed: s.some(val => val > 0) }
     }).filter(p => p.hasPlayed)
 
     const f9Winners = [...list].sort((a, b) => a.f9 - b.f9).slice(0, 3)
     const b9Winners = [...list].sort((a, b) => a.b9 - b.b9).slice(0, 3)
 
-    const skinsMap = Array(18).fill(null)
+    const nineHole = !!course.nineHole
+    const holeOffset = nineHole && course.nineHoleStart === 'back' ? 9 : 0
+    const numHoles = nineHole ? 9 : 18
+    const skinsMap = Array(numHoles).fill(null)
     const skinsCount: Record<string, number> = {}
     let totalSkinsWon = 0
 
-    for (let h = 0; h < 18; h++) {
+    for (let h = 0; h < numHoles; h++) {
+      const hIdx = holeOffset + h
       const holeScores = activePlayers
-        .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[h] || 0 }))
+        .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[hIdx] || 0 }))
         .filter(x => x.s > 0)
       if (holeScores.length > 0) {
         const min = Math.min(...holeScores.map(x => x.s))
@@ -131,6 +141,8 @@ export default function ResultsPage() {
     }
   }
 
+  const nineHoleDisplay = !!course.nineHole
+  const holeOffset = nineHoleDisplay && course.nineHoleStart === 'back' ? 9 : 0
   const ind = getIndividualResults()
   const tm = getTeamResults()
 
@@ -175,8 +187,8 @@ export default function ResultsPage() {
             {/* Front 9 / Back 9 low */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
-                { title: 'Front 9 Low', icon: <Medal size={16}/>, winners: ind.f9Winners, key: 'f9' },
-                { title: 'Back 9 Low', icon: <Award size={16}/>, winners: ind.b9Winners, key: 'b9' },
+                { title: nineHoleDisplay ? `${course.nineHoleStart === 'back' ? 'Back' : 'Front'} 9 Low` : 'Front 9 Low', icon: <Medal size={16}/>, winners: ind.f9Winners, key: 'f9' },
+                ...(!nineHoleDisplay ? [{ title: 'Back 9 Low', icon: <Award size={16}/>, winners: ind.b9Winners, key: 'b9' }] : []),
               ].map(section => (
                 <div key={section.title} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                   <div className="bg-emerald-600/20 border-b border-zinc-800 px-5 py-3 flex items-center gap-2">
@@ -219,7 +231,7 @@ export default function ResultsPage() {
                   <div key={i} className={`p-3 rounded-xl border flex flex-col items-center justify-center min-h-[72px] ${
                     winner ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-zinc-800 bg-black/30'
                   }`}>
-                    <span className="text-[10px] text-zinc-600 font-medium mb-1">Hole {i + 1}</span>
+                    <span className="text-[10px] text-zinc-600 font-medium mb-1">Hole {holeOffset + i + 1}</span>
                     <span className={`text-[10px] font-semibold text-center leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-700'}`}>
                       {winner ? winner.name : '—'}
                     </span>
