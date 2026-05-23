@@ -75,7 +75,10 @@ export default function ScorerPage() {
  const [scores, setScores] = useState<Record<string, number[]>>({})
  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
  const allPars: number[] = course.pars || Array(18).fill(4)
- const pars: number[] = course.nineHole ? allPars.slice(0,9) : allPars
+ const nineHole: boolean = !!course.nineHole
+ const nineHoleStart: 'front'|'back' = course.nineHoleStart || 'front'
+ const holeOffset: number = nineHole && nineHoleStart === 'back' ? 9 : 0
+ const pars: number[] = nineHole ? allPars.slice(holeOffset, holeOffset + 9) : allPars
  const [teams, setTeams] = useState<any[]>([])
  const [players, setPlayers] = useState<any[]>([])
  const [saveStatus, setSaveStatus] = useState<'idle'|'saving'|'saved'>('idle')
@@ -143,9 +146,9 @@ export default function ScorerPage() {
  const totalHoles = pars.length
  const frontPars = pars.slice(0, Math.min(9, totalHoles))
  const backPars = pars.slice(9)
- const frontPar = pars.slice(0,9).reduce((a:number,b:number)=>a+b,0)
- const backPar = pars.slice(9,18).reduce((a:number,b:number)=>a+b,0)
- const totalPar = frontPar + backPar
+ const frontPar = nineHole ? pars.reduce((a:number,b:number)=>a+b,0) : pars.slice(0,9).reduce((a:number,b:number)=>a+b,0)
+ const backPar = nineHole ? 0 : pars.slice(9,18).reduce((a:number,b:number)=>a+b,0)
+ const totalPar = nineHole ? frontPar : frontPar + backPar
 
  // Show empty state only if no players at all — teams optional for 1v1/wheel
  if (players.length === 0) {
@@ -257,16 +260,18 @@ export default function ScorerPage() {
  <div className="text-[10px] text-blue-400 font-black">OUT</div>
  <div className="text-[9px] text-zinc-600 font-black">{frontPar}</div>
  </th>
- {pars.slice(9,18).map((p:number,i:number) => (
+ {!nineHole && pars.slice(9,18).map((p:number,i:number) => (
  <th key={i+9} className="px-1 py-2 text-center w-12">
  <div className="text-[10px] text-zinc-500 font-black">{i+10}</div>
  <div className="text-[9px] text-zinc-700 font-black">p{pars[i+9]}</div>
  </th>
  ))}
+ {!nineHole && (
  <th className="px-2 py-2 text-center w-14 bg-zinc-900/80">
  <div className="text-[10px] text-blue-400 font-black">IN</div>
  <div className="text-[9px] text-zinc-600 font-black">{backPar}</div>
  </th>
+ )}
  <th className="px-3 py-2 text-center w-20 bg-emerald-950/60 border-l border-zinc-800">
  <div className="text-[10px] text-emerald-400 font-black">TOT</div>
  <div className="text-[9px] text-zinc-600 font-black">{totalPar}</div>
@@ -276,8 +281,11 @@ export default function ScorerPage() {
  <tbody>
  {players.map((p:any) => {
  const sc = scores[p.id] || Array(18).fill(0)
- const f9 = sc.slice(0,9).reduce((a:number,b:number)=>a+(Number(b)||0),0)
- const b9 = sc.slice(9,18).reduce((a:number,b:number)=>a+(Number(b)||0),0)
+ // For 9-hole, read/write scores at the correct offset
+ const f9 = nineHole
+ ? Array.from({length:9},(_,i)=>sc[holeOffset+i]||0).reduce((a:number,b:number)=>a+(Number(b)||0),0)
+ : sc.slice(0,9).reduce((a:number,b:number)=>a+(Number(b)||0),0)
+ const b9 = nineHole ? 0 : sc.slice(9,18).reduce((a:number,b:number)=>a+(Number(b)||0),0)
  const tot = f9+b9
  const topar = tot - totalPar
  return (
@@ -286,9 +294,9 @@ export default function ScorerPage() {
  <div className="font-bold text-sm text-white">{p.name}</div>
  <div className="text-[9px] text-zinc-600 font-semibold">HCP {p.handicap||0}</div>
  </td>
- {Array.from({length:9},(_,i)=>i).map(i => (
- <td key={i} className="px-1 py-2 text-center w-12">
- <ScoreCell score={sc[i]} par={pars[i]} editable={editMode} onChange={val=>updateScore(p.id,i,val)}/>
+ {Array.from({length:9},(_,i)=>holeOffset+i).map(idx => (
+ <td key={idx} className="px-1 py-2 text-center w-12">
+ <ScoreCell score={sc[idx]} par={pars[idx-holeOffset]} editable={editMode} onChange={val=>updateScore(p.id,idx,val)}/>
  </td>
  ))}
  <td className="px-2 py-2 text-center w-14 bg-zinc-900/40">
@@ -296,16 +304,18 @@ export default function ScorerPage() {
  {f9||'—'}
  </span>
  </td>
- {Array.from({length:9},(_,i)=>i+9).map(i => (
+ {!nineHole && Array.from({length:9},(_,i)=>i+9).map(i => (
  <td key={i} className="px-1 py-2 text-center w-12">
  <ScoreCell score={sc[i]} par={pars[i]} editable={editMode} onChange={val=>updateScore(p.id,i,val)}/>
  </td>
  ))}
+ {!nineHole && (
  <td className="px-2 py-2 text-center w-14 bg-zinc-900/40">
  <span className={`text-sm font-bold ${b9>0?(b9-backPar<0?'text-emerald-400':b9-backPar>0?'text-rose-400':'text-white'):'text-zinc-700'}`}>
  {b9||'—'}
  </span>
  </td>
+ )}
  <td className="px-3 py-2 text-center w-20 bg-emerald-950/20 border-l border-zinc-800">
  <div className={`text-base font-bold ${tot>0?(topar<0?'text-emerald-400':topar>0?'text-rose-400':'text-white'):'text-zinc-700'}`}>{tot||'—'}</div>
  {tot>0&&<div className={`text-[9px] font-bold ${topar<0?'text-emerald-400':topar>0?'text-rose-400':'text-zinc-500'}`}>{topar===0?'E':topar>0?`+${topar}`:topar}</div>}
@@ -342,16 +352,18 @@ export default function ScorerPage() {
  <div className="text-[10px] text-blue-400 font-black">OUT</div>
  <div className="text-[9px] text-zinc-600 font-black">{frontPar}</div>
  </th>
- {pars.slice(9,18).map((p:number,i:number) => (
+ {!nineHole && pars.slice(9,18).map((p:number,i:number) => (
  <th key={i+9} className="px-1 py-2 text-center w-12">
  <div className="text-[10px] text-zinc-500 font-black">{i+10}</div>
  <div className="text-[9px] text-zinc-700 font-black">p{p}</div>
  </th>
  ))}
+ {!nineHole && (
  <th className="px-2 py-2 text-center w-14 bg-zinc-900/80">
  <div className="text-[10px] text-blue-400 font-black">IN</div>
  <div className="text-[9px] text-zinc-600 font-black">{backPar}</div>
  </th>
+ )}
  <th className="px-3 py-2 text-center w-20 bg-emerald-950/60 border-l border-zinc-800">
  <div className="text-[10px] text-emerald-500 font-black">TOT</div>
  <div className="text-[9px] text-zinc-600 font-black">{totalPar}</div>
@@ -361,8 +373,10 @@ export default function ScorerPage() {
  <tbody>
  {teamPlayers.map((p:any) => {
  const pScores = scores[p.id] || Array(18).fill(0)
- const f9Raw = pScores.slice(0,9).reduce((a:number,b:number)=>a+(b||0),0)
- const b9Raw = pScores.slice(9,18).reduce((a:number,b:number)=>a+(b||0),0)
+ const f9Raw = nineHole
+ ? Array.from({length:9},(_,i)=>pScores[holeOffset+i]||0).reduce((a:number,b:number)=>a+(b||0),0)
+ : pScores.slice(0,9).reduce((a:number,b:number)=>a+(b||0),0)
+ const b9Raw = nineHole ? 0 : pScores.slice(9,18).reduce((a:number,b:number)=>a+(b||0),0)
  const totRaw = f9Raw + b9Raw
  const hasAny = pScores.some((s:number)=>s>0)
  return (
@@ -371,24 +385,26 @@ export default function ScorerPage() {
  <div className="font-black text-sm text-white leading-tight">{p.name}</div>
  <div className="text-[9px] text-zinc-600 font-black mt-0.5">HCP {p.handicap||0}</div>
  </td>
- {pScores.slice(0,9).map((sc:number,i:number) => (
- <td key={i} className="px-0.5 py-2 text-center">
- <ScoreCell score={sc} par={pars[i]} editable={editMode} onChange={val=>updateScore(p.id,i,val)}/>
+ {Array.from({length:9},(_,i)=>holeOffset+i).map(idx => (
+ <td key={idx} className="px-0.5 py-2 text-center">
+ <ScoreCell score={pScores[idx]} par={pars[idx-holeOffset]} editable={editMode} onChange={val=>updateScore(p.id,idx,val)}/>
  </td>
  ))}
  <td className="px-2 py-2 text-center bg-zinc-900/50 border-x border-zinc-800">
  <div className="font-black text-base text-white">{f9Raw||'—'}</div>
  {hasAny && <div className="text-[10px]"><ToPar raw={f9Raw} par={frontPar}/></div>}
  </td>
- {pScores.slice(9,18).map((sc:number,i:number) => (
- <td key={i+9} className="px-0.5 py-2 text-center">
- <ScoreCell score={sc} par={pars[i+9]} editable={editMode} onChange={val=>updateScore(p.id,i+9,val)}/>
+ {!nineHole && Array.from({length:9},(_,i)=>i+9).map(idx => (
+ <td key={idx} className="px-0.5 py-2 text-center">
+ <ScoreCell score={pScores[idx]} par={pars[idx]} editable={editMode} onChange={val=>updateScore(p.id,idx,val)}/>
  </td>
  ))}
+ {!nineHole && (
  <td className="px-2 py-2 text-center bg-zinc-900/50 border-x border-zinc-800">
  <div className="font-black text-base text-white">{b9Raw||'—'}</div>
  {hasAny && <div className="text-[10px]"><ToPar raw={b9Raw} par={backPar}/></div>}
  </td>
+ )}
  <td className="px-3 py-2 text-center bg-emerald-950/40 border-l border-zinc-800">
  <div className="font-black text-lg text-white">{totRaw||'—'}</div>
  {hasAny && <div className="text-sm font-black"><ToPar raw={totRaw} par={totalPar}/></div>}

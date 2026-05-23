@@ -625,29 +625,6 @@ export default function LandingPage() {
  <ChevronRight size={16}/>
  </div>
  </Link>
-
- {/* Active match — archive/close button */}
- {activeMode === 'match' && !isMock && (
- <div className="mb-4">
- {archiveSuccess && (
- <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 px-4 py-3 rounded-2xl font-black text-xs flex items-center gap-2 mb-2">
- <Archive size={14}/> MATCH ARCHIVED TO HISTORY
- </div>
- )}
- <button
- onClick={archiveMatch}
- disabled={archiving}
- className="w-full flex items-center justify-between bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-emerald-500 px-5 py-3.5 rounded-2xl font-black text-sm transition-all group"
- >
- <span className="flex items-center gap-2 text-zinc-400 group-hover:text-emerald-400 transition-colors">
- <Archive size={16}/>
- {archiving ? 'ARCHIVING...' : 'ARCHIVE MATCH TO HISTORY'}
- </span>
- <span className="text-[9px] font-black text-zinc-600 tracking-widest">CLOSES MATCH · SAVES RESULTS</span>
- </button>
- </div>
- )}
-
  {/* Main items grid */}
  <div className="space-y-3 mb-6">
  {mainItems.map(item => (

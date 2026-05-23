@@ -31,6 +31,7 @@ export default function QuickMatch() {
  // Course
  const [courseName, setCourseName] = useState('')
  const [nineHole, setNineHole] = useState(false)
+ const [nineHoleStart, setNineHoleStart] = useState<'front'|'back'>('front')
  const [holes, setHoles] = useState(Array.from({length:18}, (_, i) => ({ par: 4, hcp: i + 1 })))
  const [savedCourses, setSavedCourses] = useState<any[]>([])
  const [showCourseLibrary, setShowCourseLibrary] = useState(false)
@@ -397,7 +398,7 @@ export default function QuickMatch() {
  }
  await set(ref(db,'tournament'), null)
  await set(ref(db,'tournament/meta'), { isMock:false, mode:'match', currentDay:'Match Day', totalDays:1 })
- await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par), nineHole })
+ await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par), nineHole, nineHoleStart })
 
  // Players
  const pidMap: Record<string,string> = {}
@@ -634,7 +635,7 @@ export default function QuickMatch() {
  autoFocus
  />
 
- {/* 9 or 18 holes */}
+ {/* 18 or 9 holes */}
  <div className="flex gap-2">
  <button onClick={() => setNineHole(false)}
  className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${!nineHole?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
@@ -645,6 +646,23 @@ export default function QuickMatch() {
  9 Holes
  </button>
  </div>
+
+ {/* Front 9 / Back 9 selector — only when 9 holes selected */}
+ {nineHole && (
+ <div>
+ <p className="text-xs font-semibold text-zinc-500 mb-2">Which 9?</p>
+ <div className="flex gap-2">
+ <button onClick={() => setNineHoleStart('front')}
+ className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${nineHoleStart==='front'?'bg-blue-500 border-blue-400 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+ Front 9 (Holes 1–9)
+ </button>
+ <button onClick={() => setNineHoleStart('back')}
+ className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${nineHoleStart==='back'?'bg-blue-500 border-blue-400 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+ Back 9 (Holes 10–18)
+ </button>
+ </div>
+ </div>
+ )}
 
  {/* Saved courses */}
  {savedCourses.length > 0 && (
