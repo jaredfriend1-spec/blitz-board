@@ -83,11 +83,11 @@ function calculateWheel(
  })
 
  const pairs: {a:number, b:number}[] = []
- for (let a = 0; a < 4; a++)
- for (let b = a+1; b < 4; b++)
+ for (let a = 0; a < resolved.length; a++)
+ for (let b = a+1; b < resolved.length; b++)
  pairs.push({a, b})
 
- const netWinnings = [0, 0, 0, 0]
+ const netWinnings = resolved.map(() => 0)
 
  const runNine = (scA: number[], scB: number[], start: number, end: number, nassau: number, press: number, autoPress: boolean) => {
  let bets = [{score:0, pressed:false, isBase:true}]
