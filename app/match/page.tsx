@@ -50,7 +50,7 @@ export default function QuickMatch() {
  const [editingHcpVal, setEditingHcpVal] = useState(0)
 
  // Teams
- const [skipTeams, setSkipTeams] = useState(false)
+ const [skipTeams, setSkipTeams] = useState<boolean|null>(null)
  const [teams, setTeams] = useState<{id:string, name:string, playerIds:string[]}[]>([])
  const [teamCount, setTeamCount] = useState(2)
  const [teamNames, setTeamNames] = useState(['Team 1', 'Team 2'])
@@ -201,6 +201,9 @@ export default function QuickMatch() {
  const ts = Object.values(teamsSnap.val()) as any[]
  setTeams(ts.map((t:any) => ({ id: t.id, name: t.name, playerIds: t.playerIds || [] })))
  setTeamsCreated(true)
+ setSkipTeams(false)
+ } else {
+ setSkipTeams(true)
  }
  const matchSnap = await get(ref(db,'tournament/matchups'))
  if (matchSnap.val()) setMatches(Object.values(matchSnap.val()) as any[])
@@ -438,7 +441,7 @@ export default function QuickMatch() {
  const canProceed = [
  courseName.trim().length > 0,
  players.length >= 2,
- true, // teams optional
+ skipTeams !== null, // must choose teams or not
  true, // format always has default
  true, // matches optional but recommended
  ][step]
@@ -568,7 +571,7 @@ export default function QuickMatch() {
  ))}
  </div>
  <div className="flex justify-between mt-2 text-[9px] font-black text-zinc-600 tracking-widest">
- {STEPS.map((s,i) => (
+ {(skipTeams ? ['Course','Players','Teams','Matches'] : STEPS).map((s,i) => (
  <span key={s} className={i===step?'text-emerald-400':''}>{s}</span>
  ))}
  </div>
@@ -898,28 +901,29 @@ export default function QuickMatch() {
  {step === 2 && (
  <div className="space-y-5">
  <div>
- <h2 className="text-3xl font-black tracking-tight mb-1">Teams</h2>
- <p className="text-zinc-600 text-xs font-black tracking-widest normal-case">Optional — skip for 1v1 matches only</p>
+ <h2 className="text-3xl font-bold tracking-tight mb-1">Teams</h2>
+ <p className="text-zinc-500 text-sm font-medium normal-case">Do you need teams for this match?</p>
  </div>
 
  <div className="grid grid-cols-2 gap-3">
  <button onClick={() => setSkipTeams(false)}
- className={`p-5 rounded-[1.5rem] border-2 text-left transition-all ${!skipTeams?'border-blue-500/60 bg-blue-950/20':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
- <div className="text-xl mb-2">👥</div>
- <div className={`font-black text-sm ${!skipTeams?'text-blue-400':'text-zinc-300'}`}>Build Teams</div>
- <div className="text-[10px] text-zinc-600 normal-case mt-1">Team matches + best ball</div>
- {!skipTeams && <Check size={14} className="text-blue-400 mt-2"/>}
+ className={`p-5 rounded-2xl border-2 text-left transition-all ${skipTeams===false?'border-blue-500/60 bg-blue-950/20':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
+ <div className="text-2xl mb-3">👥</div>
+ <div className={`font-bold text-base mb-1 ${!skipTeams?'text-blue-400':'text-white'}`}>Yes, build teams</div>
+ <div className="text-zinc-500 text-xs font-medium normal-case leading-relaxed">Team vs Team matches, best ball format</div>
+ {skipTeams===false && <div className="text-blue-400 text-xs font-semibold mt-2">✓ Selected</div>}
  </button>
  <button onClick={() => setSkipTeams(true)}
- className={`p-5 rounded-[1.5rem] border-2 text-left transition-all ${skipTeams?'border-zinc-500/60 bg-zinc-800/30':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
- <div className="text-xl mb-2">⚡</div>
- <div className={`font-black text-sm ${skipTeams?'text-zinc-300':'text-zinc-300'}`}>Skip Teams</div>
- <div className="text-[10px] text-zinc-600 normal-case mt-1">1v1 and wheel only</div>
- {skipTeams && <Check size={14} className="text-zinc-400 mt-2"/>}
+ className={`p-5 rounded-2xl border-2 text-left transition-all ${skipTeams===true?'border-zinc-500/60 bg-zinc-800/30':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
+ <div className="text-2xl mb-3">⚡</div>
+ <div className={`font-bold text-base mb-1 ${skipTeams?'text-zinc-200':'text-white'}`}>No teams</div>
+ <div className="text-zinc-500 text-xs font-medium normal-case leading-relaxed">Individual matches — 1v1, 2v2, Wheel</div>
+ {skipTeams===true && <div className="text-zinc-400 text-xs font-semibold mt-2">✓ Selected</div>}
  </button>
  </div>
 
- {!skipTeams && (
+
+ {skipTeams === false && (
  <div className="space-y-4">
  {!teamsCreated ? (
  <>
@@ -1407,13 +1411,20 @@ export default function QuickMatch() {
  {/* ── NAVIGATION ── */}
  <div className="flex gap-3 pt-4">
  {step > 0 && (
- <button onClick={() => setStep(s=>s-1)}
+ <button onClick={() => {
+ if (step === 4 && skipTeams) setStep(2) // back over format
+ else setStep(s=>s-1)
+ }}
  className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-colors flex items-center justify-center gap-2">
  <ArrowLeft size={16}/> BACK
  </button>
  )}
  {step < STEPS.length - 1 ? (
- <button onClick={() => canProceed && setStep(s=>s+1)} disabled={!canProceed}
+ <button onClick={() => {
+ if (!canProceed) return
+ if (step === 2 && skipTeams) setStep(4) // skip format step
+ else setStep(s=>s+1)
+ }} disabled={!canProceed}
  className={`flex-1 py-4 rounded-2xl font-black transition-colors flex items-center justify-center gap-2 ${
  canProceed ? 'bg-emerald-500 hover:bg-emerald-400 text-black' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
  }`}>
