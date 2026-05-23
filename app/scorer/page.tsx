@@ -183,36 +183,17 @@ export default function ScorerPage() {
  {saveStatus==='saving' && <span className="text-zinc-500 animate-pulse">SAVING...</span>}
  {saveStatus==='saved' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 size={14}/> SAVED</span>}
  </span>
- {/* Edit mode toggle */}
- {editMode ? (
- <button onClick={lockScorer}
- className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 px-3 py-1.5 rounded-xl font-black text-xs hover:bg-rose-500/20 hover:border-rose-500/50 hover:text-rose-400 transition-all">
- <Unlock size={14}/> EDITING — TAP TO LOCK
- </button>
- ) : (
- <button onClick={() => setShowPinModal(true)}
- className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 px-3 py-1.5 rounded-xl font-black text-xs transition-all">
- <Lock size={14}/> VIEW ONLY — TAP TO EDIT
- </button>
+ {/* Edit mode indicator - minimal */}
+ {editMode && (
+ <span className="text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+ <Unlock size={11}/> EDITING
+ </span>
  )}
  </div>
  </div>
  </div>
 
- {/* Edit mode banner */}
- {!editMode && (
- <div className="max-w-7xl mx-auto px-4 py-2">
- <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-2 flex items-center justify-between">
- <span className="text-zinc-600 text-[10px] font-black tracking-widest flex items-center gap-2">
- <Lock size={11}/> VIEW ONLY MODE — SCORES CANNOT BE CHANGED
- </span>
- <button onClick={() => setShowPinModal(true)}
- className="text-emerald-500 text-[10px] font-black hover:text-emerald-400 transition-colors">
- UNLOCK TO EDIT →
- </button>
- </div>
- </div>
- )}
+
 
  {/* Legend */}
  <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto border-b border-zinc-900/50">
@@ -231,6 +212,22 @@ export default function ScorerPage() {
  </div>
 
  <div className="max-w-7xl mx-auto px-2 sm:px-4 pt-6 space-y-10">
+
+ {/* Lock/Unlock — TOP */}
+ <div className="px-2">
+ {editMode ? (
+ <button onClick={lockScorer}
+ className="w-full flex items-center justify-center gap-3 bg-emerald-500/10 hover:bg-emerald-500/20 border-2 border-emerald-500/40 hover:border-emerald-500 text-emerald-400 py-4 rounded-2xl font-bold text-sm transition-all">
+ <Lock size={18}/> Lock Scorer
+ </button>
+ ) : (
+ <button onClick={() => setShowPinModal(true)}
+ className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 py-4 rounded-2xl font-bold text-sm transition-all">
+ <Unlock size={18}/> Unlock to Edit Scores
+ </button>
+ )}
+ </div>
+
  {teams.map(team => {
  const teamPlayers = (team.playerIds || []).map((pid: string) => players.find(p => p.id === pid)).filter(Boolean)
  return (
