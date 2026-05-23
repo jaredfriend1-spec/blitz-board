@@ -238,7 +238,7 @@ function buildRecap(arch: any) {
  return {
  fieldSize, leaderboard, f9Winners, b9Winners,
  skinsMap, skinsLeaders, totalSkinsWon, skinsPot, perSkin,
- teamResults, matchResults, money
+ teamResults, matchResults, money, nineHole
  }
 }
 
