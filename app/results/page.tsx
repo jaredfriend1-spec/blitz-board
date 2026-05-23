@@ -11,7 +11,6 @@ export default function ResultsPage() {
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
   const [money, setMoney] = useState({ entryFee: 25, skinsAllocation: 10 })
-  const [course, setCourse] = useState<any>({})
   const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
 
   useEffect(() => {
