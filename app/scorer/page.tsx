@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, onValue } from 'firebase/database'
+import { ref, set, get, onValue } from 'firebase/database'
 import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive } from 'lucide-react'
 import Link from 'next/link'
 
@@ -441,17 +441,14 @@ export default function ScorerPage() {
  {activeMode === 'match' && (
  <button
  onClick={async () => {
- if (!window.confirm('Archive this match to History and close it?')) return
- const { ref: fbRef, set: fbSet, get: fbGet } = await import('firebase/database')
- const snap = await fbGet(fbRef(db, 'tournament'))
+ const snap = await get(ref(db, 'tournament'))
  if (snap.exists()) {
- const { ref: fbRef2, set: fbSet2, push: fbPush } = await import('firebase/database')
- await fbSet(fbRef(db, `history/${Date.now()}`), {
+ await set(ref(db, `history/${Date.now()}`), {
  ...snap.val(),
- _meta: { mode: 'match', dayLabel: 'Quick Match', archivedAt: Date.now(), courseName: snap.val().course?.name || '' }
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
  })
  }
- await fbSet(fbRef(db, 'tournament'), null)
+ await set(ref(db, 'tournament'), null)
  window.location.href = '/history'
  }}
  className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-amber-500 text-zinc-500 hover:text-amber-400 py-4 rounded-2xl font-bold text-sm transition-all"

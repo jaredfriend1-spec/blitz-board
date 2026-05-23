@@ -74,7 +74,7 @@ export default function QuickMatch() {
  nassau:5, press:5, birdie:2, eagle:5,
  scoringType:'NET' as 'NET'|'GROSS',
  autoPress:true,
- wheelPlayers:['','','',''] as string[],
+ wheelPlayers:['','',''] as string[],
  wheelAmount:10,
  wheelFormat:'straight' as 'straight'|'nassau',
  wheelNassau:5, wheelPress:5, wheelAutoPress:true,
@@ -349,12 +349,12 @@ export default function QuickMatch() {
  const m = matchDraft
  if (buildingType === 'Wheel') {
  const filled = m.wheelPlayers.filter(Boolean)
- if (filled.length !== 4) return showToast('Select all 4 players')
+ if (filled.length < 3) return showToast('Select at least 3 players for the wheel')
  if (new Set(filled).size !== 4) return showToast('All 4 must be different')
  setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress }])
  } else if (buildingType === '2v2') {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
- if (picks.some(p=>!p)) return showToast('Select all 4 players')
+ if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
  if (new Set(picks).size !== 4) return showToast('All 4 must be different')
  setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
  } else if (buildingType === 'TvT') {
@@ -365,7 +365,7 @@ export default function QuickMatch() {
  setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,wheelPlayers:['','','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -1251,19 +1251,36 @@ export default function QuickMatch() {
 
  {/* Wheel selects */}
  {buildingType === 'Wheel' && (
+ <div className="space-y-3">
+ {/* 3 or 4 player toggle */}
+ <div>
+ <p className="text-[9px] font-semibold text-zinc-500 tracking-widest mb-2">HOW MANY PLAYERS?</p>
+ <div className="flex gap-2">
+ {[3,4].map(n => (
+ <button key={n} onClick={() => {
+ const cur = matchDraft.wheelPlayers.filter(Boolean)
+ setMatchDraft(d=>({...d, wheelPlayers: Array.from({length:n},(_,i)=>cur[i]||'')}))
+ }}
+ className={`flex-1 py-2 rounded-xl font-bold text-sm border-2 transition-all ${matchDraft.wheelPlayers.length===n?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>
+ {n} Players ({n*(n-1)/2} pairs)
+ </button>
+ ))}
+ </div>
+ </div>
  <div className="grid grid-cols-2 gap-3">
- {[0,1,2,3].map(i => (
+ {matchDraft.wheelPlayers.map((wp, i) => (
  <div key={i}>
- <label className="text-[9px] font-black text-zinc-600 block mb-1.5">PLAYER {i+1}</label>
- <select value={matchDraft.wheelPlayers[i]}
+ <label className="text-[9px] font-semibold text-zinc-600 block mb-1.5">PLAYER {i+1}</label>
+ <select value={wp}
  onChange={e => { const u=[...matchDraft.wheelPlayers]; u[i]=e.target.value; setMatchDraft(d=>({...d,wheelPlayers:u})) }}
- className="w-full bg-black border border-zinc-700 p-3 rounded-xl font-black text-white outline-none text-sm">
+ className="w-full bg-black border border-zinc-700 p-3 rounded-xl font-bold text-white outline-none text-sm">
  <option value="">SELECT...</option>
- {players.filter(p => !matchDraft.wheelPlayers.some((wp,wi)=>wi!==i&&wp===p.name))
+ {players.filter(p => !matchDraft.wheelPlayers.some((v,wi)=>wi!==i&&v===p.name))
  .map(p => <option key={p.id} value={p.name}>{p.name} (HCP {p.handicap})</option>)}
  </select>
  </div>
  ))}
+ </div>
  </div>
  )}
 
