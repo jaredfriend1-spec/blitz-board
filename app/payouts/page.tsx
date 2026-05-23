@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, onValue } from 'firebase/database'
+import { ref, onValue, get, set } from 'firebase/database'
 import { ArrowLeft, Zap, ZapOff, DollarSign, Target, RefreshCw, Archive } from 'lucide-react'
 import Link from 'next/link'
 
@@ -461,6 +461,24 @@ export default function PayoutsPage() {
  </div>
  </div>
  )
+ }
+
+ const archiveMatch = async () => {
+ setArchiving(true)
+ try {
+ const snap = await get(ref(db, 'tournament'))
+ if (snap.exists()) {
+ await set(ref(db, `history/${Date.now()}`), {
+ ...snap.val(),
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+ })
+ }
+ await set(ref(db, 'tournament'), null)
+ setArchiveSuccess(true)
+ setActiveMode('')
+ setTimeout(() => setArchiveSuccess(false), 3000)
+ } catch(e) { console.error(e) }
+ setArchiving(false)
  }
 
  return (
