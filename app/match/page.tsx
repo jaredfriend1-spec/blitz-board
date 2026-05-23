@@ -208,9 +208,23 @@ export default function QuickMatch() {
  }
 
  const startFreshMatch = async () => {
+ // Always offer to archive before wiping
+ const archive = window.confirm(
+ 'Archive the current match to History before starting fresh?\n\nOK = Archive & Start Fresh\nCancel = Discard & Start Fresh'
+ )
+ if (archive) {
+ const snap = await get(ref(db, 'tournament'))
+ if (snap.exists()) {
+ await set(ref(db, `history/${Date.now()}`), {
+ ...snap.val(),
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+ })
+ }
+ }
  await set(ref(db,'tournament'), null)
  setExistingMatchMode(false)
  }
+
 
  // ── ARCHIVE EXISTING + START MATCH ──────────────────────────────
  const archiveAndStart = async () => {
@@ -334,7 +348,23 @@ export default function QuickMatch() {
  return
  }
 
- // Fresh start — wipe and rebuild everything
+ // Fresh start — if real match exists, offer to archive first
+ const existingMeta = await get(ref(db,'tournament/meta'))
+ const existingMetaVal = existingMeta.val()
+ if (existingMetaVal && !existingMetaVal.isMock && (existingMetaVal.mode || existingMetaVal.tripName)) {
+ const archive = window.confirm(
+ 'A match is already in progress. Archive it to History before starting fresh?\n\nOK = Archive & Continue\nCancel = Discard & Continue'
+ )
+ if (archive) {
+ const snap = await get(ref(db, 'tournament'))
+ if (snap.exists()) {
+ await set(ref(db, `history/${Date.now()}`), {
+ ...snap.val(),
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+ })
+ }
+ }
+ }
  await set(ref(db,'tournament'), null)
  await set(ref(db,'tournament/meta'), { isMock:false, mode:'match', currentDay:'Match Day', totalDays:1 })
  await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par) })
