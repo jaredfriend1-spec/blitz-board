@@ -350,12 +350,12 @@ export default function QuickMatch() {
  if (buildingType === 'Wheel') {
  const filled = m.wheelPlayers.filter(Boolean)
  if (filled.length < 3) return showToast('Select at least 3 players for the wheel')
- if (new Set(filled).size !== 4) return showToast('All 4 must be different')
+ if (new Set(filled).size !== filled.length) return showToast('All players must be different')
  setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress }])
  } else if (buildingType === '2v2') {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
- if (new Set(picks).size !== 4) return showToast('All 4 must be different')
+ if (new Set(picks).size !== picks.length) return showToast('All players must be different')
  setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
  } else if (buildingType === 'TvT') {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different teams')
