@@ -92,6 +92,7 @@ function calculateWheel(
  const runNine = (scA: number[], scB: number[], start: number, end: number, nassau: number, press: number, autoPress: boolean) => {
  let bets = [{score:0, pressed:false, isBase:true}]
  let totalPresses = 0
+ const pressHoles: number[] = [] // which holes (relative 0-8) fired a press
  for (let i = start; i <= end; i++) {
  const sa = scA[i], sb = scB[i]
  if (sa === 0 || sb === 0) continue
@@ -104,9 +105,9 @@ function calculateWheel(
  b.pressed = true
  newPressCount++
  totalPresses++
+ pressHoles.push(i - start) // relative hole index 0-8
  }
  })
- // Add new press bets — this is the part that was missing
  for (let p = 0; p < newPressCount; p++) {
  bets.push({ score: 0, pressed: false, isBase: false })
  }
@@ -124,7 +125,7 @@ function calculateWheel(
  if (!sa || !sb) { holeWinners.push('·'); continue }
  holeWinners.push(sa < sb ? 'A' : sb < sa ? 'B' : '½')
  }
- return {payA, payB, totalPresses, holeWinners}
+ return {payA, payB, totalPresses, holeWinners, pressHoles}
  }
 
  const pairResults = pairs.map(({a, b}) => {
@@ -152,8 +153,8 @@ function calculateWheel(
  playerA: resolved[a].name,
  playerB: resolved[b].name,
  format: 'nassau',
- f9: {payA: f9.payA, payB: f9.payB, holeWinners: f9.holeWinners, totalPresses: f9.totalPresses},
- b9: {payA: b9.payA, payB: b9.payB, holeWinners: b9.holeWinners, totalPresses: b9.totalPresses},
+ f9: {payA: f9.payA, payB: f9.payB, holeWinners: f9.holeWinners, totalPresses: f9.totalPresses, pressHoles: f9.pressHoles},
+ b9: {payA: b9.payA, payB: b9.payB, holeWinners: b9.holeWinners, totalPresses: b9.totalPresses, pressHoles: b9.pressHoles},
  totalWinner,
  nassau: wheelNassau,
  pairNetA,
@@ -642,9 +643,9 @@ export default function PayoutsPage() {
  </td>
  </tr>
  ))}
- {/* Hole winner row with press indicator */}
+ {/* Hole winner row with press + birdie indicators */}
  <tr className="border-t border-zinc-800 bg-zinc-900/40">
- <td className="py-1.5 px-3 text-[10px] font-black text-zinc-600 text-left">HOLE</td>
+ <td className="py-1.5 px-3 text-[10px] font-semibold text-zinc-600 text-left">HOLE</td>
  {Array.from({length:9},(_,i)=>start+i).map(i=>{
  const na = (holeDataA as any[])[i].net
  const nb = (holeDataB as any[])[i].net
@@ -654,9 +655,16 @@ export default function PayoutsPage() {
  const winner = na>0&&nb>0 ? na<nb?'A':nb<na?'B':'T' : null
  const aBirdie = ga>0 && ga < par
  const bBirdie = gb>0 && gb < par
+ const nineKey = start===0?'f9':'b9'
+ const pressedHere = isNassau && ((pair as any)[nineKey]?.pressHoles||[]).includes(i)
  return (
  <td key={i} className="py-1 px-0.5 text-center">
- <span className={`text-xs font-black block ${
+ {pressedHere && (
+ <div className="flex justify-center mb-0.5">
+ <Zap size={9} className="text-yellow-400"/>
+ </div>
+ )}
+ <span className={`text-xs font-semibold block ${
  winner==='A'?'text-emerald-400':winner==='B'?'text-blue-400':winner==='T'?'text-zinc-500':'text-zinc-800'
  }`}>
  {winner==='T'?'½':winner||'·'}
