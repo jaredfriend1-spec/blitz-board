@@ -19,10 +19,12 @@ function buildRecap(arch: any) {
  const matchups: any[] = arch.matchups ? Object.values(arch.matchups) : []
  const pars: number[] = course.pars || Array(18).fill(4)
 
- // Active players (on a team)
+ // Active players — if no teams, all players are active
  const activeIds = new Set<string>()
  teams.forEach(t => (t.playerIds || []).forEach((id: string) => activeIds.add(id)))
- const activePlayers = players.filter(p => activeIds.has(p.id))
+ const activePlayers = teams.length > 0
+ ? players.filter(p => activeIds.has(p.id))
+ : players // no teams = all players active
  const fieldSize = activePlayers.length
 
  // ── INDIVIDUAL LEADERBOARD ────────────────────────────────────────

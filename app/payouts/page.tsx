@@ -63,7 +63,7 @@ function calculateWheel(
 ) {
  const isGross = scoringType === 'GROSS'
  const resolved = wheelPlayers.map(name => players.find(p => p.name === name)).filter(Boolean)
- if (resolved.length !== 4) return null
+ if (resolved.length < 3) return null
 
  const allHcps = isGross ? [0] : resolved.map(p => Number(p.handicap) || 0)
  const baseHcp = Math.min(...allHcps)
