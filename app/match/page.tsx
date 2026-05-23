@@ -55,7 +55,7 @@ export default function QuickMatch() {
  const [teamsCreated, setTeamsCreated] = useState(false)
 
  // Format
- const [formatMode, setFormatMode] = useState<'blitz'|'custom'>('blitz')
+ const [formatMode, setFormatMode] = useState<'blitz'|'custom'|'gross'>('blitz')
  const [savedFormats, setSavedFormats] = useState<any[]>([])
  const [selectedSavedFormat, setSelectedSavedFormat] = useState<any>(null)
  const [customFormatBalls, setCustomFormatBalls] = useState({
