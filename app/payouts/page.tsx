@@ -160,7 +160,7 @@ function calculateWheel(
  pairNetA,
  }
  } else {
- // Straight 18
+ // Straight (9 or 18)
  let aWins = 0, bWins = 0
  const holeWinnersS: string[] = []
  for (let i = 0; i < 18; i++) {
@@ -541,7 +541,7 @@ export default function PayoutsPage() {
  {(m.wheelPlayers||[]).map((p:string) => (
  <span key={p} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-xl text-xs font-black">{p}</span>
  ))}
- <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-xl text-xs font-black">{m.wheelFormat==='nassau'?`N:$${m.wheelNassau}`:`$${m.wheelAmount}`}/PAIR · {m.scoringType||'NET'} · {m.wheelFormat==='nassau'?'NASSAU':'STRAIGHT 18'}</span>
+ <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-xl text-xs font-black">{m.wheelFormat==='nassau'?`N:$${m.wheelNassau}`:`$${m.wheelAmount}`}/PAIR · {m.scoringType||'NET'} · {m.wheelFormat==='nassau'?'NASSAU':(course.nineHole?'STRAIGHT 9':'STRAIGHT 18')}</span>
  </div>
  </div>
 

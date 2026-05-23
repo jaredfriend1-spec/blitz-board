@@ -1320,15 +1320,18 @@ export default function QuickMatch() {
  <div className="flex gap-2">
  <button onClick={() => setMatchDraft(d=>({...d,wheelFormat:'straight'}))}
  className={`flex-1 py-2.5 rounded-xl font-black text-xs border-2 transition-all ${matchDraft.wheelFormat==='straight'?'bg-purple-500 border-purple-400 text-white':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
- STRAIGHT 18
+ {nineHole ? 'STRAIGHT 9' : 'STRAIGHT 18'}
  <div className="text-[9px] opacity-70 mt-0.5 normal-case">One bet · total holes</div>
  </button>
+ {!nineHole && (
  <button onClick={() => setMatchDraft(d=>({...d,wheelFormat:'nassau'}))}
  className={`flex-1 py-2.5 rounded-xl font-black text-xs border-2 transition-all ${matchDraft.wheelFormat==='nassau'?'bg-purple-500 border-purple-400 text-white':'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
  NASSAU
  <div className="text-[9px] opacity-70 mt-0.5 normal-case">F9 · B9 · Total</div>
  </button>
+ )}
  </div>
+ {nineHole && matchDraft.wheelFormat === 'nassau' && setMatchDraft(d => ({...d, wheelFormat:'straight'})) as any}
  </div>
  {/* Straight amount */}
  {matchDraft.wheelFormat === 'straight' && (

@@ -24,9 +24,14 @@ export default function ResultsPage() {
   const getIndividualResults = () => {
     const activePlayerIds = new Set<string>()
     teams.forEach(t => (t.playerIds || []).forEach((id: string) => activePlayerIds.add(id)))
-    const activeFieldSize = activePlayerIds.size
 
-    const list = players.filter(p => activePlayerIds.has(p.id)).map(p => {
+    // No teams = all players are active
+    const activePlayers = teams.length > 0
+      ? players.filter(p => activePlayerIds.has(p.id))
+      : players
+    const activeFieldSize = activePlayers.length
+
+    const list = activePlayers.map(p => {
       const s = scores[p.id] || Array(18).fill(0)
       const f9 = s.slice(0, 9).reduce((a, b) => a + (Number(b) || 0), 0)
       const b9 = s.slice(9, 18).reduce((a, b) => a + (Number(b) || 0), 0)
@@ -41,8 +46,7 @@ export default function ResultsPage() {
     let totalSkinsWon = 0
 
     for (let h = 0; h < 18; h++) {
-      const holeScores = players
-        .filter(p => activePlayerIds.has(p.id))
+      const holeScores = activePlayers
         .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[h] || 0 }))
         .filter(x => x.s > 0)
       if (holeScores.length > 0) {
@@ -142,7 +146,7 @@ export default function ResultsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Results</h1>
         </div>
 
-        {/* Tab switcher */}
+        {/* Tab switcher — only show Team tab if teams exist */}
         <div className="flex bg-zinc-900 rounded-2xl p-1.5 mb-8 border border-zinc-800 gap-1">
           <button
             onClick={() => setActiveTab('INDIVIDUAL')}
@@ -152,6 +156,7 @@ export default function ResultsPage() {
           >
             Individual
           </button>
+          {teams.length > 0 && (
           <button
             onClick={() => setActiveTab('TEAM')}
             className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all ${
@@ -160,6 +165,7 @@ export default function ResultsPage() {
           >
             Team
           </button>
+          )}
         </div>
 
         {/* ── INDIVIDUAL TAB ── */}
