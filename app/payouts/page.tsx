@@ -192,6 +192,10 @@ function calculateWheel(
 export default function PayoutsPage() {
  const [scores, setScores] = useState<Record<string, number[]>>({})
  const [expandedWheelPair, setExpandedWheelPair] = useState<string|null>(null)
+ const [activeMode, setActiveMode] = useState('')
+ const [isMock, setIsMock] = useState(false)
+ const [archiving, setArchiving] = useState(false)
+ const [archiveSuccess, setArchiveSuccess] = useState(false)
  const [matches, setMatches] = useState<any[]>([])
  const [players, setPlayers] = useState<any[]>([])
  const [teams, setTeams] = useState<any[]>([])
@@ -202,6 +206,7 @@ export default function PayoutsPage() {
  const [format, setFormat] = useState<FormatSpec>(JEFFS_BLITZ)
 
  useEffect(() => {
+ onValue(ref(db,'tournament/meta'), snap => { const m=snap.val()||{}; setActiveMode(m.mode||''); setIsMock(!!m.isMock) })
  onValue(ref(db,'tournament/scores'), snap => snap.val() && setScores(snap.val()))
  onValue(ref(db,'tournament/matchups'), snap => snap.val() && setMatches(Object.values(snap.val())))
  onValue(ref(db,'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
