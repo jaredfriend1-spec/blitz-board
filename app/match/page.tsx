@@ -174,6 +174,31 @@ export default function QuickMatch() {
  }, [])
 
  // ── CONTINUE EXISTING QUICK MATCH ───────────────────────────────
+ const continueEditSetup = async () => {
+ setLoading(true)
+ const courseSnap = await get(ref(db,'tournament/course'))
+ if (courseSnap.val()) {
+ setCourseName(courseSnap.val().name || '')
+ if (courseSnap.val().holes?.length === 18) setHoles(courseSnap.val().holes)
+ }
+ const rosterSnap = await get(ref(db,'tournament/roster'))
+ if (rosterSnap.val()) {
+ const ps = Object.values(rosterSnap.val()) as any[]
+ setPlayers(ps.map((p:any) => ({ id: p.id, name: p.name, handicap: p.handicap || 0 })))
+ }
+ const teamsSnap = await get(ref(db,'tournament/teams'))
+ if (teamsSnap.val()) {
+ const ts = Object.values(teamsSnap.val()) as any[]
+ setTeams(ts.map((t:any) => ({ id: t.id, name: t.name, playerIds: t.playerIds || [] })))
+ setTeamsCreated(true)
+ }
+ const matchSnap = await get(ref(db,'tournament/matchups'))
+ if (matchSnap.val()) setMatches(Object.values(matchSnap.val()) as any[])
+ setLoading(false)
+ setExistingMatchMode(false)
+ setStep(1)
+ }
+
  const continueExistingMatch = async () => {
  setLoading(true)
   setAddingToExisting(true)
@@ -438,6 +463,10 @@ export default function QuickMatch() {
  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-2xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
  {loading ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
  Add More Matches
+ </button>
+ <button onClick={continueEditSetup} disabled={loading}
+ className="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 py-4 rounded-2xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+ <RefreshCw size={16}/> Edit Setup (Course, Players, Teams)
  </button>
  <div className="border border-zinc-800 rounded-2xl p-4 space-y-2">
  <p className="text-zinc-500 text-xs font-semibold normal-case text-center">Start a completely new match:</p>
@@ -1056,7 +1085,7 @@ export default function QuickMatch() {
 
  {skipTeams && (
  <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
- <p className="text-zinc-600 text-[10px] font-black normal-case">Format only applies to team matches. Skip if doing 1v1 or wheel only.</p>
+ <p className="text-zinc-600 text-[10px] font-black normal-case">Format only applies to Team vs Team matches. Since you're playing 1v1 or Wheel, this step is skipped.</p>
  </div>
  )}
  </div>

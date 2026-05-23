@@ -141,7 +141,8 @@ export default function ScorerPage() {
  const backPar = pars.slice(9,18).reduce((a:number,b:number)=>a+b,0)
  const totalPar = frontPar + backPar
 
- if (teams.length === 0) {
+ // Show empty state only if no players at all — teams optional for 1v1/wheel
+ if (players.length === 0) {
  return (
  <div className="min-h-screen bg-black text-white font-sans">
  <div className="max-w-7xl mx-auto flex justify-between items-center p-4 border-b border-zinc-900">
@@ -227,6 +228,90 @@ export default function ScorerPage() {
  </button>
  )}
  </div>
+
+ {/* If no teams (1v1/wheel), show all players in one card */}
+ {teams.length === 0 && players.length > 0 && (
+ <div className="bg-zinc-950 rounded-[2rem] border-2 border-zinc-800 overflow-hidden shadow-2xl">
+ <div className="bg-zinc-900 px-6 py-4 border-b-2 border-zinc-800 flex items-center justify-between">
+ <h2 className="text-xl font-bold text-emerald-400 tracking-tight">Players</h2>
+ <span className="text-[10px] text-zinc-600 font-semibold">{players.length} PLAYERS</span>
+ </div>
+ <div className="overflow-x-auto">
+ <table className="border-collapse" style={{minWidth:'780px',width:'100%'}}>
+ <thead>
+ <tr className="bg-black">
+ <th className="sticky left-0 bg-black z-20 border-r border-zinc-800 text-left px-4 py-2 text-[10px] text-zinc-600 font-black min-w-[130px]">PLAYER</th>
+ {pars.slice(0,9).map((p:number,i:number) => (
+ <th key={i} className="px-1 py-2 text-center w-12">
+ <div className="text-[10px] text-zinc-500 font-black">{i+1}</div>
+ <div className="text-[9px] text-zinc-700 font-black">p{p}</div>
+ </th>
+ ))}
+ <th className="px-2 py-2 text-center w-14 bg-zinc-900/80">
+ <div className="text-[10px] text-blue-400 font-black">OUT</div>
+ <div className="text-[9px] text-zinc-600 font-black">{frontPar}</div>
+ </th>
+ {pars.slice(9,18).map((p:number,i:number) => (
+ <th key={i+9} className="px-1 py-2 text-center w-12">
+ <div className="text-[10px] text-zinc-500 font-black">{i+10}</div>
+ <div className="text-[9px] text-zinc-700 font-black">p{pars[i+9]}</div>
+ </th>
+ ))}
+ <th className="px-2 py-2 text-center w-14 bg-zinc-900/80">
+ <div className="text-[10px] text-blue-400 font-black">IN</div>
+ <div className="text-[9px] text-zinc-600 font-black">{backPar}</div>
+ </th>
+ <th className="px-3 py-2 text-center w-20 bg-emerald-950/60 border-l border-zinc-800">
+ <div className="text-[10px] text-emerald-400 font-black">TOT</div>
+ <div className="text-[9px] text-zinc-600 font-black">{totalPar}</div>
+ </th>
+ </tr>
+ </thead>
+ <tbody>
+ {players.map((p:any) => {
+ const sc = scores[p.id] || Array(18).fill(0)
+ const f9 = sc.slice(0,9).reduce((a:number,b:number)=>a+(Number(b)||0),0)
+ const b9 = sc.slice(9,18).reduce((a:number,b:number)=>a+(Number(b)||0),0)
+ const tot = f9+b9
+ const topar = tot - totalPar
+ return (
+ <tr key={p.id} className="border-t border-zinc-900 hover:bg-zinc-900/20 transition-colors">
+ <td className="sticky left-0 bg-black z-10 border-r border-zinc-800 px-4 py-3 min-w-[130px]">
+ <div className="font-bold text-sm text-white">{p.name}</div>
+ <div className="text-[9px] text-zinc-600 font-semibold">HCP {p.handicap||0}</div>
+ </td>
+ {Array.from({length:9},(_,i)=>i).map(i => (
+ <td key={i} className="px-1 py-2 text-center w-12">
+ <ScoreCell score={sc[i]} par={pars[i]} editable={editMode} onChange={val=>updateScore(p.id,i,val)}/>
+ </td>
+ ))}
+ <td className="px-2 py-2 text-center w-14 bg-zinc-900/40">
+ <span className={`text-sm font-bold ${f9>0?(f9-frontPar<0?'text-emerald-400':f9-frontPar>0?'text-rose-400':'text-white'):'text-zinc-700'}`}>
+ {f9||'—'}
+ </span>
+ </td>
+ {Array.from({length:9},(_,i)=>i+9).map(i => (
+ <td key={i} className="px-1 py-2 text-center w-12">
+ <ScoreCell score={sc[i]} par={pars[i]} editable={editMode} onChange={val=>updateScore(p.id,i,val)}/>
+ </td>
+ ))}
+ <td className="px-2 py-2 text-center w-14 bg-zinc-900/40">
+ <span className={`text-sm font-bold ${b9>0?(b9-backPar<0?'text-emerald-400':b9-backPar>0?'text-rose-400':'text-white'):'text-zinc-700'}`}>
+ {b9||'—'}
+ </span>
+ </td>
+ <td className="px-3 py-2 text-center w-20 bg-emerald-950/20 border-l border-zinc-800">
+ <div className={`text-base font-bold ${tot>0?(topar<0?'text-emerald-400':topar>0?'text-rose-400':'text-white'):'text-zinc-700'}`}>{tot||'—'}</div>
+ {tot>0&&<div className={`text-[9px] font-bold ${topar<0?'text-emerald-400':topar>0?'text-rose-400':'text-zinc-500'}`}>{topar===0?'E':topar>0?`+${topar}`:topar}</div>}
+ </td>
+ </tr>
+ )
+ })}
+ </tbody>
+ </table>
+ </div>
+ </div>
+ )}
 
  {teams.map(team => {
  const teamPlayers = (team.playerIds || []).map((pid: string) => players.find(p => p.id === pid)).filter(Boolean)
