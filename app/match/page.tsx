@@ -30,6 +30,7 @@ export default function QuickMatch() {
 
  // Course
  const [courseName, setCourseName] = useState('')
+ const [nineHole, setNineHole] = useState(false)
  const [holes, setHoles] = useState(Array.from({length:18}, (_, i) => ({ par: 4, hcp: i + 1 })))
  const [savedCourses, setSavedCourses] = useState<any[]>([])
  const [showCourseLibrary, setShowCourseLibrary] = useState(false)
@@ -175,6 +176,14 @@ export default function QuickMatch() {
 
  // ── CONTINUE EXISTING QUICK MATCH ───────────────────────────────
  const continueEditSetup = async () => {
+ // Check if scores already exist — warn but allow
+ const scoresSnap = await get(ref(db,'tournament/scores'))
+ if (scoresSnap.exists()) {
+ const hasScores = Object.values(scoresSnap.val()||{}).some((s:any) => Array.isArray(s) && s.some((v:number)=>v>0))
+ if (hasScores) {
+ showToast('⚠️ Scores are saved — they will be preserved when you Go Live')
+ }
+ }
  setLoading(true)
  const courseSnap = await get(ref(db,'tournament/course'))
  if (courseSnap.val()) {
@@ -388,7 +397,7 @@ export default function QuickMatch() {
  }
  await set(ref(db,'tournament'), null)
  await set(ref(db,'tournament/meta'), { isMock:false, mode:'match', currentDay:'Match Day', totalDays:1 })
- await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par) })
+ await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par), nineHole })
 
  // Players
  const pidMap: Record<string,string> = {}
@@ -470,9 +479,13 @@ export default function QuickMatch() {
  </button>
  <div className="border border-zinc-800 rounded-2xl p-4 space-y-2">
  <p className="text-zinc-500 text-xs font-semibold normal-case text-center">Start a completely new match:</p>
- <button onClick={startFreshWithArchive} disabled={loading}
+ <button onClick={async () => { await startFreshWithArchive(); router.push('/') }} disabled={loading}
  className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 py-3.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
- <Archive size={14}/> Archive Current & Start Fresh
+ <Archive size={14}/> Archive & Go Home
+ </button>
+ <button onClick={startFreshWithArchive} disabled={loading}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-3.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+ <Archive size={14}/> Archive & Start Fresh Match
  </button>
  <button onClick={startFreshDiscard} disabled={loading}
  className="w-full bg-transparent hover:bg-rose-950/20 border border-zinc-700 hover:border-rose-500/40 text-zinc-500 hover:text-rose-400 py-3.5 rounded-xl font-bold text-sm transition-colors">
@@ -620,6 +633,18 @@ export default function QuickMatch() {
  placeholder="COURSE NAME"
  autoFocus
  />
+
+ {/* 9 or 18 holes */}
+ <div className="flex gap-2">
+ <button onClick={() => setNineHole(false)}
+ className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${!nineHole?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+ 18 Holes
+ </button>
+ <button onClick={() => setNineHole(true)}
+ className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all ${nineHole?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+ 9 Holes
+ </button>
+ </div>
 
  {/* Saved courses */}
  {savedCourses.length > 0 && (

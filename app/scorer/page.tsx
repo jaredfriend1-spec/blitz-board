@@ -74,6 +74,8 @@ function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
 export default function ScorerPage() {
  const [scores, setScores] = useState<Record<string, number[]>>({})
  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
+ const allPars: number[] = course.pars || Array(18).fill(4)
+ const pars: number[] = course.nineHole ? allPars.slice(0,9) : allPars
  const [teams, setTeams] = useState<any[]>([])
  const [players, setPlayers] = useState<any[]>([])
  const [saveStatus, setSaveStatus] = useState<'idle'|'saving'|'saved'>('idle')
@@ -92,7 +94,9 @@ export default function ScorerPage() {
  if (sessionStorage.getItem('scorer-edit') === 'true') setEditMode(true)
  setIsAdmin(sessionStorage.getItem('role') === 'admin')
  onValue(ref(db,'tournament/scores'), snap => snap.val() && setScores(snap.val()))
- onValue(ref(db,'tournament/course'), snap => snap.val() && setCourse(snap.val()))
+ onValue(ref(db,'tournament/course'), snap => {
+ if (snap.val()) setCourse(snap.val())
+ })
  onValue(ref(db,'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
  onValue(ref(db,'tournament/roster'), snap => setPlayers(snap.val() ? Object.values(snap.val()) : []))
  }, [])
@@ -136,7 +140,9 @@ export default function ScorerPage() {
  sessionStorage.removeItem('scorer-edit')
  }
 
- const pars = course.pars || Array(18).fill(4)
+ const totalHoles = pars.length
+ const frontPars = pars.slice(0, Math.min(9, totalHoles))
+ const backPars = pars.slice(9)
  const frontPar = pars.slice(0,9).reduce((a:number,b:number)=>a+b,0)
  const backPar = pars.slice(9,18).reduce((a:number,b:number)=>a+b,0)
  const totalPar = frontPar + backPar

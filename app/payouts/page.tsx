@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { ArrowLeft, Zap, ZapOff, DollarSign, Target, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Zap, ZapOff, DollarSign, Target, RefreshCw, Archive } from 'lucide-react'
 import Link from 'next/link'
 
 // ── TYPES ──────────────────────────────────────────────────────────
@@ -469,7 +469,19 @@ export default function PayoutsPage() {
  <DollarSign size={36} className="text-emerald-500"/>
  <h1 className="text-4xl sm:text-5xl font-black tracking-tighter">Match Payouts</h1>
  </div>
+ {activeMode === 'match' && !isMock && (
+ <button onClick={archiveMatch} disabled={archiving}
+ className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-emerald-500 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all text-zinc-400 hover:text-emerald-400">
+ <Archive size={15}/>
+ {archiving ? 'Archiving...' : 'Archive Match'}
+ </button>
+ )}
  </div>
+ {archiveSuccess && (
+ <div className="max-w-4xl mx-auto mb-4 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 px-4 py-3 rounded-2xl text-xs font-semibold flex items-center gap-2">
+ <Archive size={14}/> Match archived to History
+ </div>
+ )}
 
  {/* Legend */}
  <div className="max-w-4xl mx-auto mb-6 flex items-center gap-5 flex-wrap text-[10px] font-black text-zinc-600 tracking-widest">
