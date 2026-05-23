@@ -83,7 +83,7 @@ function buildRecap(arch: any) {
 
  const totalSkinsWon = Object.values(skinsCount).reduce((a, b) => a + b, 0)
  const skinsPot = fieldSize * (money.skinsAllocation || 0)
- const perSkin = totalSkinsWon > 0 ? Math.round(skinsPot / totalSkinsWon) : 0
+ const perSkin = totalSkinsWon > 0 ? skinsPot / totalSkinsWon : 0
 
  const skinsLeaders = activePlayers
  .filter(p => skinsCount[p.id] > 0)

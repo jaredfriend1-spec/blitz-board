@@ -32,6 +32,8 @@ export default function QuickMatch() {
  const [courseName, setCourseName] = useState('')
  const [nineHole, setNineHole] = useState(false)
  const [nineHoleStart, setNineHoleStart] = useState<'front'|'back'>('front')
+ const [doSkins, setDoSkins] = useState(false)
+ const [skinsAmount, setSkinsAmount] = useState(5)
  const [holes, setHoles] = useState(Array.from({length:18}, (_, i) => ({ par: 4, hcp: i + 1 })))
  const [savedCourses, setSavedCourses] = useState<any[]>([])
  const [showCourseLibrary, setShowCourseLibrary] = useState(false)
@@ -427,11 +429,14 @@ export default function QuickMatch() {
  : { name: 'Custom', ...customFormatBalls }
  await set(ref(db,'tournament/format'), formatToSave)
 
- // Matches — remap player names (they're already names not IDs)
+ // Matches
  for (const m of matches) {
  const mRef = push(ref(db,'tournament/matchups'))
  await set(mRef, { id:mRef.key, ...m })
  }
+
+ // Skins
+ await set(ref(db,'tournament/money'), { entryFee: 0, skinsAllocation: doSkins ? skinsAmount : 0 })
 
  setLoading(false)
  router.push('/scorer')
@@ -1446,6 +1451,48 @@ export default function QuickMatch() {
  <p className="text-zinc-700 text-xs font-black text-center py-4 border border-dashed border-zinc-800 rounded-2xl">
  NO MATCHES YET — ADD ONE ABOVE OR GO LIVE WITHOUT BETS
  </p>
+ )}
+ </div>
+ )}
+
+ {/* ── SKINS — shown on matches step ── */}
+ {step === 4 && (
+ <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
+ <div className="flex items-center justify-between">
+ <div>
+ <p className="font-bold text-sm">Skins</p>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-0.5">Lowest score on each hole wins the skin</p>
+ </div>
+ <div className="flex gap-2">
+ <button onClick={() => setDoSkins(false)}
+ className={`px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all ${!doSkins?'bg-zinc-700 border-zinc-500 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>
+ No
+ </button>
+ <button onClick={() => setDoSkins(true)}
+ className={`px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all ${doSkins?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>
+ Yes
+ </button>
+ </div>
+ </div>
+ {doSkins && (
+ <div>
+ <p className="text-[10px] font-semibold text-zinc-500 tracking-widest mb-2">$ PER PLAYER</p>
+ <div className="flex gap-2">
+ {[2,5,10,20].map(amt => (
+ <button key={amt} onClick={() => setSkinsAmount(amt)}
+ className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${skinsAmount===amt?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-400'}`}>
+ ${amt}
+ </button>
+ ))}
+ <input type="number" value={skinsAmount}
+ onChange={e => setSkinsAmount(Number(e.target.value))}
+ className="w-16 bg-black border border-zinc-700 focus:border-emerald-500 p-2 rounded-xl font-bold text-emerald-400 outline-none text-center text-sm"
+ />
+ </div>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-2">
+ Total pot: <span className="text-emerald-400 font-bold">${skinsAmount * players.length}</span> ({players.length} players × ${skinsAmount})
+ </p>
+ </div>
  )}
  </div>
  )}

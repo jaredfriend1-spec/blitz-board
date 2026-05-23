@@ -70,11 +70,10 @@ export default function ResultsPage() {
     }
 
     const totalSkinsPot = activeFieldSize * (money.skinsAllocation || 0)
-    const perSkin = totalSkinsWon > 0 ? Math.round(totalSkinsPot / totalSkinsWon) : 0
+    const perSkin = totalSkinsWon > 0 ? totalSkinsPot / totalSkinsWon : 0
     const sortedSkins = Object.entries(skinsCount).sort((a, b) => b[1] - a[1])
     const mostSkinsPlayerId = sortedSkins.length > 0 ? sortedSkins[0][0] : null
-    const totalPaidOutBase = totalSkinsWon * perSkin
-    const adjustment = totalSkinsPot - totalPaidOutBase
+    const adjustment = 0
 
     return { f9Winners, b9Winners, skinsMap, skinsCount, mostSkinsPlayerId, totalSkinsPot, totalSkinsWon, perSkin, adjustment }
   }
@@ -222,7 +221,7 @@ export default function ResultsPage() {
                   <span className="font-semibold text-sm">Skins</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${ind.perSkin}/skin · Pot ${ind.totalSkinsPot}</span>
+                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${Number.isInteger(ind.perSkin) ? ind.perSkin : ind.perSkin.toFixed(2)}/skin · Pot ${ind.totalSkinsPot}</span>
                 </div>
               </div>
               <div className="p-4 grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -253,7 +252,7 @@ export default function ResultsPage() {
                 )}
                 <div className="divide-y divide-zinc-800">
                   {players.filter(p => ind.skinsCount[p.id] > 0).map(p => {
-                    const final = (ind.skinsCount[p.id] * ind.perSkin) + (p.id === ind.mostSkinsPlayerId ? ind.adjustment : 0)
+                    const final = ind.skinsCount[p.id] * ind.perSkin
                     return (
                       <div key={p.id} className="flex items-center justify-between px-5 py-4">
                         <div className="flex items-center gap-3">
