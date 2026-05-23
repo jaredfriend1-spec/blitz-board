@@ -983,9 +983,37 @@ export default function QuickMatch() {
  {/* ── STEP 3: FORMAT ── */}
  {step === 3 && (
  <div className="space-y-5">
+
+ {skipTeams ? (
+ /* 1v1 / no teams — just NET or GROSS */
+ <>
  <div>
- <h2 className="text-3xl font-black tracking-tight mb-1">Team Format</h2>
- <p className="text-zinc-600 text-xs font-black tracking-widest normal-case">How balls count for team matches</p>
+ <h2 className="text-3xl font-bold tracking-tight mb-1">Scoring</h2>
+ <p className="text-zinc-500 text-sm font-medium normal-case">How are your matches scored?</p>
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <button onClick={() => setFormatMode('blitz')}
+ className={`p-6 rounded-2xl border-2 text-left transition-all ${formatMode==='blitz'?'border-emerald-500/60 bg-emerald-950/30':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
+ <div className="text-3xl mb-3">🏌️</div>
+ <div className={`font-bold text-lg mb-1 ${formatMode==='blitz'?'text-emerald-400':'text-white'}`}>Net</div>
+ <div className="text-zinc-500 text-xs font-medium normal-case leading-relaxed">Handicap strokes applied — levels the field between different skill levels.</div>
+ {formatMode==='blitz' && <div className="text-emerald-400 text-xs font-semibold mt-2 flex items-center gap-1"><Check size={12}/> Selected</div>}
+ </button>
+ <button onClick={() => setFormatMode('gross')}
+ className={`p-6 rounded-2xl border-2 text-left transition-all ${formatMode==='gross'?'border-rose-500/60 bg-rose-950/20':'border-zinc-800 bg-zinc-900 hover:border-zinc-600'}`}>
+ <div className="text-3xl mb-3">⛳</div>
+ <div className={`font-bold text-lg mb-1 ${formatMode==='gross'?'text-rose-400':'text-white'}`}>Gross</div>
+ <div className="text-zinc-500 text-xs font-medium normal-case leading-relaxed">Raw strokes, no adjustments. Scratch golf — whoever scores lowest wins.</div>
+ {formatMode==='gross' && <div className="text-rose-400 text-xs font-semibold mt-2 flex items-center gap-1"><Check size={12}/> Selected</div>}
+ </button>
+ </div>
+ </>
+ ) : (
+ /* Teams — show full format configurator */
+ <>
+ <div>
+ <h2 className="text-3xl font-bold tracking-tight mb-1">Team Format</h2>
+ <p className="text-zinc-500 text-sm font-medium normal-case">How balls count for Team vs Team matches</p>
  </div>
 
  {/* Jeff's Blitz card */}
@@ -995,8 +1023,8 @@ export default function QuickMatch() {
  <div className="flex items-center gap-4">
  <span className="text-2xl">⭐</span>
  <div>
- <div className={`font-black text-sm ${formatMode==='blitz'?'text-emerald-400':'text-zinc-300'}`}>Jeff's Blitz</div>
- <div className="text-[10px] text-zinc-600 normal-case mt-0.5">Best 2 Net · Best 3 Net on par 3s</div>
+ <div className={`font-bold text-sm ${formatMode==='blitz'?'text-emerald-400':'text-zinc-300'}`}>Jeff's Blitz</div>
+ <div className="text-xs text-zinc-600 normal-case mt-0.5">Best 2 Net · Best 3 Net on par 3s</div>
  </div>
  </div>
  <Check size={16} className={formatMode==='blitz'?'text-emerald-400':'text-transparent'}/>
@@ -1004,7 +1032,7 @@ export default function QuickMatch() {
  {formatMode === 'blitz' && (
  <div className="border-t border-emerald-500/20 bg-emerald-950/10 px-5 py-3 space-y-1.5">
  {[['Par 3','Best 3 Net'],['Par 4','Best 2 Net'],['Par 5','Best 2 Net']].map(([label,desc])=>(
- <div key={label} className="flex justify-between text-sm font-black">
+ <div key={label} className="flex justify-between text-sm font-bold">
  <span className="text-zinc-500">{label}</span>
  <span className="text-emerald-400">{desc}</span>
  </div>
@@ -1013,26 +1041,23 @@ export default function QuickMatch() {
  )}
  </div>
 
- {/* Configure Custom card — expands inline */}
+ {/* Configure Custom card */}
  <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${formatMode==='custom'?'border-purple-500/60':'border-zinc-800'}`}>
  <button onClick={() => setFormatMode('custom')}
  className={`w-full p-5 text-left flex items-center justify-between transition-all ${formatMode==='custom'?'bg-purple-950/20':'bg-zinc-900 hover:bg-zinc-800'}`}>
  <div className="flex items-center gap-4">
  <span className="text-2xl">⚙️</span>
  <div>
- <div className={`font-black text-sm ${formatMode==='custom'?'text-purple-400':'text-zinc-300'}`}>Configure Custom</div>
- <div className="text-[10px] text-zinc-600 normal-case mt-0.5">
+ <div className={`font-bold text-sm ${formatMode==='custom'?'text-purple-400':'text-zinc-300'}`}>Configure Custom</div>
+ <div className="text-xs text-zinc-600 normal-case mt-0.5">
  {formatMode==='custom' ? 'Configure your format below ↓' : 'Set your own ball count and types per par'}
  </div>
  </div>
  </div>
  <Check size={16} className={formatMode==='custom'?'text-purple-400':'text-transparent'}/>
  </button>
-
  {formatMode === 'custom' && (
  <div className="border-t border-purple-500/20 bg-purple-950/10 p-5 space-y-4">
-
- {/* Par sections */}
  {(['par3','par4','par5'] as const).map((parKey, pi) => {
  const label = ['PAR 3','PAR 4','PAR 5'][pi]
  const balls = customFormatBalls[parKey]
@@ -1041,25 +1066,25 @@ export default function QuickMatch() {
  return (
  <div key={parKey} className="bg-black rounded-2xl border border-zinc-800 p-4 space-y-3">
  <div className="flex justify-between items-center">
- <span className="font-black text-sm">{label}</span>
- <span className="text-purple-400 text-[10px] font-black">{summary}</span>
+ <span className="font-bold text-sm">{label}</span>
+ <span className="text-purple-400 text-[10px] font-semibold">{summary}</span>
  </div>
  <div>
- <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">NUMBER OF BALLS</p>
+ <p className="text-[9px] font-semibold text-zinc-600 tracking-widest mb-2">NUMBER OF BALLS</p>
  <div className="flex gap-2">
  {[1,2,3,4].map(n => (
  <button key={n} onClick={() => setCustomFormatBalls(prev => ({
  ...prev,
  [parKey]: Array.from({length:n}, (_,i) => (prev[parKey] as any[])[i] || {type:'net'})
  }))}
- className={`w-11 h-11 rounded-xl font-black text-lg border-2 transition-all ${balls.length===n?'bg-white text-black border-white':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
+ className={`w-11 h-11 rounded-xl font-bold text-lg border-2 transition-all ${balls.length===n?'bg-white text-black border-white':'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
  {n}
  </button>
  ))}
  </div>
  </div>
  <div>
- <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TAP TO TOGGLE NET / GROSS</p>
+ <p className="text-[9px] font-semibold text-zinc-600 tracking-widest mb-2">TAP TO TOGGLE NET / GROSS</p>
  <div className="flex gap-2 flex-wrap">
  {balls.map((ball:any, i:number) => (
  <button key={i} onClick={() => setCustomFormatBalls(prev => {
@@ -1067,7 +1092,7 @@ export default function QuickMatch() {
  updated[i] = {type: updated[i].type === 'net' ? 'gross' : 'net'}
  return {...prev, [parKey]: updated}
  })}
- className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-xs border-2 transition-all ${
+ className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs border-2 transition-all ${
  ball.type==='net'?'bg-emerald-500/20 border-emerald-500/50 text-emerald-400':'bg-rose-500/20 border-rose-500/50 text-rose-400'
  }`}>
  <span className="text-[9px] text-zinc-500">#{i+1}</span>
@@ -1082,14 +1107,12 @@ export default function QuickMatch() {
  </div>
  )}
  </div>
+ </>
+ )}
 
- {skipTeams && (
- <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
- <p className="text-zinc-600 text-[10px] font-black normal-case">Format only applies to Team vs Team matches. Since you're playing 1v1 or Wheel, this step is skipped.</p>
  </div>
  )}
- </div>
- )}
+
 
  {/* ── STEP 4: MATCHES ── */}
  {step === 4 && (
