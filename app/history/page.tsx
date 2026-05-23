@@ -17,26 +17,40 @@ function buildRecap(arch: any) {
  const course = arch.course || { pars: Array(18).fill(4), holes: [] }
  const money = arch.money || { entryFee: 0, skinsAllocation: 0 }
  const matchups: any[] = arch.matchups ? Object.values(arch.matchups) : []
- const pars: number[] = course.pars || Array(18).fill(4)
+
+ // 9-hole support
+ const nineHole: boolean = !!course.nineHole
+ const nineHoleStart: string = course.nineHoleStart || 'front'
+ const holeOffset: number = nineHole && nineHoleStart === 'back' ? 9 : 0
+ const allPars: number[] = course.pars || Array(18).fill(4)
+ const pars: number[] = nineHole ? allPars.slice(holeOffset, holeOffset + 9) : allPars
+ const totalPar = pars.reduce((a, b) => a + b, 0)
 
  // Active players — if no teams, all players are active
  const activeIds = new Set<string>()
  teams.forEach(t => (t.playerIds || []).forEach((id: string) => activeIds.add(id)))
  const activePlayers = teams.length > 0
  ? players.filter(p => activeIds.has(p.id))
- : players // no teams = all players active
+ : players
  const fieldSize = activePlayers.length
+
+ // Helper: get player's scored holes correctly for 9 or 18
+ const getScores = (playerId: string) => {
+ const s = scores[playerId] || Array(18).fill(0)
+ return nineHole ? s.slice(holeOffset, holeOffset + 9) : s
+ }
 
  // ── INDIVIDUAL LEADERBOARD ────────────────────────────────────────
  const leaderboard = activePlayers.map(p => {
- const s = scores[p.id] || Array(18).fill(0)
- const f9 = s.slice(0, 9).reduce((a: number, b: number) => a + (Number(b) || 0), 0)
- const b9 = s.slice(9, 18).reduce((a: number, b: number) => a + (Number(b) || 0), 0)
+ const s = getScores(p.id)
+ const f9 = nineHole
+ ? s.reduce((a: number, b: number) => a + (Number(b) || 0), 0)
+ : s.slice(0, 9).reduce((a: number, b: number) => a + (Number(b) || 0), 0)
+ const b9 = nineHole ? 0 : s.slice(9, 18).reduce((a: number, b: number) => a + (Number(b) || 0), 0)
  const tot = f9 + b9
- const totalPar = pars.reduce((a, b) => a + b, 0)
  const toPar = tot > 0 ? tot - totalPar : null
- const f9Par = pars.slice(0, 9).reduce((a, b) => a + b, 0)
- const b9Par = pars.slice(9, 18).reduce((a, b) => a + b, 0)
+ const f9Par = nineHole ? totalPar : pars.slice(0, 9).reduce((a, b) => a + b, 0)
+ const b9Par = nineHole ? 0 : pars.slice(9, 18).reduce((a, b) => a + b, 0)
  return { ...p, f9, b9, tot, toPar, f9ToPar: f9 > 0 ? f9 - f9Par : null, b9ToPar: b9 > 0 ? b9 - b9Par : null }
  }).sort((a, b) => {
  if (a.tot === 0 && b.tot > 0) return 1
@@ -48,12 +62,14 @@ function buildRecap(arch: any) {
  const b9Winners = leaderboard.filter(p => p.b9 > 0).sort((a, b) => a.b9 - b.b9).slice(0, 3)
 
  // ── SKINS ─────────────────────────────────────────────────────────
- const skinsMap: (any | null)[] = Array(18).fill(null)
+ const numHoles = nineHole ? 9 : 18
+ const skinsMap: (any | null)[] = Array(numHoles).fill(null)
  const skinsCount: Record<string, number> = {}
 
- for (let h = 0; h < 18; h++) {
+ for (let h = 0; h < numHoles; h++) {
+ const hIdx = holeOffset + h // actual index in scores array
  const holeScores = activePlayers
- .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[h] || 0 }))
+ .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[hIdx] || 0 }))
  .filter(x => x.s > 0)
  if (holeScores.length > 0) {
  const min = Math.min(...holeScores.map(x => x.s))
@@ -78,8 +94,9 @@ function buildRecap(arch: any) {
  const teamResults = teams.map(t => {
  const pIds: string[] = t.playerIds || []
  const holeAgg = pars.map((par, i) => {
+ const actualIdx = holeOffset + i
  const pScores = pIds
- .map(id => scores[id]?.[i] || 0)
+ .map(id => scores[id]?.[actualIdx] || 0)
  .filter(s => s > 0)
  .sort((a, b) => a - b)
  if (pScores.length === 0) return 0
@@ -159,9 +176,9 @@ function buildRecap(arch: any) {
  const p = activePlayers.find((pl:any) => pl.name === name)
  if (!p) return
  netScoresW[name] = pars.map((par, i) => {
- const g = scores[p.id]?.[i] || 0
+ const g = scores[p.id]?.[holeOffset + i] || 0
  if (!g) return 0
- const hcpR = Number(course.holes?.[i]?.hcp) || (i+1)
+ const hcpR = Number(course.holes?.[holeOffset + i]?.hcp) || (holeOffset + i + 1)
  const diff = Math.max(0, (Number(p.handicap)||0) - baseHcpW)
  let s = Math.floor(diff/18); if (hcpR <= (diff%18)) s++
  return isGrossW ? g : g - s
@@ -195,7 +212,7 @@ function buildRecap(arch: any) {
  const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Number(p.handicap) || 0)
  const baseHcp = Math.min(...allHcps)
  const makeNetScores = (playerList: any[]) => pars.map((par, i) => {
- const valid = playerList.map(p => { const g = scores[p.id]?.[i] || 0; return g > 0 ? g - getStrokes(Number(p.handicap)||0, i, baseHcp, isGross) : 0 }).filter(Boolean)
+ const valid = playerList.map(p => { const g = scores[p.id]?.[holeOffset + i] || 0; return g > 0 ? g - getStrokes(Number(p.handicap)||0, holeOffset + i, baseHcp, isGross) : 0 }).filter(Boolean)
  return valid.length > 0 ? Math.min(...valid) : 0
  })
  const sA = makeNetScores(pA)
@@ -209,8 +226,8 @@ function buildRecap(arch: any) {
  let aWins18 = 0, bWins18 = 0
  for (let i = 0; i < 18; i++) { if(sA[i]>0&&sB[i]>0) { if(sA[i]<sB[i]) aWins18++; else if(sB[i]<sA[i]) bWins18++ } }
  const tot18Pay = aWins18 > bWins18 ? nassau : bWins18 > aWins18 ? -nassau : 0
- const birdieA = pars.map((par,i) => { const bg = Math.min(...pA.map(p=>scores[p.id]?.[i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
- const birdieB = pars.map((par,i) => { const bg = Math.min(...pB.map(p=>scores[p.id]?.[i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
+ const birdieA = pars.map((par,i) => { const bg = Math.min(...pA.map(p=>scores[p.id]?.[holeOffset+i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
+ const birdieB = pars.map((par,i) => { const bg = Math.min(...pB.map(p=>scores[p.id]?.[holeOffset+i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
  const net = (f9.payA - f9.payB) + (b9.payA - b9.payB) + tot18Pay + birdieA - birdieB
  const winner = net > 0 ? (m.type==='2v2'?`${m.sideA}+${m.sideA2||''}`:m.sideA) : net < 0 ? (m.type==='2v2'?`${m.sideB}+${m.sideB2||''}`:m.sideB) : 'TIE'
  const sideALabel = m.type==='2v2' ? `${m.sideA} + ${m.sideA2}` : m.sideA
@@ -263,7 +280,7 @@ export default function HistoryPage() {
 
  const deleteHistory = (id: string) => {
  const pw = prompt("ENTER ADMIN PASSWORD:")
- if (pw !== "jeff") return alert("ACCESS DENIED")
+ if (pw !== "jeff") return
  if (confirm("PERMANENTLY DELETE THIS TOURNAMENT RECORD?")) {
  set(ref(db, `history/${id}`), null)
  }
@@ -585,7 +602,7 @@ return (
  </span>
  {arch.course?.pars && (
  <span className="text-[10px] font-black text-zinc-600">
- PAR {arch.course.pars.reduce((a: number, b: number) => a + b, 0)}
+ PAR {(() => { const ap = arch.course.pars || []; const nh = arch.course.nineHole; const ns = arch.course.nineHoleStart; const off = nh && ns === 'back' ? 9 : 0; return nh ? ap.slice(off, off+9).reduce((a:number,b:number)=>a+b,0) : ap.reduce((a:number,b:number)=>a+b,0) })()}
  </span>
  )}
  </div>
@@ -660,7 +677,7 @@ return (
  <Section title={`Skins · ${recap.totalSkinsWon} Won · $${recap.perSkin}/Skin`} icon={<Zap size={14}/>} color="text-emerald-400">
  {/* Hole grid */}
  <div className="grid grid-cols-9 gap-1.5 mb-4">
- {recap.skinsMap.slice(0, 9).map((winner, i) => (
+ {recap.skinsMap.slice(0, Math.min(9, recap.skinsMap.length)).map((winner, i) => (
  <div key={i} className={`rounded-xl p-2 text-center border ${winner ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800 bg-black/40'}`}>
  <div className="text-[9px] text-zinc-600 font-black">{i + 1}</div>
  <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-800'}`}>
@@ -670,7 +687,7 @@ return (
  ))}
  </div>
  <div className="grid grid-cols-9 gap-1.5 mb-5">
- {recap.skinsMap.slice(9, 18).map((winner, i) => (
+ {!recap.nineHole && recap.skinsMap.slice(9, 18).map((winner, i) => (
  <div key={i + 9} className={`rounded-xl p-2 text-center border ${winner ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800 bg-black/40'}`}>
  <div className="text-[9px] text-zinc-600 font-black">{i + 10}</div>
  <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-800'}`}>
