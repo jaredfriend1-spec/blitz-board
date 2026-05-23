@@ -22,6 +22,19 @@ export default function LandingPage() {
  const [archiving, setArchiving] = useState(false)
  const [archiveSuccess, setArchiveSuccess] = useState(false)
  const [demoLoading, setDemoLoading] = useState(false)
+ const [modal, setModal] = useState<{
+ title: string
+ body: string
+ warning?: string
+ confirmLabel: string
+ cancelLabel?: string
+ danger?: boolean
+ onConfirm: () => void
+ onCancel?: () => void
+ } | null>(null)
+
+ const showModal = (opts: typeof modal) => setModal(opts)
+ const closeModal = () => setModal(null)
 
  // PIN state
  const [showPinModal, setShowPinModal] = useState(false)
@@ -71,32 +84,33 @@ export default function LandingPage() {
  }
  }
 
- const archiveMatch = async () => {
- if (!window.confirm('Archive this match to History and close it?')) return
+ const archiveMatch = () => {
+ showModal({
+ title: 'Archive Match to History',
+ body: 'This saves the current match to History and closes it. All scores, payouts and results will be preserved.',
+ confirmLabel: 'Archive & Close',
+ cancelLabel: 'Not yet',
+ onConfirm: async () => {
+ closeModal()
  setArchiving(true)
  try {
  const snap = await get(ref(db, 'tournament'))
  if (snap.exists()) {
  const data = snap.val()
- const histRef = ref(db, `history/${Date.now()}`)
- await set(histRef, {
+ await set(ref(db, `history/${Date.now()}`), {
  ...data,
- _meta: {
- mode: 'match',
- dayLabel: 'Quick Match',
- archivedAt: Date.now(),
- courseName: data.course?.name || 'Quick Match'
- }
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:data.course?.name||'Quick Match' }
  })
  }
  await set(ref(db, 'tournament'), null)
  setArchiveSuccess(true)
  setActiveMode('')
  setTimeout(() => setArchiveSuccess(false), 3000)
- } catch (e) {
- alert('Archive failed — check connection')
- }
+ } catch(e) { }
  setArchiving(false)
+ },
+ onCancel: closeModal
+ })
  }
 
   // ── DEMO ──────────────────────────────────────────────────────────
@@ -119,14 +133,79 @@ export default function LandingPage() {
   ]
 
   const loadDemo = async () => {
+    const metaSnap = await get(ref(db,'tournament/meta'))
+    const meta = metaSnap.val()
+    if (meta && !meta.isMock && (meta.mode || meta.tripName)) {
+      showModal({
+        title: '⚠️ Match In Progress',
+        body: 'You have a real match currently active. Archive it to History first, or load the demo which will replace it.',
+        warning: 'Choosing "Archive & Demo" will save the current match to History first.',
+        confirmLabel: 'Archive & Load Demo',
+        cancelLabel: 'Cancel — Keep My Match',
+        danger: true,
+        onConfirm: async () => {
+          closeModal()
+          const snap = await get(ref(db,'tournament'))
+          if (snap.exists()) {
+            await set(ref(db,`history/${Date.now()}`), {
+              ...snap.val(),
+              _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+            })
+          }
+          setDemoLoading(true)
+          await runDemoLoad()
+        },
+        onCancel: closeModal
+      })
+      return
+    }
+    showModal({
+      title: 'Load Live Demo?',
+      body: 'Loads a sample match with 8 players, 4 teams, and all 4 match types fully scored — great for showing the app to someone new.',
+      confirmLabel: 'Load Demo',
+      cancelLabel: 'Cancel',
+      onConfirm: async () => { closeModal(); setDemoLoading(true); await runDemoLoad() },
+      onCancel: closeModal
+    })
+  }
+
+  const runDemoLoad = async () => {
     // Block if real match is active
     const metaSnap = await get(ref(db,'tournament/meta'))
     const meta = metaSnap.val()
     if (meta && !meta.isMock && (meta.mode || meta.tripName)) {
-      alert('A real match is currently in progress. Archive or clear it before running the demo.')
+      showModal({
+        title: '⚠️ Match In Progress',
+        body: 'You have a real match currently active. Archive it to History first before running the demo.',
+        warning: 'Running the demo while a match is active will lose all unarchived scores.',
+        confirmLabel: 'Archive & Run Demo',
+        cancelLabel: 'Cancel',
+        danger: true,
+        onConfirm: async () => {
+          closeModal()
+          const snap = await get(ref(db, 'tournament'))
+          if (snap.exists()) {
+            await set(ref(db, `history/${Date.now()}`), {
+              ...snap.val(),
+              _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+            })
+          }
+          setDemoLoading(true)
+          await runDemoLoad()
+        },
+        onCancel: closeModal
+      })
       return
     }
-    if (!window.confirm('Load a demo match with sample data?')) return
+    showModal({
+      title: 'Load Demo Match?',
+      body: 'This loads a sample match with 8 players, 4 teams, and all 4 match types (1v1, 2v2, Team, Wheel) fully scored. Perfect for showing someone how the app works.',
+      warning: 'If a match is in progress it must be archived first. The demo button will warn you.',
+      confirmLabel: 'Load Demo',
+      cancelLabel: 'Cancel',
+      onConfirm: async () => { closeModal(); setDemoLoading(true); await runDemoLoad() },
+      onCancel: closeModal
+    })
     setDemoLoading(true)
     try {
       await set(ref(db,'tournament'), null)
@@ -172,7 +251,7 @@ export default function LandingPage() {
     } catch(e) {
       console.error(e)
       setDemoLoading(false)
-      alert('Demo failed — check your connection')
+      showModal({ title:'Demo Failed', body:'Could not load the demo — check your internet connection and try again.', confirmLabel:'OK', onConfirm:closeModal })
     }
   }
 
@@ -255,6 +334,40 @@ export default function LandingPage() {
  BLITZ BOARD · {new Date().getFullYear()}
  </p>
  </div>
+
+ {/* In-app confirm modal — no popup blockers */}
+ {modal && (
+ <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-[2rem] border border-zinc-700 shadow-2xl overflow-hidden">
+ <div className="p-6 space-y-3">
+ <h2 className="font-bold text-lg text-white">{modal.title}</h2>
+ <p className="text-zinc-400 text-sm font-medium normal-case leading-relaxed">{modal.body}</p>
+ {modal.warning && (
+ <div className={`flex items-start gap-2 rounded-xl p-3 text-xs font-medium normal-case leading-relaxed ${
+ modal.danger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+ }`}>
+ <span className="flex-shrink-0">⚠️</span>
+ <span>{modal.warning}</span>
+ </div>
+ )}
+ </div>
+ <div className="px-6 pb-6 flex flex-col gap-2">
+ <button onClick={modal.onConfirm}
+ className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-colors ${
+ modal.danger ? 'bg-rose-500 hover:bg-rose-400 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
+ }`}>
+ {modal.confirmLabel}
+ </button>
+ {modal.cancelLabel && (
+ <button onClick={modal.onCancel || closeModal}
+ className="w-full py-3.5 rounded-2xl font-bold text-sm text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 transition-colors">
+ {modal.cancelLabel}
+ </button>
+ )}
+ </div>
+ </div>
+ </div>
+ )}
 
  {/* PIN Modal */}
  {showPinModal && (

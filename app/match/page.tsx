@@ -5,7 +5,7 @@ import { ref, set, get, push, onValue } from 'firebase/database'
 import {
  ArrowLeft, ArrowRight, Flag, Users, Layers, Sword, Play,
  Check, X, Plus, Trash2, Zap, ZapOff, ChevronRight,
- AlertTriangle, Loader2, User, RefreshCw, Pencil, Camera, Save
+ AlertTriangle, Loader2, User, RefreshCw, Pencil, Camera, Save, Archive
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -207,12 +207,8 @@ export default function QuickMatch() {
  setStep(4) // Jump straight to matches step
  }
 
- const startFreshMatch = async () => {
- // Always offer to archive before wiping
- const archive = window.confirm(
- 'Archive the current match to History before starting fresh?\n\nOK = Archive & Start Fresh\nCancel = Discard & Start Fresh'
- )
- if (archive) {
+ const startFreshWithArchive = async () => {
+ setLoading(true)
  const snap = await get(ref(db, 'tournament'))
  if (snap.exists()) {
  await set(ref(db, `history/${Date.now()}`), {
@@ -220,7 +216,12 @@ export default function QuickMatch() {
  _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
  })
  }
+ await set(ref(db,'tournament'), null)
+ setLoading(false)
+ setExistingMatchMode(false)
  }
+
+ const startFreshDiscard = async () => {
  await set(ref(db,'tournament'), null)
  setExistingMatchMode(false)
  }
@@ -348,21 +349,16 @@ export default function QuickMatch() {
  return
  }
 
- // Fresh start — if real match exists, offer to archive first
+ // Fresh start — always archive if real match exists (safe default)
  const existingMeta = await get(ref(db,'tournament/meta'))
  const existingMetaVal = existingMeta.val()
  if (existingMetaVal && !existingMetaVal.isMock && (existingMetaVal.mode || existingMetaVal.tripName)) {
- const archive = window.confirm(
- 'A match is already in progress. Archive it to History before starting fresh?\n\nOK = Archive & Continue\nCancel = Discard & Continue'
- )
- if (archive) {
  const snap = await get(ref(db, 'tournament'))
  if (snap.exists()) {
  await set(ref(db, `history/${Date.now()}`), {
  ...snap.val(),
  _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
  })
- }
  }
  }
  await set(ref(db,'tournament'), null)
@@ -439,16 +435,23 @@ export default function QuickMatch() {
  </p>
  <div className="space-y-3">
  <button onClick={continueExistingMatch} disabled={loading}
- className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-2xl font-black text-sm transition-colors flex items-center justify-center gap-2">
+ className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-2xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
  {loading ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
- ADD MORE MATCHES
+ Add More Matches
  </button>
- <button onClick={startFreshMatch} disabled={loading}
- className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black text-sm transition-colors">
- START FRESH MATCH
+ <div className="border border-zinc-800 rounded-2xl p-4 space-y-2">
+ <p className="text-zinc-500 text-xs font-semibold normal-case text-center">Start a completely new match:</p>
+ <button onClick={startFreshWithArchive} disabled={loading}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 py-3.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+ <Archive size={14}/> Archive Current & Start Fresh
  </button>
- <Link href="/"className="w-full block text-center text-zinc-600 hover:text-zinc-400 font-black text-sm py-2 transition-colors">
- CANCEL — GO BACK
+ <button onClick={startFreshDiscard} disabled={loading}
+ className="w-full bg-transparent hover:bg-rose-950/20 border border-zinc-700 hover:border-rose-500/40 text-zinc-500 hover:text-rose-400 py-3.5 rounded-xl font-bold text-sm transition-colors">
+ Discard Scores & Start Fresh
+ </button>
+ </div>
+ <Link href="/" className="w-full block text-center text-zinc-600 hover:text-zinc-400 font-semibold text-sm py-2 transition-colors">
+ Cancel — Go Back
  </Link>
  </div>
  </div>
