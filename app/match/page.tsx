@@ -73,7 +73,7 @@ export default function QuickMatch() {
  const [buildingType, setBuildingType] = useState<string|null>(null)
  const [matchDraft, setMatchDraft] = useState({
  sideA:'', sideB:'', sideA2:'', sideB2:'',
- nassau:5, press:5, birdie:2, eagle:5,
+ nassau:5, overall:10, press:5, birdie:2, eagle:5,
  scoringType:'NET' as 'NET'|'GROSS',
  autoPress:true,
  wheelPlayers:['','',''] as string[],
@@ -358,16 +358,16 @@ export default function QuickMatch() {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
  if (new Set(picks).size !== picks.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
  } else if (buildingType === 'TvT') {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different teams')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType }])
  } else {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different players')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -1304,7 +1304,7 @@ export default function QuickMatch() {
  {/* Stakes */}
  {buildingType !== 'Wheel' && (
  <div className="grid grid-cols-2 gap-3">
- {[['nassau','NASSAU ($)','text-white'],['press','PRESS ($)','text-yellow-400'],['birdie','BIRDIE ($)','text-blue-400'],['eagle','EAGLE ($)','text-emerald-400']].map(([key,label,color]) => (
+ {[['nassau','F9 + B9 ($)','text-white'],['overall','OVERALL ($)','text-purple-400'],['press','PRESS ($)','text-yellow-400'],['birdie','BIRDIE ($)','text-blue-400'],['eagle','EAGLE ($)','text-emerald-400']].map(([key,label,color]) => (
  <div key={key}>
  <label className={`text-[10px] font-black block mb-1 ${color}`}>{label}</label>
  <input type="number"value={(matchDraft as any)[key]}

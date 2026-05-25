@@ -83,11 +83,12 @@ function buildRecap(arch: any) {
 
  const totalSkinsWon = Object.values(skinsCount).reduce((a, b) => a + b, 0)
  const skinsPot = fieldSize * (money.skinsAllocation || 0)
- const perSkin = totalSkinsWon > 0 ? skinsPot / totalSkinsWon : 0
+ const perSkinRaw = totalSkinsWon > 0 ? skinsPot / totalSkinsWon : 0
+ const perSkin = Math.round(perSkinRaw * 100) / 100
 
  const skinsLeaders = activePlayers
  .filter(p => skinsCount[p.id] > 0)
- .map(p => ({ name: p.name, count: skinsCount[p.id], winnings: skinsCount[p.id] * perSkin }))
+ .map(p => ({ name: p.name, count: skinsCount[p.id], winnings: Math.round(skinsCount[p.id] * perSkin * 100) / 100 }))
  .sort((a, b) => b.count - a.count)
 
  // ── TEAM BEST BALL SCORES ──────────────────────────────────────────
@@ -706,7 +707,7 @@ return (
  </div>
  <div className="flex items-center gap-4 text-xs font-black">
  <span className="text-zinc-500">{p.count} skin{p.count > 1 ? 's' : ''}</span>
- <span className="text-emerald-400 text-base">${p.winnings}</span>
+ <span className="text-emerald-400 text-base">${Number.isInteger(p.winnings) ? p.winnings : p.winnings.toFixed(2)}</span>
  </div>
  </div>
  ))}

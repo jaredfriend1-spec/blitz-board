@@ -221,7 +221,7 @@ export default function ResultsPage() {
                   <span className="font-semibold text-sm">Skins</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${Number.isInteger(ind.perSkin) ? ind.perSkin : ind.perSkin.toFixed(2)}/skin · Pot ${ind.totalSkinsPot}</span>
+                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${Number.isInteger(ind.perSkin) ? ind.perSkin : (Math.round(ind.perSkin * 100) / 100).toFixed(2)}/skin · Pot ${ind.totalSkinsPot}</span>
                 </div>
               </div>
               <div className="p-4 grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -252,7 +252,8 @@ export default function ResultsPage() {
                 )}
                 <div className="divide-y divide-zinc-800">
                   {players.filter(p => ind.skinsCount[p.id] > 0).map(p => {
-                    const final = ind.skinsCount[p.id] * ind.perSkin
+                    const finalRaw = ind.skinsCount[p.id] * ind.perSkin
+                const final = Math.round(finalRaw * 100) / 100
                     return (
                       <div key={p.id} className="flex items-center justify-between px-5 py-4">
                         <div className="flex items-center gap-3">
@@ -261,7 +262,7 @@ export default function ResultsPage() {
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="text-zinc-500 text-xs">{ind.skinsCount[p.id]} skin{ind.skinsCount[p.id] > 1 ? 's' : ''}</span>
-                          <span className="text-emerald-400 font-bold">${final}</span>
+                          <span className="text-emerald-400 font-bold">${Number.isInteger(final) ? final : final.toFixed(2)}</span>
                         </div>
                       </div>
                     )

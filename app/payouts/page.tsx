@@ -363,11 +363,20 @@ export default function PayoutsPage() {
 
  const f9 = runNine(0, 8)
  const b9 = runNine(9, 17)
+ const overallAmt = Number(m.overall || 0)
+ let overallPayA = 0, overallPayB = 0
+ if (overallAmt > 0) {
+ const allHoles = [...(f9.holeResults||[]), ...(b9.holeResults||[])]
+ const aHoles = allHoles.filter((h:any) => h.winner === 'A').length
+ const bHoles = allHoles.filter((h:any) => h.winner === 'B').length
+ if (aHoles > bHoles) overallPayA = overallAmt
+ else if (bHoles > aHoles) overallPayB = overallAmt
+ }
  const strokesA = Math.max(0, ...pA.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)))
  const strokesB = Math.max(0, ...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)))
- const net = (f9.payoutA + b9.payoutA + birdieA) - (f9.payoutB + b9.payoutB + birdieB)
+ const net = (f9.payoutA + b9.payoutA + overallPayA + birdieA) - (f9.payoutB + b9.payoutB + overallPayB + birdieB)
 
- return { sA_net: sA_final, sB_net: sB_final, sA_dots, sB_dots, holeBonus, strokesA, strokesB, f9, b9, birdieA, birdieB, net, useAutoPress, isPvPLike }
+ return { sA_net: sA_final, sB_net: sB_final, sA_dots, sB_dots, holeBonus, strokesA, strokesB, f9, b9, birdieA, birdieB, net, useAutoPress, isPvPLike, overallPayA, overallPayB, overallAmt }
  }
 
  const renderDots = (count: number) => {
@@ -813,6 +822,18 @@ export default function PayoutsPage() {
  <span className="text-blue-400">${res.b9.payoutB}</span>
  </div>
  </div>
+ {res.overallAmt > 0 ? (
+ <div className={`bg-black border p-5 rounded-2xl ${res.overallPayA>0?'border-emerald-500/40':res.overallPayB>0?'border-blue-500/40':'border-zinc-800'}`}>
+ <div className="text-purple-400 text-xs font-black tracking-widest mb-2">OVERALL (18)</div>
+ <div className="font-black text-lg">
+ {res.overallPayA > 0
+ ? <span className="text-emerald-400">{sideALabel} +${res.overallPayA}</span>
+ : res.overallPayB > 0
+ ? <span className="text-blue-400">{sideBLabel} +${res.overallPayB}</span>
+ : <span className="text-zinc-500">EVEN</span>}
+ </div>
+ </div>
+ ) : (
  <div className="bg-black border border-zinc-800 p-5 rounded-2xl">
  <div className="flex items-center gap-2 text-zinc-500 text-xs font-black tracking-widest mb-2"><Target size={12}/> BIRDIE POOL</div>
  <div className="font-black text-lg">
@@ -821,7 +842,21 @@ export default function PayoutsPage() {
  <span className="text-blue-400">${res.birdieB}</span>
  </div>
  </div>
+ )}
  </div>
+ {/* Extra birdie row if overall is also shown */}
+ {res.overallAmt > 0 && (res.birdieA > 0 || res.birdieB > 0) && (
+ <div className="px-4 sm:px-8 pb-4">
+ <div className="bg-black border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
+ <div className="flex items-center gap-2 text-zinc-500 text-xs font-black tracking-widest"><Target size={12}/> BIRDIE POOL</div>
+ <div className="font-black">
+ <span className="text-emerald-400">${res.birdieA}</span>
+ <span className="text-zinc-600 mx-2 text-sm">to</span>
+ <span className="text-blue-400">${res.birdieB}</span>
+ </div>
+ </div>
+ </div>
+ )}
 
  {/* Net result */}
  <div className="mx-4 sm:mx-8 mb-8 flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-6 sm:p-8 rounded-3xl gap-4">
