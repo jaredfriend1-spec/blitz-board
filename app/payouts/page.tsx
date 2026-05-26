@@ -224,11 +224,12 @@ export default function PayoutsPage() {
  let pB: any[] = []
 
  if (m.type === 'PvP') {
- pA = players.filter(p => p.name === m.sideA)
- pB = players.filter(p => p.name === m.sideB)
+ pA = players.filter(p => p.name === m.sideA).slice(0, 1)
+ pB = players.filter(p => p.name === m.sideB).slice(0, 1)
  } else if (m.type === '2v2') {
- pA = players.filter(p => p.name === m.sideA || p.name === m.sideA2)
- pB = players.filter(p => p.name === m.sideB || p.name === m.sideB2)
+ const uniqueBy = (arr: any[]) => arr.filter((p, i, self) => self.findIndex(x => x.name === p.name) === i)
+ pA = uniqueBy(players.filter(p => p.name === m.sideA || p.name === m.sideA2)).slice(0, 2)
+ pB = uniqueBy(players.filter(p => p.name === m.sideB || p.name === m.sideB2)).slice(0, 2)
  } else {
  // TvT
  pA = players.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id))
