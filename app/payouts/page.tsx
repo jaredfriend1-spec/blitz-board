@@ -376,7 +376,7 @@ export default function PayoutsPage() {
  const strokesB = Math.max(0, ...pB.map(p => Math.max(0, (Number(p.handicap)||0) - baseHcp)))
  const net = (f9.payoutA + b9.payoutA + overallPayA + birdieA) - (f9.payoutB + b9.payoutB + overallPayB + birdieB)
 
- return { sA_net: sA_final, sB_net: sB_final, sA_dots, sB_dots, holeBonus, strokesA, strokesB, f9, b9, birdieA, birdieB, net, useAutoPress, isPvPLike, overallPayA, overallPayB, overallAmt }
+ return { sA_net: sA_final, sB_net: sB_final, sA_dots, sB_dots, holeBonus, strokesA, strokesB, f9, b9, birdieA, birdieB, net, useAutoPress, isPvPLike, overallPayA, overallPayB, overallAmt, pA, pB }
  }
 
  const renderDots = (count: number) => {
@@ -418,7 +418,7 @@ export default function PayoutsPage() {
  {/* Side A — show each player individually for 2v2, combined for others */}
  {m.type === '2v2' ? (
  <>
- {pA.map((player: any, pi: number) => {
+ {(res.pA||[]).map((player: any, pi: number) => {
  const rawScores = scores[player.id] || Array(18).fill(0)
  return (
  <tr key={player.id} className="border-t border-zinc-900">
@@ -477,7 +477,7 @@ export default function PayoutsPage() {
  {/* Side B */}
  {m.type === '2v2' ? (
  <>
- {pB.map((player: any, pi: number) => {
+ {(res.pB||[]).map((player: any, pi: number) => {
  const rawScores = scores[player.id] || Array(18).fill(0)
  return (
  <tr key={player.id} className="border-t border-zinc-900 bg-white/[0.02]">
