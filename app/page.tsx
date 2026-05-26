@@ -668,6 +668,21 @@ export default function LandingPage() {
  </div>
  </Link>
  {/* Main items grid */}
+ {/* Master Dashboard — only visible to master admin */}
+ {typeof window !== 'undefined' && sessionStorage.getItem('role') === 'master' && (
+ <Link href="/master"
+ className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border-2 border-emerald-500/30 hover:border-emerald-500 p-4 rounded-2xl transition-all group mb-3 block">
+ <div className="flex items-center gap-3">
+ <Shield size={18} className="text-emerald-400"/>
+ <div>
+ <div className="font-bold text-sm text-emerald-400">⚡ Master Dashboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Roster · History · Full control</div>
+ </div>
+ </div>
+ <ChevronRight size={16} className="text-emerald-500"/>
+ </Link>
+ )}
+
  <div className="space-y-3 mb-6">
  {mainItems.map(item => (
  <Link key={item.title} href={item.path}
