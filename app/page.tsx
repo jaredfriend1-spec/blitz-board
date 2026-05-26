@@ -12,7 +12,7 @@ import {
 import Link from 'next/link'
 
 const ADMIN_PIN = "jeff"
-const MASTER_PIN = "jfriend024"
+const MASTER_PIN = "jared2025"
 
 export default function LandingPage() {
  const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
@@ -57,6 +57,7 @@ export default function LandingPage() {
  const stored = sessionStorage.getItem('role')
  if (stored === 'admin') setRole('admin')
  else if (stored === 'player') setRole('player')
+ else if (stored === 'master') setRole('master')
 
  // Firebase data
  onValue(ref(db, 'tournament/course'), snap => {
@@ -68,6 +69,21 @@ export default function LandingPage() {
  setCurrentDay(m.currentDay || '')
  setIsMock(!!m.isMock)
  setActiveMode(m.mode || '')
+ })
+ // Master data listeners
+ onValue(ref(db, 'globalRoster'), snap => {
+ if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
+ else setGlobalRoster([])
+ })
+ onValue(ref(db, 'courseHistory'), snap => {
+ if (snap.val()) setCourseLibrary(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
+ else setCourseLibrary([])
+ })
+ onValue(ref(db, 'history'), snap => {
+ if (snap.val()) {
+ const items = Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})).sort((a:any,b:any)=>Number(b.id)-Number(a.id))
+ setHistory(items)
+ } else setHistory([])
  })
  }, [])
 
@@ -510,7 +526,7 @@ export default function LandingPage() {
  ))}
  </div>
 
- {/* Guide + Switch Role — uniform pill style */}
+ {/* Guide + Exit — uniform pill style */}
  <div className="space-y-3">
  <Link href="/guide"
  className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
@@ -531,8 +547,8 @@ export default function LandingPage() {
  <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
  </div>
  <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Switch Role</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Change between Player and Admin</p>
+ <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Exit</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Return to home screen</p>
  </div>
  </button>
  </div>
@@ -678,7 +694,7 @@ export default function LandingPage() {
  ))}
  </div>
 
- {/* Guide + Switch Role — uniform pill style */}
+ {/* Guide + Exit — uniform pill style */}
  <div className="space-y-3">
  <Link href="/guide"
  className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
@@ -699,8 +715,8 @@ export default function LandingPage() {
  <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
  </div>
  <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Switch Role</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Change between Player and Admin</p>
+ <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Exit</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Return to home screen</p>
  </div>
  </button>
  </div>
