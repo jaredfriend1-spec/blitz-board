@@ -282,15 +282,25 @@ export default function QuickMatch() {
  setExistingWarning(false)
  }
 
+ // ── BLOCKED PLAYERS ───────────────────────────────────────────
+ const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
+ const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b))
+
  // ── PLAYERS ───────────────────────────────────────────────────────
  const addPlayer = () => {
  if (!newName.trim()) return
+ if (isBlocked(newName)) {
+ showToast('⛔ Sam Silverman cannot be added to Blitz Board')
+ setNewName('')
+ return
+ }
  const id = `p_${Date.now()}`
  setPlayers(prev => [...prev, { id, name: newName.trim().toUpperCase(), handicap: Number(newHcp)||0 }])
  setNewName(''); setNewHcp('')
  }
 
  const loadFromRoster = (rosterPlayer: any) => {
+ if (isBlocked(rosterPlayer.name)) { showToast('⛔ Sam Silverman cannot be added to Blitz Board'); return }
  const already = players.find(p => p.name === rosterPlayer.name)
  if (already) return showToast(`${rosterPlayer.name} already added`)
  const id = `p_${Date.now()}_${Math.random().toString(36).slice(2)}`
@@ -301,6 +311,7 @@ export default function QuickMatch() {
  const loadAllFromRoster = () => {
  let added = 0
  globalRoster.forEach(rp => {
+ if (isBlocked(rp.name)) return
  const already = players.find(p => p.name === rp.name)
  if (!already) {
  const id = `p_${Date.now()}_${Math.random().toString(36).slice(2)}_${added}`

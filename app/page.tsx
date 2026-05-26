@@ -12,7 +12,7 @@ import {
 import Link from 'next/link'
 
 const ADMIN_PIN = "jeff"
-const MASTER_PIN = "jared2025"
+const MASTER_PIN = "jfriend024"
 
 export default function LandingPage() {
  const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
@@ -26,6 +26,8 @@ export default function LandingPage() {
  const [demoLoading, setDemoLoading] = useState(false)
  const [toast, setToast] = useState('')
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
+ const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
+ const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b.toUpperCase()))
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
  const [courseLibrary, setCourseLibrary] = useState<any[]>([])
  const [history, setHistory] = useState<any[]>([])
@@ -328,6 +330,22 @@ export default function LandingPage() {
  </div>
  <Lock size={16} className="text-zinc-600 ml-auto group-hover:text-rose-400 transition-colors"/>
  </button>
+
+ <button
+ onClick={() => { setPinTarget('master'); setShowPinModal(true) }}
+ className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500/50 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
+ >
+ <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
+ <Shield size={28} className="text-emerald-400"/>
+ </div>
+ <div className="text-left">
+ <div className="text-xl font-black text-white">Master Admin</div>
+ <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
+ Full control & command center
+ </div>
+ </div>
+ <Lock size={16} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
+ </button>
  </div>
 
  <button onClick={loadDemo} disabled={demoLoading}
@@ -348,11 +366,7 @@ export default function LandingPage() {
  <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
  BLITZ BOARD · {new Date().getFullYear()}
  </p>
- <button
-          onClick={() => { setPinTarget('master'); setShowPinModal(true) }}
-          className="block w-full text-center text-zinc-800 hover:text-zinc-600 text-[10px] font-semibold transition-colors mt-1">
-          ⬡ master
-          </button>
+
  </div>
 
  {/* In-app confirm modal — no popup blockers */}
