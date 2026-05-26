@@ -11,7 +11,7 @@ import {
   AlertTriangle, Activity, Clock, Hash
 } from 'lucide-react'
 
-const MASTER_PIN = "jfriend024"
+const MASTER_PIN = "jared2025"
 
 // ── SECTION WRAPPER ────────────────────────────────────────────────
 function Section({ title, icon, children, defaultOpen = true }: any) {
@@ -44,6 +44,13 @@ function StatCard({ label, value, sub, color = 'text-emerald-400' }: any) {
 
 export default function MasterPage() {
   const [authed, setAuthed] = useState(false)
+
+  useEffect(() => {
+    // Auto-authenticate if already logged in as master from home screen
+    if (typeof window !== 'undefined' && sessionStorage.getItem('role') === 'master') {
+      setAuthed(true)
+    }
+  }, [])
   const [pin, setPin] = useState('')
   const [showPin, setShowPin] = useState(false)
   const [pinError, setPinError] = useState(false)

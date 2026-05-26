@@ -65,8 +65,16 @@ export default function RosterManager() {
  }
 
  // ── PLAYERS ───────────────────────────────────────────────────
+ const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
+ const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b))
+
  const addPlayer = () => {
  if (!newPlayerName.trim()) return
+ if (isBlocked(newPlayerName)) {
+ alert('⛔ Sam Silverman cannot be added to Blitz Board')
+ setNewPlayerName('')
+ return
+ }
  const pRef = push(ref(db,'tournament/roster'))
  set(pRef, { id: pRef.key, name: newPlayerName.trim().toUpperCase(), handicap: Number(newPlayerHcp) || 0 })
  setNewPlayerName("")

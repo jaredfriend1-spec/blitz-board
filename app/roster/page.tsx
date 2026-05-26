@@ -32,8 +32,16 @@ export default function RosterManager() {
  setTimeout(() => setToast(null), 2500)
  }
 
+ const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
+ const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b))
+
  const addPlayer = () => {
  if (!newName.trim()) return
+ if (isBlocked(newName)) {
+ alert('⛔ Sam Silverman cannot be added to Blitz Board')
+ setNewName('')
+ return
+ }
  const existing = players.find(p => p.name.toLowerCase() === newName.trim().toLowerCase())
  if (existing) return showToast('Player already in roster')
  const pRef = push(ref(db, 'globalRoster'))

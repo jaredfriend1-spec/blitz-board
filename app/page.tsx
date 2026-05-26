@@ -743,6 +743,21 @@ export default function LandingPage() {
 
  <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
  {/* Quick nav to all sections */}
+ {/* Primary CTA — Master Dashboard */}
+ <Link href="/master"
+ className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border-2 border-emerald-500/40 hover:border-emerald-500 p-5 rounded-2xl transition-all group">
+ <div className="flex items-center gap-4">
+ <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+ <Shield size={24} className="text-emerald-400"/>
+ </div>
+ <div>
+ <div className="font-black text-base text-emerald-400">Master Dashboard</div>
+ <div className="text-zinc-500 text-xs font-medium normal-case mt-0.5">Roster · History · Settings · Stats</div>
+ </div>
+ </div>
+ <ChevronRight size={20} className="text-emerald-500"/>
+ </Link>
+
  <div className="grid grid-cols-2 gap-3">
  {[
  {label:'Live Scorer', icon:<Target size={18}/>, path:'/scorer', color:'border-emerald-500/30 text-emerald-400'},
