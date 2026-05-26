@@ -11,7 +11,7 @@ import {
   AlertTriangle, Activity, Clock, Hash
 } from 'lucide-react'
 
-const MASTER_PIN = "jared2025"
+const MASTER_PIN = "jfriend024"
 
 // ── SECTION WRAPPER ────────────────────────────────────────────────
 function Section({ title, icon, children, defaultOpen = true }: any) {
