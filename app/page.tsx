@@ -24,6 +24,8 @@ export default function LandingPage() {
  const [archiving, setArchiving] = useState(false)
  const [archiveSuccess, setArchiveSuccess] = useState(false)
  const [demoLoading, setDemoLoading] = useState(false)
+ const [toast, setToast] = useState('')
+ const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
  const [courseLibrary, setCourseLibrary] = useState<any[]>([])
  const [history, setHistory] = useState<any[]>([])
@@ -288,6 +290,7 @@ export default function LandingPage() {
  <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
  GOLF TOURNAMENT SCORING
  </p>
+ <p className="text-zinc-700 text-[10px] font-medium normal-case mt-1">By Jared Friend</p>
  </div>
 
  {/* Role choice */}
