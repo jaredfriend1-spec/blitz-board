@@ -498,11 +498,7 @@ export default function MasterPage() {
                 <span className="text-zinc-400 text-sm font-semibold">Clear Active Match</span>
                 <Trash2 size={14} className="text-zinc-600"/>
               </button>
-              <button onClick={()=>setConfirmDelete({id:'history-all',label:'ALL history records (cannot be undone)',path:'history'})}
-                className="w-full flex items-center justify-between bg-transparent hover:bg-rose-950/10 border border-zinc-800 hover:border-rose-500/30 px-4 py-3 rounded-xl transition-all">
-                <span className="text-zinc-400 text-sm font-semibold">Wipe All History</span>
-                <Trash2 size={14} className="text-zinc-600"/>
-              </button>
+
             </div>
           </div>
         </Section>
