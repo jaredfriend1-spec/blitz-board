@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+import { db } from '@/lib/firebase'
+import { ref, onValue, set, get, push } from 'firebase/database'
 import {
  Shield, Zap, Users, BookOpen, ShieldAlert,
  User, Lock, Eye, EyeOff, Archive, RefreshCw, PlayCircle, X,
