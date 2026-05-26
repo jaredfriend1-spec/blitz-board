@@ -415,7 +415,52 @@ export default function PayoutsPage() {
  </tr>
  </thead>
  <tbody>
- {/* Side A */}
+ {/* Side A — show each player individually for 2v2, combined for others */}
+ {m.type === '2v2' ? (
+ <>
+ {pA.map((player: any, pi: number) => {
+ const rawScores = scores[player.id] || Array(18).fill(0)
+ return (
+ <tr key={player.id} className="border-t border-zinc-900">
+ <td className="py-2 px-4 text-left">
+ <div className="text-emerald-400 font-bold text-xs">{player.name}</div>
+ <div className="text-zinc-600 text-[9px] font-semibold">HCP {player.handicap||0}</div>
+ </td>
+ {holes.map(i => {
+ const g = rawScores[i] || 0
+ const par = pars[i] || 4
+ const diff = g > 0 ? g - par : null
+ let cls = 'w-6 h-6 flex items-center justify-center mx-auto text-[10px] font-bold rounded '
+ if (diff === null) cls += 'text-zinc-700'
+ else if (diff <= -2) cls += 'rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if (diff === -1) cls += 'rounded-full border border-red-500 text-red-400'
+ else if (diff === 0) cls += 'bg-zinc-800 text-white'
+ else if (diff === 1) cls += 'border border-zinc-600 text-zinc-400'
+ else cls += 'border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1 px-0.5"><div className={cls}>{g||'—'}</div></td>
+ })}
+ <td className="py-2 px-3 font-bold text-emerald-400 text-sm">
+ {holes.reduce((acc,i)=>acc+(rawScores[i]||0),0)||'—'}
+ </td>
+ </tr>
+ )
+ })}
+ <tr className="border-t-2 border-emerald-900/50 bg-emerald-950/20">
+ <td className="py-2 px-4 text-left">
+ <div className="text-emerald-300 font-black text-[9px] tracking-widest">BEST BALL</div>
+ </td>
+ {holes.map(i => (
+ <td key={i} className="py-2 px-0.5">
+ <div className="text-sm font-black text-emerald-300">{res.sA_net[i] || <span className="text-zinc-700">—</span>}</div>
+ {renderDots(res.sA_dots[i])}
+ </td>
+ ))}
+ <td className="py-2 px-3 font-black text-emerald-300 text-base">
+ {holes.reduce((acc,i)=>acc+(res.sA_net[i]||0),0)||'—'}
+ </td>
+ </tr>
+ </>
+ ) : (
  <tr className="border-t border-zinc-900">
  <td className="py-3 px-4 text-left text-emerald-400 font-black text-xs truncate max-w-[8rem]">{sideALabel}</td>
  {holes.map(i => (
@@ -428,7 +473,53 @@ export default function PayoutsPage() {
  {holes.reduce((acc,i)=>acc+(res.sA_net[i]||0),0)||'—'}
  </td>
  </tr>
+ )}
  {/* Side B */}
+ {m.type === '2v2' ? (
+ <>
+ {pB.map((player: any, pi: number) => {
+ const rawScores = scores[player.id] || Array(18).fill(0)
+ return (
+ <tr key={player.id} className="border-t border-zinc-900 bg-white/[0.02]">
+ <td className="py-2 px-4 text-left">
+ <div className="text-blue-400 font-bold text-xs">{player.name}</div>
+ <div className="text-zinc-600 text-[9px] font-semibold">HCP {player.handicap||0}</div>
+ </td>
+ {holes.map(i => {
+ const g = rawScores[i] || 0
+ const par = pars[i] || 4
+ const diff = g > 0 ? g - par : null
+ let cls = 'w-6 h-6 flex items-center justify-center mx-auto text-[10px] font-bold rounded '
+ if (diff === null) cls += 'text-zinc-700'
+ else if (diff <= -2) cls += 'rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if (diff === -1) cls += 'rounded-full border border-red-500 text-red-400'
+ else if (diff === 0) cls += 'bg-zinc-800 text-white'
+ else if (diff === 1) cls += 'border border-zinc-600 text-zinc-400'
+ else cls += 'border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1 px-0.5"><div className={cls}>{g||'—'}</div></td>
+ })}
+ <td className="py-2 px-3 font-bold text-blue-400 text-sm">
+ {holes.reduce((acc,i)=>acc+(rawScores[i]||0),0)||'—'}
+ </td>
+ </tr>
+ )
+ })}
+ <tr className="border-t-2 border-blue-900/50 bg-blue-950/20">
+ <td className="py-2 px-4 text-left">
+ <div className="text-blue-300 font-black text-[9px] tracking-widest">BEST BALL</div>
+ </td>
+ {holes.map(i => (
+ <td key={i} className="py-2 px-0.5">
+ <div className="text-sm font-black text-blue-300">{res.sB_net[i] || <span className="text-zinc-700">—</span>}</div>
+ {renderDots(res.sB_dots[i])}
+ </td>
+ ))}
+ <td className="py-2 px-3 font-black text-blue-300 text-base">
+ {holes.reduce((acc,i)=>acc+(res.sB_net[i]||0),0)||'—'}
+ </td>
+ </tr>
+ </>
+ ) : (
  <tr className="border-t border-zinc-900 bg-white/[0.02]">
  <td className="py-3 px-4 text-left text-blue-400 font-black text-xs truncate max-w-[8rem]">{sideBLabel}</td>
  {holes.map(i => (
@@ -441,6 +532,7 @@ export default function PayoutsPage() {
  {holes.reduce((acc,i)=>acc+(res.sB_net[i]||0),0)||'—'}
  </td>
  </tr>
+ )}
  {/* Winner row */}
  <tr className="border-t-2 border-zinc-800 bg-zinc-900/60">
  <td className="py-2 px-4 text-left text-zinc-600 font-black text-[10px]">HOLE</td>
