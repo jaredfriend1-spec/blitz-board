@@ -12,7 +12,7 @@ import {
 import Link from 'next/link'
 
 const ADMIN_PIN = "jeff"
-const MASTER_PIN = "jared2025"
+const MASTER_PIN = "jfriend024"
 
 export default function LandingPage() {
  const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
@@ -47,7 +47,8 @@ export default function LandingPage() {
 
  // PIN state
  const [showPinModal, setShowPinModal] = useState(false)
- const [pinTarget, setPinTarget] = useState<'admin'|'master'>('admin')
+ const pinTargetRef = React.useRef<'admin'|'master'>('admin')
+ const setPinTarget = (t: 'admin'|'master') => { pinTargetRef.current = t }
  const [pin, setPin] = useState('')
  const [pinError, setPinError] = useState(false)
  const [showPin, setShowPin] = useState(false)
@@ -98,7 +99,7 @@ export default function LandingPage() {
  }
 
  const submitPin = () => {
- if (pinTarget === 'master' && pin === MASTER_PIN) {
+ if (pinTargetRef.current === 'master' && pin === MASTER_PIN) {
  sessionStorage.setItem('role', 'master')
  setRole('master')
  setShowPinModal(false)
