@@ -333,11 +333,12 @@ export default function LandingPage() {
  <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
  BLITZ BOARD · {new Date().getFullYear()}
  </p>
+ <Link href="/master" className="block text-center text-zinc-800 hover:text-zinc-600 text-[10px] font-semibold transition-colors mt-1">⬡ master</Link>
  </div>
 
  {/* In-app confirm modal — no popup blockers */}
  {modal && (
- <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+ <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/80 backdrop-blur-sm overflow-y-auto">
  <div className="w-full max-w-sm bg-zinc-900 rounded-[2rem] border border-zinc-700 shadow-2xl overflow-hidden">
  <div className="p-6 space-y-3">
  <h2 className="font-bold text-lg text-white">{modal.title}</h2>
@@ -371,7 +372,7 @@ export default function LandingPage() {
 
  {/* PIN Modal */}
  {showPinModal && (
- <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+ <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/80 backdrop-blur-sm overflow-y-auto">
  <div className="w-full max-w-sm bg-zinc-900 rounded-[2.5rem] border-2 border-zinc-700 shadow-2xl p-8 space-y-6">
  <div className="text-center">
  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
