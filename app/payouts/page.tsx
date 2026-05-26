@@ -449,15 +449,17 @@ export default function PayoutsPage() {
  <td className="py-2 px-4 text-left">
  <div className="text-emerald-300 font-black text-[9px] tracking-widest">BEST BALL</div>
  </td>
- {holes.map(i => (
- <td key={i} className="py-2 px-0.5">
- <div className="text-sm font-black text-emerald-300">{res.sA_net[i] || <span className="text-zinc-700">—</span>}</div>
- {renderDots(res.sA_dots[i])}
- </td>
- ))}
- <td className="py-2 px-3 font-black text-emerald-300 text-base">
- {holes.reduce((acc,i)=>acc+(res.sA_net[i]||0),0)||'—'}
- </td>
+ {holes.map(i => {
+ const s = res.sA_net[i]; const par = pars[i]||4; const diff = s>0?s-par:null
+ let cls = 'w-6 h-6 flex items-center justify-center mx-auto text-[10px] font-black rounded '
+ if(!s) cls+='text-zinc-700'
+ else if(diff!=null&&diff<=-2) cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1) cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0) cls+='bg-emerald-900 text-emerald-100'
+ else if(diff===1) cls+='border border-emerald-800 text-emerald-400'
+ else cls+='border-2 border-emerald-900 text-emerald-500'
+ return <td key={i} className="py-1 px-0.5"><div className={cls}>{s||'—'}</div>{renderDots(res.sA_dots[i])}</td>
+ })}
  </tr>
  </>
  ) : (
@@ -508,12 +510,17 @@ export default function PayoutsPage() {
  <td className="py-2 px-4 text-left">
  <div className="text-blue-300 font-black text-[9px] tracking-widest">BEST BALL</div>
  </td>
- {holes.map(i => (
- <td key={i} className="py-2 px-0.5">
- <div className="text-sm font-black text-blue-300">{res.sB_net[i] || <span className="text-zinc-700">—</span>}</div>
- {renderDots(res.sB_dots[i])}
- </td>
- ))}
+ {holes.map(i => {
+ const s = res.sB_net[i]; const par = pars[i]||4; const diff = s>0?s-par:null
+ let cls = 'w-6 h-6 flex items-center justify-center mx-auto text-[10px] font-black rounded '
+ if(!s) cls+='text-zinc-700'
+ else if(diff!=null&&diff<=-2) cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1) cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0) cls+='bg-blue-900 text-blue-100'
+ else if(diff===1) cls+='border border-blue-800 text-blue-400'
+ else cls+='border-2 border-blue-900 text-blue-500'
+ return <td key={i} className="py-1 px-0.5"><div className={cls}>{s||'—'}</div>{renderDots(res.sB_dots[i])}</td>
+ })}
  <td className="py-2 px-3 font-black text-blue-300 text-base">
  {holes.reduce((acc,i)=>acc+(res.sB_net[i]||0),0)||'—'}
  </td>

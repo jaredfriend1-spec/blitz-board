@@ -233,7 +233,10 @@ function buildRecap(arch: any) {
  const winner = net > 0 ? (m.type==='2v2'?`${m.sideA}+${m.sideA2||''}`:m.sideA) : net < 0 ? (m.type==='2v2'?`${m.sideB}+${m.sideB2||''}`:m.sideB) : 'TIE'
  const sideALabel = m.type==='2v2' ? `${m.sideA} + ${m.sideA2}` : m.sideA
  const sideBLabel = m.type==='2v2' ? `${m.sideB} + ${m.sideB2}` : m.sideB
- return { id: m.id, type: m.type, sideA: sideALabel, sideB: sideBLabel, sA, sB, f9, b9, tot18Pay, birdieA, birdieB, net, winner, nassau, press, autoPress, scoringType: m.scoringType||'NET', pars }
+ // Individual raw scores for each player (for 2v2 display)
+ const pAScores = pA.map((p:any) => ({ id:p.id, name:p.name, handicap:p.handicap, scores: arch.scores?.[p.id] || Array(18).fill(0) }))
+ const pBScores = pB.map((p:any) => ({ id:p.id, name:p.name, handicap:p.handicap, scores: arch.scores?.[p.id] || Array(18).fill(0) }))
+ return { id: m.id, type: m.type, sideA: sideALabel, sideB: sideBLabel, sA, sB, pAScores, pBScores, f9, b9, tot18Pay, birdieA, birdieB, net, winner, nassau, press, autoPress, scoringType: m.scoringType||'NET', pars }
  }).filter(Boolean)
 
  return {
@@ -797,6 +800,77 @@ return (
  </tr>
  </thead>
  <tbody>
+ {m.type === '2v2' ? (
+ <>
+ {/* Side A — individual players */}
+ {(m.pAScores||[{label:m.sideA,scores:m.sA}]).map((player:any) => {
+ const sc = player.scores || []
+ const nineScores = sc.slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={player.id||player.label} className="border-t border-zinc-900">
+ <td className="py-2 px-3 text-left">
+ <div className="text-emerald-400 font-bold text-[11px] truncate">{player.name||player.label}</div>
+ {player.handicap!==undefined && <div className="text-zinc-600 text-[9px]">HCP {player.handicap}</div>}
+ </td>
+ {nineScores.map((s:number,i:number) => {
+ const par = m.pars?.[start+i]||4; const diff = s>0?s-par:null
+ let cls = 'w-6 h-6 rounded flex items-center justify-center mx-auto text-[9px] font-black '
+ if(diff===null)cls+='text-zinc-700'
+ else if(diff<=-2)cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1)cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0)cls+='bg-zinc-800 text-white'
+ else if(diff===1)cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className="py-2 px-2 font-black text-sm text-emerald-400">{total||'—'}</td>
+ </tr>
+ )
+ })}
+ <tr className="border-t-2 border-emerald-900/50 bg-emerald-950/20">
+ <td className="py-1.5 px-3 text-emerald-300 font-black text-[9px] tracking-widest">BEST BALL</td>
+ {(m.sA||[]).slice(start,start+9).map((s:number,i:number) => (
+ <td key={i} className="py-1 text-center text-[10px] font-black text-emerald-300">{s||'—'}</td>
+ ))}
+ <td className="py-1.5 px-2 font-black text-sm text-emerald-300">{(m.sA||[]).slice(start,start+9).reduce((a:number,b:number)=>a+(b||0),0)||'—'}</td>
+ </tr>
+ {/* Side B — individual players */}
+ {(m.pBScores||[{label:m.sideB,scores:m.sB}]).map((player:any) => {
+ const sc = player.scores || []
+ const nineScores = sc.slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={player.id||player.label} className="border-t border-zinc-900 bg-white/[0.01]">
+ <td className="py-2 px-3 text-left">
+ <div className="text-blue-400 font-bold text-[11px] truncate">{player.name||player.label}</div>
+ {player.handicap!==undefined && <div className="text-zinc-600 text-[9px]">HCP {player.handicap}</div>}
+ </td>
+ {nineScores.map((s:number,i:number) => {
+ const par = m.pars?.[start+i]||4; const diff = s>0?s-par:null
+ let cls = 'w-6 h-6 rounded flex items-center justify-center mx-auto text-[9px] font-black '
+ if(diff===null)cls+='text-zinc-700'
+ else if(diff<=-2)cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1)cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0)cls+='bg-zinc-800 text-white'
+ else if(diff===1)cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className="py-2 px-2 font-black text-sm text-blue-400">{total||'—'}</td>
+ </tr>
+ )
+ })}
+ <tr className="border-t-2 border-blue-900/50 bg-blue-950/20">
+ <td className="py-1.5 px-3 text-blue-300 font-black text-[9px] tracking-widest">BEST BALL</td>
+ {(m.sB||[]).slice(start,start+9).map((s:number,i:number) => (
+ <td key={i} className="py-1 text-center text-[10px] font-black text-blue-300">{s||'—'}</td>
+ ))}
+ <td className="py-1.5 px-2 font-black text-sm text-blue-300">{(m.sB||[]).slice(start,start+9).reduce((a:number,b:number)=>a+(b||0),0)||'—'}</td>
+ </tr>
+ </>
+ ) : (
+ <>
  {[{label:m.sideA,scores:m.sA,color:'text-emerald-400'},{label:m.sideB,scores:m.sB,color:'text-blue-400'}].map(side => {
  const nineScores = (side.scores||[]).slice(start,start+9)
  const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
@@ -819,6 +893,8 @@ return (
  </tr>
  )
  })}
+ </>
+ )}
  {/* Hole winners */}
  <tr className="border-t border-zinc-800 bg-zinc-900/40">
  <td className="py-1.5 px-3 text-[9px] font-black text-zinc-600 text-left">HOLE</td>
