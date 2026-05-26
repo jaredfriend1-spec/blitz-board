@@ -93,6 +93,7 @@ export default function LandingPage() {
  }
 
  const chooseAdmin = () => {
+ setPinTarget('admin')
  setShowPinModal(true)
  }
 
@@ -333,36 +334,21 @@ export default function LandingPage() {
 
  <button
  onClick={chooseAdmin}
- className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-rose-500/50 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
- >
- <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-500/20 transition-colors">
- <ShieldAlert size={28} className="text-rose-400"/>
- </div>
- <div className="text-left">
- <div className="text-xl font-black text-white">I'm the Admin</div>
- <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
- Setup, manage & configure
- </div>
- </div>
- <Lock size={16} className="text-zinc-600 ml-auto group-hover:text-rose-400 transition-colors"/>
- </button>
-
- <button
- onClick={() => { setPinTarget('master'); setShowPinModal(true) }}
- className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500/50 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
+ className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
  >
  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
- <Shield size={28} className="text-emerald-400"/>
+ <ShieldAlert size={28} className="text-emerald-400"/>
  </div>
  <div className="text-left">
- <div className="text-xl font-black text-white">Master Admin</div>
+ <div className="text-xl font-black text-white">Tournament Admin</div>
  <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
- Full control & command center
+ Setup, score & manage matches
  </div>
  </div>
  <Lock size={16} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
  </button>
  </div>
+
 
  <button onClick={loadDemo} disabled={demoLoading}
  className="w-full flex items-center justify-center gap-2 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-500/30 hover:border-emerald-500/50 px-4 py-4 rounded-2xl transition-all group disabled:opacity-50">
@@ -381,6 +367,11 @@ export default function LandingPage() {
  </Link>
  <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
  BLITZ BOARD · {new Date().getFullYear()}
+ <button
+          onClick={() => { setPinTarget('master'); setShowPinModal(true) }}
+          className="block w-full text-center text-zinc-800 hover:text-zinc-600 text-[10px] font-medium transition-colors py-1">
+          ⬡ master admin
+          </button>
  </p>
 
  </div>
