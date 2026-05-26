@@ -1,19 +1,19 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { db } from '@/lib/firebase'
-import { ref, onValue, get, set, push } from 'firebase/database'
 import {
- Trophy, Settings, Target, DollarSign, Flag,
- ChevronRight, History, BookOpen, ShieldAlert,
- User, Users, Lock, Eye, EyeOff, Zap, Archive, RefreshCw, PlayCircle, X
+ Shield, Zap, Users, BookOpen, ShieldAlert,
+ User, Lock, Eye, EyeOff, Archive, RefreshCw, PlayCircle, X,
+ Target, DollarSign, Trophy, History, Settings, BarChart3, Activity,
+ ChevronRight, Flag
 } from 'lucide-react'
 import Link from 'next/link'
 
 const ADMIN_PIN = "jeff"
+const MASTER_PIN = "jared2025"
 
 export default function LandingPage() {
- const [role, setRole] = useState<'none' | 'player' | 'admin'>('none')
+ const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
  const [courseName, setCourseName] = useState('')
  const [tripName, setTripName] = useState('')
  const [currentDay, setCurrentDay] = useState('')
@@ -22,6 +22,9 @@ export default function LandingPage() {
  const [archiving, setArchiving] = useState(false)
  const [archiveSuccess, setArchiveSuccess] = useState(false)
  const [demoLoading, setDemoLoading] = useState(false)
+ const [globalRoster, setGlobalRoster] = useState<any[]>([])
+ const [courseLibrary, setCourseLibrary] = useState<any[]>([])
+ const [history, setHistory] = useState<any[]>([])
  const [modal, setModal] = useState<{
  title: string
  body: string
@@ -38,6 +41,7 @@ export default function LandingPage() {
 
  // PIN state
  const [showPinModal, setShowPinModal] = useState(false)
+ const [pinTarget, setPinTarget] = useState<'admin'|'master'>('admin')
  const [pin, setPin] = useState('')
  const [pinError, setPinError] = useState(false)
  const [showPin, setShowPin] = useState(false)
@@ -71,7 +75,13 @@ export default function LandingPage() {
  }
 
  const submitPin = () => {
- if (pin === ADMIN_PIN) {
+ if (pinTarget === 'master' && pin === MASTER_PIN) {
+ sessionStorage.setItem('role', 'master')
+ setRole('master')
+ setShowPinModal(false)
+ setPin('')
+ setPinError(false)
+ } else if (pin === ADMIN_PIN) {
  sessionStorage.setItem('role', 'admin')
  setRole('admin')
  setShowPinModal(false)
@@ -333,7 +343,11 @@ export default function LandingPage() {
  <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
  BLITZ BOARD · {new Date().getFullYear()}
  </p>
- <Link href="/master" className="block text-center text-zinc-800 hover:text-zinc-600 text-[10px] font-semibold transition-colors mt-1">⬡ master</Link>
+ <button
+          onClick={() => { setPinTarget('master'); setShowPinModal(true) }}
+          className="block w-full text-center text-zinc-800 hover:text-zinc-600 text-[10px] font-semibold transition-colors mt-1">
+          ⬡ master
+          </button>
  </div>
 
  {/* In-app confirm modal — no popup blockers */}
@@ -675,4 +689,161 @@ export default function LandingPage() {
  </div>
  </div>
  )
+
+ // ── MASTER HUB ─────────────────────────────────────────────────
+ if (role === 'master') {
+ return (
+ <div className="min-h-screen bg-black text-white font-sans pb-20">
+ {/* Header */}
+ <div className="bg-zinc-950 border-b border-emerald-500/30 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
+ <div className="flex items-center gap-3">
+ <Shield size={18} className="text-emerald-400"/>
+ <div>
+ <h1 className="font-black text-sm text-white tracking-tight">MASTER ADMIN</h1>
+ <p className="text-zinc-600 text-[10px] font-medium">Full control · Jared only</p>
+ </div>
+ </div>
+ <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
+ className="text-zinc-600 hover:text-zinc-400 text-xs font-semibold transition-colors flex items-center gap-1">
+ <RefreshCw size={12}/> Exit
+ </button>
+ </div>
+
+ {toast && (
+ <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-black px-5 py-2.5 rounded-2xl font-bold text-sm shadow-xl">
+ {toast}
+ </div>
+ )}
+
+ <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
+ {/* Quick nav to all sections */}
+ <div className="grid grid-cols-2 gap-3">
+ {[
+ {label:'Live Scorer', icon:<Target size={18}/>, path:'/scorer', color:'border-emerald-500/30 text-emerald-400'},
+ {label:'Payouts', icon:<DollarSign size={18}/>, path:'/payouts', color:'border-yellow-500/30 text-yellow-400'},
+ {label:'Results', icon:<Trophy size={18}/>, path:'/results', color:'border-blue-500/30 text-blue-400'},
+ {label:'History', icon:<History size={18}/>, path:'/history', color:'border-purple-500/30 text-purple-400'},
+ {label:'Quick Match', icon:<Zap size={18}/>, path:'/match', color:'border-amber-500/30 text-amber-400'},
+ {label:'Setup', icon:<Settings size={18}/>, path:'/setup', color:'border-zinc-500/30 text-zinc-400'},
+ ].map(item => (
+ <Link key={item.path} href={item.path}
+ className={`flex items-center gap-3 bg-zinc-900/60 p-4 rounded-2xl border ${item.color} hover:bg-zinc-800/60 transition-all`}>
+ <span className={item.color.split(' ')[1]}>{item.icon}</span>
+ <span className="font-bold text-sm text-white">{item.label}</span>
+ </Link>
+ ))}
+ </div>
+
+ {/* Global Roster */}
+ <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
+ <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+ <div className="flex items-center gap-3">
+ <Users size={16} className="text-emerald-400"/>
+ <span className="font-bold text-sm">Global Roster ({globalRoster.length})</span>
+ </div>
+ <Link href="/roster" className="text-emerald-400 text-xs font-semibold hover:text-emerald-300 transition-colors">Manage →</Link>
+ </div>
+ <div className="p-4 space-y-2">
+ {globalRoster.slice(0,5).map(p => (
+ <div key={p.id} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5">
+ <span className="font-semibold text-sm">{p.name}</span>
+ <span className="text-zinc-500 text-xs">HCP {p.handicap||0}</span>
+ </div>
+ ))}
+ {globalRoster.length > 5 && <p className="text-zinc-600 text-xs text-center">+{globalRoster.length-5} more in Roster Manager</p>}
+ {globalRoster.length === 0 && <p className="text-zinc-600 text-xs text-center py-2">No players yet</p>}
+ </div>
+ </div>
+
+ {/* Recent history */}
+ <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
+ <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+ <div className="flex items-center gap-3">
+ <History size={16} className="text-purple-400"/>
+ <span className="font-bold text-sm">Recent History ({history.length})</span>
+ </div>
+ <Link href="/history" className="text-purple-400 text-xs font-semibold hover:text-purple-300 transition-colors">View All →</Link>
+ </div>
+ <div className="p-4 space-y-2">
+ {history.slice(0,5).map(arch => {
+ const date = new Date(Number(arch.id)).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+ const course = arch.course?.name || arch._meta?.courseName || '—'
+ const players = arch.roster ? Object.keys(arch.roster).length : 0
+ return (
+ <div key={arch.id} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5">
+ <div>
+ <div className="font-semibold text-sm">{course}</div>
+ <div className="text-zinc-600 text-xs">{date} · {players} players</div>
+ </div>
+ <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${arch._meta?.mode==='match'?'bg-amber-500/20 text-amber-400':'bg-blue-500/20 text-blue-400'}`}>
+ {arch._meta?.mode==='match'?'MATCH':'TOUR'}
+ </span>
+ </div>
+ )
+ })}
+ {history.length === 0 && <p className="text-zinc-600 text-xs text-center py-2">No history yet</p>}
+ </div>
+ </div>
+
+ {/* Active match status */}
+ <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
+ <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-3">
+ <Activity size={16} className="text-amber-400"/>
+ <span className="font-bold text-sm">Active Match</span>
+ </div>
+ <div className="p-4">
+ {activeMode && !isMock ? (
+ <div className="space-y-3">
+ <div className="bg-zinc-950 border border-amber-500/30 rounded-xl px-4 py-3">
+ <p className="text-amber-400 font-bold text-sm">Match in progress</p>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-0.5">{courseName || 'Course not set'}</p>
+ </div>
+ <div className="grid grid-cols-2 gap-2">
+ <Link href="/scorer" className="flex items-center justify-center gap-2 bg-emerald-500 text-black py-3 rounded-xl font-bold text-sm">
+ <Target size={14}/> Scorer
+ </Link>
+ <button onClick={archiveMatch} disabled={archiving}
+ className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-xl font-bold text-sm transition-colors">
+ <Archive size={14}/> {archiving?'Saving...':'Archive'}
+ </button>
+ </div>
+ </div>
+ ) : isMock ? (
+ <div className="flex items-center justify-between bg-zinc-950 border border-amber-500/20 rounded-xl px-4 py-3">
+ <span className="text-amber-400 font-semibold text-sm">Demo running</span>
+ <button onClick={clearDemo} className="text-rose-400 text-xs font-semibold hover:text-rose-300">Clear Demo</button>
+ </div>
+ ) : (
+ <p className="text-zinc-600 text-sm text-center py-2 font-medium">No active match</p>
+ )}
+ </div>
+ </div>
+
+ {/* Stats summary */}
+ <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
+ <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-3">
+ <BarChart3 size={16} className="text-blue-400"/>
+ <span className="font-bold text-sm">All Time Stats</span>
+ </div>
+ <div className="p-4 grid grid-cols-3 gap-3">
+ <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-center">
+ <div className="text-emerald-400 font-black text-xl">{history.length}</div>
+ <div className="text-zinc-600 text-[10px] font-semibold mt-1">ROUNDS</div>
+ </div>
+ <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-center">
+ <div className="text-yellow-400 font-black text-xl">{globalRoster.length}</div>
+ <div className="text-zinc-600 text-[10px] font-semibold mt-1">PLAYERS</div>
+ </div>
+ <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-center">
+ <div className="text-purple-400 font-black text-xl">{courseLibrary.length}</div>
+ <div className="text-zinc-600 text-[10px] font-semibold mt-1">COURSES</div>
+ </div>
+ </div>
+ </div>
+
+ </div>
+ </div>
+ )
+ }
+
 }
