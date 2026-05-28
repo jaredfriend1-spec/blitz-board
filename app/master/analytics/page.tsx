@@ -1114,6 +1114,7 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
 
 export default function AnalyticsPage() {
   const [history, setHistory] = useState<any[]>([])
+  const [filterType, setFilterType] = useState<'all'|'match'|'tournament'|'nine'>('all')
   const { role, loading } = useAuth()
   const defaultSections = {money_board:true,match_records:true,scoring_avgs:true,skins:true,h2h:true,partnerships:true,handicap:true,integrity:true,consistency:true,trends:true,records:true,betting:true}
   const [scorerAccess, setScorerAccess] = useState(true)
@@ -1182,6 +1183,15 @@ export default function AnalyticsPage() {
     )
   }
 
+
+  const filteredHistory = history.filter(arch => {
+    if (filterType === 'all') return true
+    if (filterType === 'match') return arch._meta?.mode === 'match'
+    if (filterType === 'tournament') return arch._meta?.mode !== 'match' && !!arch._meta?.tripName
+    if (filterType === 'nine') return !!arch.course?.nineHole
+    return true
+  })
+
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       {/* Header */}
@@ -1190,7 +1200,7 @@ export default function AnalyticsPage() {
           <BarChart3 size={18} className="text-emerald-400"/>
           <div>
             <h1 className="font-black text-sm text-white tracking-tight">ANALYTICS</h1>
-            <p className="text-zinc-600 text-[10px] font-medium">{history.length} rounds · Master Admin only</p>
+            <p className="text-zinc-600 text-[10px] font-medium">{filteredHistory.length} of {history.length} rounds</p>
           </div>
         </div>
         <Link href="/"
@@ -1199,7 +1209,26 @@ export default function AnalyticsPage() {
         </Link>
       </div>
 
-      <AnalyticsDashboard history={history} activeSections={activeSections}/>
+      {/* Filter bar */}
+      <div className="px-4 py-3 flex gap-2 overflow-x-auto border-b border-zinc-900 bg-zinc-950/60">
+        {([
+          { key: 'all', label: '⚡ All' },
+          { key: 'match', label: '🏌️ Quick Matches' },
+          { key: 'tournament', label: '🏆 Tournaments' },
+          { key: 'nine', label: '🔟 9-Hole' },
+        ] as const).map(f => (
+          <button key={f.key} onClick={() => setFilterType(f.key)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+              filterType === f.key
+                ? 'bg-emerald-500 text-black'
+                : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300 border border-zinc-800'
+            }`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <AnalyticsDashboard history={filteredHistory} activeSections={activeSections}/>
     </div>
   )
 }
