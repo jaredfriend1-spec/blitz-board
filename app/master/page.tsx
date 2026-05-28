@@ -797,10 +797,12 @@ export default function MasterPage() {
   const [savedFormats, setSavedFormats] = useState<any[]>([])
 
   // Edit states
-  // Feature flags state
-  const [featureFlags, setFeatureFlags] = useState<Record<string,boolean>>({
-    analytics: true, history: true, payouts: true, results: true,
-    roster: true, guide: true, demo: true
+  // Analytics flags state
+  const [analyticsFlags, setAnalyticsFlags] = useState<Record<string,boolean>>({
+    analytics_scorer:true, analytics_player:false,
+    money_board:true, match_records:true, scoring_avgs:true, skins:true,
+    h2h:true, partnerships:true, handicap:true, integrity:true,
+    consistency:true, trends:true, records:true, betting:true
   })
 
   // User management state
@@ -830,8 +832,8 @@ export default function MasterPage() {
 
   useEffect(() => {
     if (!authed) return
-    onValue(ref(db,'featureFlags'), snap => {
-      if (snap.val()) setFeatureFlags(prev => ({ ...prev, ...snap.val() }))
+    onValue(ref(db,'analyticsFlags'), snap => {
+      if (snap.val()) setAnalyticsFlags((prev:any) => ({ ...prev, ...snap.val() }))
     })
     onValue(ref(db,'users'), snap => {
       if (snap.val()) {
@@ -1072,39 +1074,77 @@ export default function MasterPage() {
           </div>
         </Section>
 
-        {/* ── FEATURE FLAGS ── */}
-        <Section title="🎛️ Feature Visibility" icon={<Settings size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-3">
+        {/* ── ANALYTICS ACCESS ── */}
+        <Section title="📊 Analytics Access" icon={<BarChart3 size={16}/>} defaultOpen={false}>
+          <div className="p-4 space-y-4">
             <p className="text-zinc-500 text-xs font-medium normal-case">
-              Toggle which features are visible to players and scorers. Changes apply instantly — no deploy needed.
+              Control who can see Analytics and which sections are visible. Changes apply instantly.
             </p>
-            <div className="space-y-2">
-              {([
-                {key:'analytics', label:'Analytics', desc:'Stats, records & betting trends', who:'Scorer + Players'},
-                {key:'history', label:'History', desc:'Past tournament results', who:'All users'},
-                {key:'payouts', label:'Side Bets & Payouts', desc:'Match payouts & evidence', who:'All users'},
-                {key:'results', label:'Tournament Results', desc:'Leaderboard & rankings', who:'All users'},
-                {key:'roster', label:'Roster Manager', desc:'Player list management', who:'Scorer'},
-                {key:'guide', label:'How It Works Guide', desc:'Feature walkthrough', who:'All users'},
-                {key:'demo', label:'Live Demo Button', desc:'Demo mode on home screen', who:'All users'},
-              ] as const).map(f => (
-                <div key={f.key} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-                  <div className="flex-1 min-w-0 mr-3">
-                    <div className="font-semibold text-sm">{f.label}</div>
-                    <div className="text-zinc-600 text-[10px] font-medium normal-case">{f.desc} · <span className="text-zinc-700">{f.who}</span></div>
+
+            {/* Role access toggles */}
+            <div>
+              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">WHO CAN ACCESS ANALYTICS</p>
+              <div className="space-y-2">
+                {[
+                  {key:'analytics_scorer', label:'Scorer Admins', desc:'Jeff and other scorers can view analytics'},
+                  {key:'analytics_player', label:'Players', desc:'Anyone on the Player hub can view analytics'},
+                ].map(f => (
+                  <div key={f.key} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
+                    <div className="flex-1 min-w-0 mr-3">
+                      <div className="font-semibold text-sm">{f.label}</div>
+                      <div className="text-zinc-600 text-[10px] font-medium normal-case">{f.desc}</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const newVal = !(analyticsFlags[f.key] !== false)
+                        await set(ref(db, `analyticsFlags/${f.key}`), newVal)
+                        setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
+                        showToast(`Analytics ${newVal ? 'enabled' : 'disabled'} for ${f.label}`)
+                      }}
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]!==false ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]!==false ? 'translate-x-7' : 'translate-x-1'}`}/>
+                    </button>
                   </div>
-                  <button
-                    onClick={async () => {
-                      const newVal = !featureFlags[f.key]
-                      await set(ref(db, `featureFlags/${f.key}`), newVal)
-                      setFeatureFlags(prev => ({ ...prev, [f.key]: newVal }))
-                      showToast(`${f.label} ${newVal ? 'enabled' : 'disabled'}`)
-                    }}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${featureFlags[f.key] ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${featureFlags[f.key] ? 'translate-x-7' : 'translate-x-1'}`}/>
-                  </button>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            {/* Section visibility */}
+            <div>
+              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">WHICH SECTIONS ARE VISIBLE</p>
+              <div className="space-y-2">
+                {[
+                  {key:'money_board', label:'Money Leaderboard', desc:'Net won/lost per player'},
+                  {key:'match_records', label:'Match Records', desc:'W/L records by format'},
+                  {key:'scoring_avgs', label:'Scoring Averages', desc:'Avg scores, birdies, eagles'},
+                  {key:'skins', label:'Skins Kings', desc:'Skins won & money'},
+                  {key:'h2h', label:'Head to Head', desc:'Player vs player records'},
+                  {key:'partnerships', label:'Best Partnerships', desc:'2v2 partner win rates'},
+                  {key:'handicap', label:'Handicap Analysis', desc:'HCP trends over time'},
+                  {key:'integrity', label:'Handicap Integrity', desc:'Sandbagging detector'},
+                  {key:'consistency', label:'Consistency Index', desc:'Score variance'},
+                  {key:'trends', label:'Score Trends', desc:'Last 8 rounds chart'},
+                  {key:'records', label:'Round Records', desc:'Best/worst rounds ever'},
+                  {key:'betting', label:'Betting Stats', desc:'Format & bet analytics'},
+                ].map(f => (
+                  <div key={f.key} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5">
+                    <div className="flex-1 min-w-0 mr-3">
+                      <div className="font-semibold text-sm">{f.label}</div>
+                      <div className="text-zinc-600 text-[10px] font-medium normal-case">{f.desc}</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const newVal = !(analyticsFlags[f.key] !== false)
+                        await set(ref(db, `analyticsFlags/${f.key}`), newVal)
+                        setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
+                        showToast(`${f.label} ${newVal ? 'shown' : 'hidden'}`)
+                      }}
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]!==false ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]!==false ? 'translate-x-7' : 'translate-x-1'}`}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </Section>

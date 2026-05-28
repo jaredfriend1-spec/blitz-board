@@ -29,7 +29,6 @@ export default function LandingPage() {
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
  const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
  const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b.toUpperCase()))
- const [featureFlags, setFeatureFlags] = useState<Record<string,boolean>>({analytics:true,history:true,payouts:true,results:true,roster:true,guide:true,demo:true})
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
  const [courseLibrary, setCourseLibrary] = useState<any[]>([])
  const [history, setHistory] = useState<any[]>([])
@@ -71,7 +70,6 @@ export default function LandingPage() {
  setActiveMode(m.mode || '')
  })
  // Master data listeners
-    onValue(ref(db,'featureFlags'), snap => { if(snap.val()) setFeatureFlags(prev=>({...prev,...snap.val()})) })
  onValue(ref(db, 'globalRoster'), snap => {
  if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
  else setGlobalRoster([])
@@ -180,42 +178,6 @@ export default function LandingPage() {
   }
 
   const runDemoLoad = async () => {
-    // Block if real match is active
-    const metaSnap = await get(ref(db,'tournament/meta'))
-    const meta = metaSnap.val()
-    if (meta && !meta.isMock && (meta.mode || meta.tripName)) {
-      showModal({
-        title: '⚠️ Match In Progress',
-        body: 'You have a real match currently active. Archive it to History first before running the demo.',
-        warning: 'Running the demo while a match is active will lose all unarchived scores.',
-        confirmLabel: 'Archive & Run Demo',
-        cancelLabel: 'Cancel',
-        danger: true,
-        onConfirm: async () => {
-          closeModal()
-          const snap = await get(ref(db, 'tournament'))
-          if (snap.exists()) {
-            await set(ref(db, `history/${Date.now()}`), {
-              ...snap.val(),
-              _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
-            })
-          }
-          setDemoLoading(true)
-          await runDemoLoad()
-        },
-        onCancel: closeModal
-      })
-      return
-    }
-    showModal({
-      title: 'Load Demo Match?',
-      body: 'This loads a sample match with 8 players, 4 teams, and all 4 match types (1v1, 2v2, Team, Wheel) fully scored. Perfect for showing someone how the app works.',
-      warning: 'If a match is in progress it must be archived first. The demo button will warn you.',
-      confirmLabel: 'Load Demo',
-      cancelLabel: 'Cancel',
-      onConfirm: async () => { closeModal(); setDemoLoading(true); await runDemoLoad() },
-      onCancel: closeModal
-    })
     setDemoLoading(true)
     try {
       await set(ref(db,'tournament'), null)
@@ -332,13 +294,13 @@ export default function LandingPage() {
 
 
 
- {featureFlags.demo!==false && <button onClick={loadDemo} disabled={demoLoading}
+ <button onClick={loadDemo} disabled={demoLoading}
  className="w-full flex items-center justify-center gap-2 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-500/30 hover:border-emerald-500/50 px-4 py-4 rounded-2xl transition-all group disabled:opacity-50">
  <PlayCircle size={16} className="text-emerald-500 flex-shrink-0"/>
  <span className="font-semibold text-sm text-emerald-500 group-hover:text-emerald-400 transition-colors">
  {demoLoading ? 'Loading demo...' : 'See a Live Demo'}
  </span>
- </button>}
+ </button>
 
  <Link href="/guide"
  className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
@@ -395,10 +357,10 @@ export default function LandingPage() {
  // ── PLAYER HUB ─────────────────────────────────────────────────
  if (role === 'player') {
  const playerItems = [
- { key:'scorer', title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
- ...(featureFlags.results!==false?[{ key:'results', title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"}]:[]),
- ...(featureFlags.payouts!==false?[{ key:'payouts', title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"}]:[]),
- ...(featureFlags.history!==false?[{ key:'history', title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"}]:[]),
+ { title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
+ { title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"},
+ { title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"},
+ { title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"},
  ]
 
  return (
@@ -557,12 +519,8 @@ export default function LandingPage() {
  },
  ]
 
- const filteredAdminItems = adminItems.filter((item:any) => {
- if(item.key==='wizard'||item.key==='scorer') return true
- return featureFlags[item.key]!==false
- })
- const setupItem = filteredAdminItems[0]
- const mainItems = filteredAdminItems.slice(1)
+ const setupItem = adminItems[0]
+ const mainItems = adminItems.slice(1)
 
  return (
  <div className="min-h-screen bg-zinc-950 text-white font-sans">

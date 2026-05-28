@@ -21,6 +21,7 @@ export default function CoursesPage() {
   const [scanning, setScanning] = useState(false)
   const [toast, setToast] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
 
@@ -111,14 +112,25 @@ export default function CoursesPage() {
             {/* Scan scorecard */}
             <div className="space-y-2">
               <p className="text-zinc-500 text-[10px] font-semibold tracking-widest">HOLE DATA</p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={scanning}
-                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-zinc-700 hover:border-emerald-500 py-4 rounded-xl text-zinc-500 hover:text-emerald-400 transition-all font-semibold text-sm">
-                <Camera size={18}/>
-                {scanning ? 'Scanning...' : 'Scan Scorecard Photo'}
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={scanning}
+                  className="flex items-center justify-center gap-2 border-2 border-dashed border-zinc-700 hover:border-emerald-500 py-4 rounded-xl text-zinc-500 hover:text-emerald-400 transition-all font-semibold text-sm">
+                  <Camera size={18}/>
+                  {scanning ? 'Scanning...' : 'Take Photo'}
+                </button>
+                <button
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={scanning}
+                  className="flex items-center justify-center gap-2 border-2 border-dashed border-zinc-700 hover:border-zinc-500 py-4 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-semibold text-sm">
+                  <Plus size={18}/>
+                  Upload Image
+                </button>
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={e => e.target.files?.[0] && scanCard(e.target.files[0])}/>
+              <input ref={uploadInputRef} type="file" accept="image/*" className="hidden"
                 onChange={e => e.target.files?.[0] && scanCard(e.target.files[0])}/>
             </div>
 

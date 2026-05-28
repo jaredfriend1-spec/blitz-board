@@ -587,7 +587,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       )}
 
       {/* ── MONEY LEADERBOARD ── */}
-      <AnalyticsSection title="💰 Money Leaderboard" icon={<DollarSign size={15}/>} accent="yellow" defaultOpen={false}>
+      {analyticsFlags.money_board!==false && <AnalyticsSection title="💰 Money Leaderboard" icon={<DollarSign size={15}/>} accent="yellow" defaultOpen={false}>
         <div className="p-4 space-y-3">
           {moneyLeaderboard.map((p, i) => {
             const net = p.moneyWon - p.moneyLost
@@ -614,7 +614,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── MATCH WIN/LOSS ── */}
-      <AnalyticsSection title="⚡ Match Records" icon={<Trophy size={15}/>} accent="emerald">
+      {analyticsFlags.match_records!==false && <AnalyticsSection title="⚡ Match Records" icon={<Trophy size={15}/>} accent="emerald">
         <div className="p-4 space-y-3">
           {winRateLeaderboard.map((p, i) => (
             <div key={p.name} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
@@ -635,7 +635,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── SCORING STATS ── */}
-      <AnalyticsSection title="🏌️ Scoring Averages" icon={<Target size={15}/>} accent="blue">
+      {analyticsFlags.scoring_avgs!==false && <AnalyticsSection title="🏌️ Scoring Averages" icon={<Target size={15}/>} accent="blue">
         <div className="p-4 space-y-3">
           {scoringLeaderboard.map((p, i) => {
             const avg = p.grossScores.length ? Math.round(p.grossScores.reduce((s,n)=>s+n,0)/p.grossScores.length*10)/10 : 0
@@ -953,7 +953,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
 
-      <AnalyticsSection title="🦴 Skins Kings" icon={<Zap size={15}/>} accent="purple">
+      {analyticsFlags.skins!==false && <AnalyticsSection title="🦴 Skins Kings" icon={<Zap size={15}/>} accent="purple">
         <div className="p-4 space-y-3">
           {skinsLeaderboard.length === 0 && <p className="text-zinc-600 text-sm text-center py-4">No skins data yet</p>}
           {skinsLeaderboard.map((p, i) => {
@@ -978,7 +978,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── HEAD TO HEAD ── */}
-      <AnalyticsSection title="🥊 Head to Head Records" icon={<Users size={15}/>} accent="orange">
+      {analyticsFlags.h2h!==false && <AnalyticsSection title="🥊 Head to Head Records" icon={<Users size={15}/>} accent="orange">
         <div className="p-4 space-y-2">
           {h2h.slice(0,10).map(match => (
             <div key={match.matchup} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
@@ -1001,7 +1001,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── BEST PARTNERSHIPS ── */}
-      <AnalyticsSection title="🤝 Best Partnerships" icon={<Users size={15}/>} accent="teal">
+      {analyticsFlags.partnerships!==false && <AnalyticsSection title="🤝 Best Partnerships" icon={<Users size={15}/>} accent="teal">
         <div className="p-4 space-y-2">
           {partnerships.slice(0,8).map((p, i) => (
             <div key={p.names} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
@@ -1019,7 +1019,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── HANDICAP ANALYSIS ── */}
-      <AnalyticsSection title="📐 Handicap Analysis" icon={<Hash size={15}/>} accent="blue">
+      {analyticsFlags.handicap!==false && <AnalyticsSection title="📐 Handicap Analysis" icon={<Hash size={15}/>} accent="blue">
         <div className="p-4 space-y-4">
           <div className="space-y-2">
             <p className="text-zinc-500 text-[10px] font-semibold tracking-widest">CURRENT HANDICAPS</p>
@@ -1039,7 +1039,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── SANDBAG INDEX ── */}
-      <AnalyticsSection title="⚠️ Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
+      {analyticsFlags.integrity!==false && <AnalyticsSection title="⚠️ Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
         <div className="p-4 space-y-3">
           <div className="bg-zinc-900/60 border border-zinc-700 rounded-xl p-3 mb-1">
             <p className="text-zinc-400 text-xs font-semibold mb-1">How to read this</p>
@@ -1064,7 +1064,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── CONSISTENCY ── */}
-      <AnalyticsSection title="🎯 Consistency Index" icon={<Activity size={15}/>} accent="emerald">
+      {analyticsFlags.consistency!==false && <AnalyticsSection title="🎯 Consistency Index" icon={<Activity size={15}/>} accent="emerald">
         <div className="p-4 space-y-2">
           <p className="text-zinc-600 text-xs font-medium normal-case">Lower std deviation = more consistent player</p>
           {consistency.map((p, i) => (
@@ -1115,7 +1115,23 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
 export default function AnalyticsPage() {
   const [history, setHistory] = useState<any[]>([])
   const { role, loading } = useAuth()
-  const authed = role === 'master' || role === 'scorer'
+  const [analyticsFlags, setAnalyticsFlags] = useState<Record<string,boolean>>({
+    analytics_scorer:true, analytics_player:false,
+    money_board:true, match_records:true, scoring_avgs:true, skins:true,
+    h2h:true, partnerships:true, handicap:true, integrity:true,
+    consistency:true, trends:true, records:true, betting:true
+  })
+
+  useEffect(() => {
+    onValue(ref(db,'analyticsFlags'), snap => {
+      if (snap.val()) setAnalyticsFlags((prev:any) => ({...prev,...snap.val()}))
+    })
+  }, [])
+
+  // Access control - master always gets in, others depend on flags
+  const authed = role === 'master' ||
+    (role === 'scorer' && analyticsFlags.analytics_scorer !== false) ||
+    (role === null && analyticsFlags.analytics_player === true)
 
   useEffect(() => {
     if (!authed) return
