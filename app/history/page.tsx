@@ -1135,6 +1135,43 @@ return (
  </div>
  </div>
  )
+ {/* Delete confirmation modal */}
+ {deleteConfirm && (
+ <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl p-6 space-y-4">
+ <div className="text-center">
+ <div className="w-12 h-12 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+ <Trash2 size={20} className="text-rose-400"/>
+ </div>
+ <h2 className="font-black text-lg text-white">Delete Round?</h2>
+ <p className="text-zinc-500 text-sm font-medium normal-case mt-1">This permanently removes the record. Cannot be undone.</p>
+ </div>
+ <div>
+ <p className="text-zinc-500 text-xs font-semibold mb-2">Type <span className="text-rose-400 font-black">delete</span> to confirm</p>
+ <input
+ value={deleteInput}
+ onChange={e => setDeleteInput(e.target.value)}
+ onKeyDown={e => e.key === 'Enter' && confirmDelete()}
+ placeholder="delete"
+ autoFocus
+ className={`w-full bg-black border px-4 py-3 rounded-xl text-sm font-mono outline-none transition-colors ${deleteInput.toLowerCase() === 'delete' ? 'border-rose-500 text-rose-400' : 'border-zinc-700 text-white'}`}
+ />
+ </div>
+ <div className="flex gap-2">
+ <button onClick={() => { setDeleteConfirm(null); setDeleteInput('') }}
+ className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-3 rounded-xl font-bold text-sm transition-colors">
+ Cancel
+ </button>
+ <button onClick={confirmDelete}
+ disabled={deleteInput.toLowerCase() !== 'delete'}
+ className="flex-1 bg-rose-500 hover:bg-rose-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-3 rounded-xl font-bold text-sm transition-colors">
+ Delete
+ </button>
+ </div>
+ </div>
+ </div>
+ )}
+
 }
 
 // ── SECTION WRAPPER ───────────────────────────────────────────────
