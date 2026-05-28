@@ -350,11 +350,20 @@ export default function HistoryPage() {
  matchupToSave.birdie = Number(newMatchData.birdie) || 0
  matchupToSave.eagle = Number(newMatchData.eagle) || 0
  matchupToSave.autoPress = newMatchData.autoPress !== false
- } else {
+ } else if (newMatchType === '2v2') {
  matchupToSave.sideA = newMatchData.sideA
- matchupToSave.sideA2 = newMatchData.sideA2 || undefined
+ matchupToSave.sideA2 = newMatchData.sideA2
  matchupToSave.sideB = newMatchData.sideB
- matchupToSave.sideB2 = newMatchData.sideB2 || undefined
+ matchupToSave.sideB2 = newMatchData.sideB2
+ matchupToSave.nassau = Number(newMatchData.nassau) || 5
+ matchupToSave.press = Number(newMatchData.press) || 5
+ matchupToSave.birdie = Number(newMatchData.birdie) || 0
+ matchupToSave.eagle = Number(newMatchData.eagle) || 0
+ matchupToSave.autoPress = newMatchData.autoPress !== false
+ } else {
+ // PvP - don't include sideA2/sideB2
+ matchupToSave.sideA = newMatchData.sideA
+ matchupToSave.sideB = newMatchData.sideB
  matchupToSave.nassau = Number(newMatchData.nassau) || 5
  matchupToSave.press = Number(newMatchData.press) || 5
  matchupToSave.birdie = Number(newMatchData.birdie) || 0
