@@ -815,9 +815,6 @@ export default function MasterPage() {
   const [newCourseName, setNewCourseName] = useState('')
   const [addingCourse, setAddingCourse] = useState(false)
 
-  const [jeffPin, setJeffPin] = useState('jeff')
-  const [editingJeffPin, setEditingJeffPin] = useState(false)
-  const [newJeffPin, setNewJeffPin] = useState('')
 
   const [toast, setToast] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<{id:string,label:string,path:string}|null>(null)
@@ -1315,29 +1312,7 @@ export default function MasterPage() {
         {/* ── APP SETTINGS ── */}
         <Section title="App Settings" icon={<Settings size={16}/>} defaultOpen={false}>
           <div className="p-4 space-y-4">
-            {/* Jeff's PIN */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">JEFF'S ADMIN PIN</p>
-              {editingJeffPin ? (
-                <div className="flex gap-2">
-                  <input value={newJeffPin} onChange={e=>setNewJeffPin(e.target.value)} placeholder="New PIN" autoFocus
-                    className="flex-1 bg-black border border-emerald-500 px-3 py-2.5 rounded-xl font-mono font-bold text-sm outline-none tracking-widest"/>
-                  <button onClick={async()=>{
-                    // Note: PIN is hardcoded in landing-page.tsx as ADMIN_PIN constant
-                    // This is a visual reminder only - actual change requires code update
-                    showToast("Update ADMIN_PIN in landing-page.tsx to: "+newJeffPin)
-                    setEditingJeffPin(false)
-                  }} className="bg-emerald-500 text-black px-3 py-2.5 rounded-xl font-bold text-sm"><Check size={14}/></button>
-                  <button onClick={()=>setEditingJeffPin(false)} className="text-zinc-600 px-2"><X size={14}/></button>
-                </div>
-              ) : (
-                <button onClick={()=>{setEditingJeffPin(true);setNewJeffPin('')}}
-                  className="w-full flex items-center justify-between bg-zinc-950 border border-zinc-800 hover:border-zinc-600 px-4 py-3 rounded-xl transition-colors">
-                  <span className="font-mono font-bold text-sm text-zinc-400">••••••</span>
-                  <span className="text-zinc-600 text-xs font-semibold flex items-center gap-1"><Edit3 size={12}/> Change</span>
-                </button>
-              )}
-            </div>
+
 
             {/* Saved formats */}
             <div>
