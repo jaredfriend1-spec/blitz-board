@@ -611,7 +611,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             )
           })}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── MATCH WIN/LOSS ── */}
       {analyticsFlags.match_records!==false && <AnalyticsSection title="⚡ Match Records" icon={<Trophy size={15}/>} accent="emerald">
@@ -632,7 +632,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             </div>
           ))}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── SCORING STATS ── */}
       {analyticsFlags.scoring_avgs!==false && <AnalyticsSection title="🏌️ Scoring Averages" icon={<Target size={15}/>} accent="blue">
@@ -710,10 +710,10 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             )
           })}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── ROUND RECORDS ── */}
-      <AnalyticsSection title="🏅 Round Records — All Time" icon={<Trophy size={15}/>} accent="yellow">
+      {analyticsFlags.records!==false && <AnalyticsSection title="🏅 Round Records — All Time" icon={<Trophy size={15}/>} accent="yellow">
         <div className="p-4 space-y-4">
 
           {/* 18-hole records */}
@@ -835,10 +835,10 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             </div>
           )}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── BETTING STATS ── */}
-      <AnalyticsSection title="🎰 Betting Stats & Patterns" icon={<DollarSign size={15}/>} accent="yellow">
+      {analyticsFlags.betting!==false && <AnalyticsSection title="🎰 Betting Stats & Patterns" icon={<DollarSign size={15}/>} accent="yellow">
         <div className="p-4 space-y-4">
 
           {/* Overview numbers */}
@@ -950,7 +950,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
           )}
 
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
 
       {analyticsFlags.skins!==false && <AnalyticsSection title="🦴 Skins Kings" icon={<Zap size={15}/>} accent="purple">
@@ -975,7 +975,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             )
           })}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── HEAD TO HEAD ── */}
       {analyticsFlags.h2h!==false && <AnalyticsSection title="🥊 Head to Head Records" icon={<Users size={15}/>} accent="orange">
@@ -998,7 +998,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             </div>
           ))}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── BEST PARTNERSHIPS ── */}
       {analyticsFlags.partnerships!==false && <AnalyticsSection title="🤝 Best Partnerships" icon={<Users size={15}/>} accent="teal">
@@ -1016,7 +1016,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             </div>
           ))}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── HANDICAP ANALYSIS ── */}
       {analyticsFlags.handicap!==false && <AnalyticsSection title="📐 Handicap Analysis" icon={<Hash size={15}/>} accent="blue">
@@ -1036,7 +1036,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             ))}
           </div>
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── SANDBAG INDEX ── */}
       {analyticsFlags.integrity!==false && <AnalyticsSection title="⚠️ Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
@@ -1061,7 +1061,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             </div>
           ))}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── CONSISTENCY ── */}
       {analyticsFlags.consistency!==false && <AnalyticsSection title="🎯 Consistency Index" icon={<Activity size={15}/>} accent="emerald">
@@ -1081,10 +1081,10 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             </div>
           ))}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
       {/* ── SCORING TRENDS ── */}
-      <AnalyticsSection title="📈 Score Trends (Last 8 Rounds)" icon={<BarChart3 size={15}/>} accent="blue">
+      {analyticsFlags.trends!==false && <AnalyticsSection title="📈 Score Trends (Last 8 Rounds)" icon={<BarChart3 size={15}/>} accent="blue">
         <div className="p-4 space-y-3">
           {scoreTrends.filter(p => p.scores.length >= 2).map(p => {
             const avg = Math.round(p.scores.reduce((a,b)=>a+b,0)/p.scores.length)
@@ -1103,7 +1103,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
             )
           })}
         </div>
-      </AnalyticsSection>
+      </AnalyticsSection>}
 
     </div>
   )
