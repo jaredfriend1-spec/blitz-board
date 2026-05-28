@@ -9,11 +9,10 @@ import {
   Shield, Users, BookOpen, History, Settings, BarChart3,
   Trash2, Plus, Edit3, Check, X, ChevronDown, ChevronRight,
   Database, Zap, DollarSign, Trophy, Flag, RefreshCw,
-  Lock, Eye, EyeOff, LogOut, Download, Archive, Target,
+  Lock, LogOut, Download, Archive, Target,
   AlertTriangle, Activity, Clock, Hash
 } from 'lucide-react'
 
-const MASTER_PIN = "jared2025"
 
 // ── SECTION WRAPPER ────────────────────────────────────────────────
 function Section({ title, icon, children, defaultOpen = false }: any) {
@@ -842,11 +841,6 @@ export default function MasterPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
 
-  const tryPin = () => {
-    if (pin === MASTER_PIN) { setAuthed(true); setPinError(false) }
-    else { setPinError(true); setPin('') }
-  }
-
   // ── STATS ────────────────────────────────────────────────────────
   const totalRounds = history.length
   const allPlayers: Record<string,{name:string,rounds:number,skins:number,totalScore:number,holes:number}> = {}
@@ -882,38 +876,12 @@ export default function MasterPage() {
   if (!authed) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl mb-4">
-              <Shield size={28} className="text-emerald-400"/>
-            </div>
-            <h1 className="text-2xl font-black text-white">Master Admin</h1>
-            <p className="text-zinc-600 text-sm font-medium normal-case mt-1">Blitz Board Command Center</p>
-          </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
-            <div className="relative">
-              <input
-                type={showPin ? 'text' : 'password'}
-                value={pin}
-                onChange={e => { setPin(e.target.value); setPinError(false) }}
-                onKeyDown={e => e.key==='Enter' && tryPin()}
-                placeholder="Enter master PIN"
-                className={`w-full bg-black border ${pinError?'border-rose-500':'border-zinc-700'} focus:border-emerald-500 p-4 rounded-xl font-mono text-white text-lg outline-none text-center tracking-widest`}
-                autoFocus
-              />
-              <button onClick={() => setShowPin(!showPin)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
-                {showPin ? <EyeOff size={18}/> : <Eye size={18}/>}
-              </button>
-            </div>
-            {pinError && <p className="text-rose-400 text-xs font-semibold text-center">Incorrect PIN</p>}
-            <button onClick={tryPin}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-xl font-black text-sm transition-colors">
-              Enter
-            </button>
-          </div>
-          <Link href="/" className="block text-center text-zinc-700 hover:text-zinc-500 text-xs font-medium mt-6 transition-colors">
-            ← Back to app
+        <div className="text-center">
+          <Shield size={32} className="text-zinc-700 mx-auto mb-4"/>
+          <p className="text-zinc-500 font-semibold text-sm mb-4">Master Admin access required</p>
+          <Link href="/login"
+            className="bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-3 rounded-xl font-black text-sm transition-colors">
+            Sign In
           </Link>
         </div>
       </div>
