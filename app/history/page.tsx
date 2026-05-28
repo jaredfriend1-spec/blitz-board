@@ -2,11 +2,11 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
-import { ref, onValue, set } from 'firebase/database'
+import { ref, onValue, set, push } from 'firebase/database'
 import {
  ArrowLeft, Archive, Calendar, Users, Trophy, Zap,
  Trash2, ChevronDown, ChevronUp, Medal, Target,
- Flag, DollarSign, Sword, RefreshCw, Check, FileDown, Loader2
+ Flag, DollarSign, Sword, RefreshCw, Check, FileDown, Loader2, Plus
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -269,6 +269,24 @@ export default function HistoryPage() {
  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
  const [exportingId, setExportingId] = useState<string | null>(null)
  const [expandedWheelPairHistKey, setExpandedWheelPairHistKey] = useState<string | null>(null)
+ 
+ // ── ADD MATCHUPS STATE ──
+ const [addMatchupsTo, setAddMatchupsTo] = useState<string | null>(null)
+ const [newMatchType, setNewMatchType] = useState<'PvP' | '2v2'>('PvP')
+ const [newMatchData, setNewMatchData] = useState<any>({
+ sideA: '',
+ sideA2: '',
+ sideB: '',
+ sideB2: '',
+ nassau: 5,
+ press: 5,
+ birdie: 0,
+ eagle: 0,
+ autoPress: true,
+ scoringType: 'NET',
+ wheelPlayers: [],
+ wheelAmount: 10,
+ })
 
  useEffect(() => {
  onValue(ref(db, 'history'), snap => {
@@ -289,6 +307,59 @@ export default function HistoryPage() {
  }
  }
 
+ // ── SAVE NEW MATCHUP ──
+ const saveNewMatchup = () => {
+ if (!addMatchupsTo) return
+ 
+ // Validate inputs
+ if (!newMatchData.sideA || !newMatchData.sideB) {
+ alert('Please select Side A and Side B players')
+ return
+ }
+ if (newMatchType === '2v2' && (!newMatchData.sideA2 || !newMatchData.sideB2)) {
+ alert('For 2v2, please select 2 players per side')
+ return
+ }
+
+ const matchupToSave = {
+ type: newMatchType,
+ sideA: newMatchData.sideA,
+ sideA2: newMatchData.sideA2 || undefined,
+ sideB: newMatchData.sideB,
+ sideB2: newMatchData.sideB2 || undefined,
+ nassau: Number(newMatchData.nassau) || 5,
+ press: Number(newMatchData.press) || 5,
+ birdie: Number(newMatchData.birdie) || 0,
+ eagle: Number(newMatchData.eagle) || 0,
+ autoPress: newMatchData.autoPress !== false,
+ scoringType: newMatchData.scoringType || 'NET',
+ wheelPlayers: newMatchData.wheelPlayers || [],
+ wheelAmount: Number(newMatchData.wheelAmount) || 10,
+ }
+
+ try {
+ push(ref(db, `history/${addMatchupsTo}/matchups`), matchupToSave)
+ // Reset modal
+ setAddMatchupsTo(null)
+ setNewMatchData({
+ sideA: '',
+ sideA2: '',
+ sideB: '',
+ sideB2: '',
+ nassau: 5,
+ press: 5,
+ birdie: 0,
+ eagle: 0,
+ autoPress: true,
+ scoringType: 'NET',
+ wheelPlayers: [],
+ wheelAmount: 10,
+ })
+ } catch (err) {
+ console.error('Error saving matchup:', err)
+ alert('Failed to save matchup')
+ }
+ }
 
  const exportPDF = (arch: any, recap: any, date: string) => {
  setExportingId(arch.id)
@@ -1090,10 +1161,16 @@ return (
  </Section>
  )}
 
- {/* ── FOOTER: EXPORT + DELETE ── */}
+ {/* ── FOOTER: EXPORT + DELETE + ADD MATCHUP ── */}
  <div className="px-5 py-4 border-t border-zinc-900 flex items-center justify-between gap-3">
  <p className="text-[9px] text-zinc-600 font-medium">{date}</p>
  <div className="flex items-center gap-2">
+ <button
+ onClick={() => setAddMatchupsTo(arch.id)}
+ className="flex items-center gap-1.5 bg-purple-900/40 hover:bg-purple-900/60 border border-purple-600/30 hover:border-purple-500 text-purple-300 hover:text-purple-200 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+ >
+ <Plus size={13}/> Add Matchup
+ </button>
  <button
  onClick={() => exportPDF(arch, recap, date)}
  disabled={exportingId === arch.id}
@@ -1112,6 +1189,188 @@ return (
  </button>
  </div>
  </div>
+
+ {/* ── ADD MATCHUPS MODAL ── */}
+ {addMatchupsTo === arch.id && (
+ <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+ <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+ <div className="p-6 border-b border-zinc-800">
+ <h2 className="text-xl font-black text-white">Add Matchup</h2>
+ <p className="text-[9px] text-zinc-500 mt-1 tracking-widest">{date}</p>
+ </div>
+ <div className="p-6 space-y-4">
+ {/* Match type selector */}
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">TYPE</label>
+ <div className="grid grid-cols-2 gap-2 mt-2">
+ {(['PvP', '2v2'] as const).map(type => (
+ <button
+ key={type}
+ onClick={() => setNewMatchType(type)}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${
+ newMatchType === type
+ ? 'bg-amber-500 text-black'
+ : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+ }`}
+ >
+ {type}
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* Player selectors */}
+ <div className="space-y-3">
+ {/* Side A */}
+ <div>
+ <label className="text-xs font-black text-emerald-400 tracking-widest">SIDE A</label>
+ <select
+ value={newMatchData.sideA}
+ onChange={(e) => setNewMatchData({...newMatchData, sideA: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select player</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+
+ {/* Side A2 (2v2 only) */}
+ {newMatchType === '2v2' && (
+ <div>
+ <label className="text-xs font-black text-emerald-400 tracking-widest">SIDE A PARTNER</label>
+ <select
+ value={newMatchData.sideA2}
+ onChange={(e) => setNewMatchData({...newMatchData, sideA2: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select partner</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+ )}
+
+ {/* Side B */}
+ <div>
+ <label className="text-xs font-black text-blue-400 tracking-widest">SIDE B</label>
+ <select
+ value={newMatchData.sideB}
+ onChange={(e) => setNewMatchData({...newMatchData, sideB: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select player</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+
+ {/* Side B2 (2v2 only) */}
+ {newMatchType === '2v2' && (
+ <div>
+ <label className="text-xs font-black text-blue-400 tracking-widest">SIDE B PARTNER</label>
+ <select
+ value={newMatchData.sideB2}
+ onChange={(e) => setNewMatchData({...newMatchData, sideB2: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select partner</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+ )}
+ </div>
+
+ {/* Match amounts */}
+ <div className="grid grid-cols-3 gap-2">
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">NASSAU</label>
+ <input
+ type="number"
+ value={newMatchData.nassau}
+ onChange={(e) => setNewMatchData({...newMatchData, nassau: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
+ />
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">PRESS</label>
+ <input
+ type="number"
+ value={newMatchData.press}
+ onChange={(e) => setNewMatchData({...newMatchData, press: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
+ />
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">BIRDIE</label>
+ <input
+ type="number"
+ value={newMatchData.birdie}
+ onChange={(e) => setNewMatchData({...newMatchData, birdie: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
+ />
+ </div>
+ </div>
+
+ {/* Scoring type */}
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest mb-2 block">SCORING</label>
+ <div className="grid grid-cols-2 gap-2">
+ {(['NET', 'GROSS'] as const).map(type => (
+ <button
+ key={type}
+ onClick={() => setNewMatchData({...newMatchData, scoringType: type})}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${
+ newMatchData.scoringType === type
+ ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500'
+ : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700'
+ }`}
+ >
+ {type}
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* Auto-press toggle */}
+ <div className="flex items-center justify-between bg-zinc-800 px-3 py-2 rounded-xl">
+ <span className="text-xs font-black text-zinc-400">Auto-Press</span>
+ <button
+ onClick={() => setNewMatchData({...newMatchData, autoPress: !newMatchData.autoPress})}
+ className={`w-10 h-6 rounded-full flex items-center px-1 transition-all ${
+ newMatchData.autoPress
+ ? 'bg-emerald-500'
+ : 'bg-zinc-700'
+ }`}
+ >
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatchData.autoPress ? 'translate-x-4' : ''}`} />
+ </button>
+ </div>
+ </div>
+
+ {/* Modal footer */}
+ <div className="px-6 py-4 border-t border-zinc-800 flex gap-2">
+ <button
+ onClick={() => setAddMatchupsTo(null)}
+ className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-4 py-2 rounded-xl font-semibold text-xs transition-all"
+ >
+ Cancel
+ </button>
+ <button
+ onClick={saveNewMatchup}
+ className="flex-1 bg-amber-500 hover:bg-amber-600 text-black px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-1.5"
+ >
+ <Check size={13}/> Save
+ </button>
+ </div>
+ </div>
+ </div>
+ )}
  </div>
  )}
  </div>
@@ -1121,7 +1380,6 @@ return (
  </div>
  </div>
  )
-
 }
 
 // ── SECTION WRAPPER ───────────────────────────────────────────────
