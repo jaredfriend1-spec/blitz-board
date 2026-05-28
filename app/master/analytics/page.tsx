@@ -850,8 +850,9 @@ export default function MasterPage() {
       const d = snap.val() || {}
       if (d.scorer_access !== undefined) setScorerAccess(!!d.scorer_access)
       if (d.player_access !== undefined) setPlayerAccess(!!d.player_access)
-      if (d.scorer_sections) setScorerSections(prev => ({...prev, ...d.scorer_sections}))
-      if (d.player_sections) setPlayerSections(prev => ({...prev, ...d.player_sections}))
+      if (d.scorer_sections) setScorerSections(d.scorer_sections)
+      if (d.player_sections) setPlayerSections(d.player_sections)
+      setFlagsLoaded(true)
     })
     onValue(ref(db,'users'), snap => {
       if (snap.val()) {
@@ -1188,7 +1189,31 @@ export default function MasterPage() {
             {/* WHAT THEY SEE */}
             {analyticsTab === 'what' && (
               <div className="space-y-4">
-                <p className="text-zinc-600 text-xs font-medium normal-case">Control which sections each role sees. Independent per role.</p>
+                <p className="text-zinc-600 text-xs font-medium normal-case">Tap sections to toggle, then hit Save.</p>
+
+                {/* Single save button at TOP - always visible */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await set(ref(db, 'analyticsFlags/scorer_sections'), scorerSections)
+                        showToast('✓ Scorer view saved!')
+                      } catch(e) { showToast('❌ Save failed') }
+                    }}
+                    className="bg-blue-500 hover:bg-blue-400 text-white py-3 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
+                    <Check size={13}/> Save Scorer
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await set(ref(db, 'analyticsFlags/player_sections'), playerSections)
+                        showToast('✓ Player view saved!')
+                      } catch(e) { showToast('❌ Save failed') }
+                    }}
+                    className="bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
+                    <Check size={13}/> Save Players
+                  </button>
+                </div>
 
                 {/* Scorer sections */}
                 <div>
