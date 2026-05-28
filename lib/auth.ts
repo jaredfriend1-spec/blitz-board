@@ -22,10 +22,6 @@ export async function getUserRole(uid: string): Promise<UserRole> {
 export async function signIn(email: string, password: string): Promise<{ user: User; role: UserRole }> {
   const result = await signInWithEmailAndPassword(auth, email, password)
   const role = await getUserRole(result.user.uid)
-  // Store email in users node for display in master dashboard
-  if (role) {
-    await set(ref(db, `users/${result.user.uid}/email`), email)
-  }
   return { user: result.user, role }
 }
 
