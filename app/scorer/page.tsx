@@ -1,11 +1,11 @@
 "use client"
 import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
 import { ref, set, get, onValue } from 'firebase/database'
 import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive } from 'lucide-react'
 import Link from 'next/link'
 
-const ADMIN_PIN = "jeff"
 
 // ── GOLF SCORING SYMBOL ────────────────────────────────────────────
 function ScoreCell({ score, par, onChange, editable }: {
@@ -83,19 +83,18 @@ export default function ScorerPage() {
  const [players, setPlayers] = useState<any[]>([])
  const [saveStatus, setSaveStatus] = useState<'idle'|'saving'|'saved'>('idle')
 
- // Edit mode PIN gate
+ const { role } = useAuth()
+ const canEdit = role === 'scorer' || role === 'master'
  const [editMode, setEditMode] = useState(false)
  const [isAdmin, setIsAdmin] = useState(false)
  const [activeMode, setActiveMode] = useState('')
- const [showPinModal, setShowPinModal] = useState(false)
- const [pinInput, setPinInput] = useState('')
- const [pinError, setPinError] = useState(false)
- const [showPin, setShowPin] = useState(false)
+ const [isMock, setIsMock] = useState(false)
 
  useEffect(() => {
  // Check session storage for edit mode and role
  if (sessionStorage.getItem('scorer-edit') === 'true') setEditMode(true)
  setIsAdmin(sessionStorage.getItem('role') === 'admin')
+ onValue(ref(db,'tournament/meta'), snap => setIsMock(!!snap.val()?.isMock))
  onValue(ref(db,'tournament/scores'), snap => snap.val() && setScores(snap.val()))
  onValue(ref(db,'tournament/course'), snap => {
  if (snap.val()) setCourse(snap.val())
@@ -124,18 +123,9 @@ export default function ScorerPage() {
  saveScores(newScores)
  }
 
- const submitPin = () => {
- if (pinInput === ADMIN_PIN) {
- setEditMode(true)
- sessionStorage.setItem('scorer-edit', 'true')
- setShowPinModal(false)
- setPinInput('')
- setPinError(false)
- } else {
- setPinError(true)
- setPinInput('')
- setTimeout(() => setPinError(false), 2000)
- }
+
+ const clearDemo = async () => {
+ await set(ref(db,'tournament'), null)
  }
 
  const lockScorer = () => {
@@ -181,6 +171,20 @@ export default function ScorerPage() {
 
  return (
  <div className="min-h-screen bg-black text-white font-sans pb-8">
+
+ {/* Demo banner */}
+ {isMock && (
+ <div className="bg-purple-500/10 border-b border-purple-500/30 px-4 py-2.5 flex items-center justify-between">
+ <div className="flex items-center gap-2">
+ <span className="text-purple-400 text-xs font-black">🎮 DEMO MODE</span>
+ <span className="text-zinc-600 text-[10px] font-medium normal-case">Augusta National · Pro golfers</span>
+ </div>
+ <button onClick={clearDemo}
+ className="bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-black px-3 py-1.5 rounded-lg hover:bg-rose-500/30 transition-colors">
+ ✕ EXIT DEMO
+ </button>
+ </div>
+ )}
 
  {/* Top bar */}
  <div className="sticky top-0 z-30 bg-black/95 backdrop-blur border-b border-zinc-900">
@@ -231,7 +235,7 @@ export default function ScorerPage() {
  <Lock size={18}/> Lock Scorer
  </button>
  ) : (
- <button onClick={() => setShowPinModal(true)}
+ <button onClick={() => { if (canEdit) setEditMode(true) }}
  className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 py-4 rounded-2xl font-bold text-sm transition-all">
  <Unlock size={18}/> Unlock to Edit Scores
  </button>
@@ -432,7 +436,7 @@ export default function ScorerPage() {
  )}
  {!editMode && (
  <button
- onClick={() => setShowPinModal(true)}
+ onClick={() => { if (canEdit) setEditMode(true) }}
  className="w-full flex items-center justify-center gap-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 py-4 rounded-2xl font-bold text-sm transition-all"
  >
  <Unlock size={18}/> Unlock to Edit Scores
@@ -458,41 +462,6 @@ export default function ScorerPage() {
  )}
  </div>
 
- {/* PIN MODAL */}
- {showPinModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
- <div className="w-full max-w-sm bg-zinc-900 rounded-[2.5rem] border-2 border-zinc-700 shadow-2xl p-8 space-y-6">
- <div className="text-center">
- <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all ${pinError?'bg-rose-500/20 border-2 border-rose-500/50 animate-bounce':'bg-zinc-800 border-2 border-zinc-700'}`}>
- <Lock size={24} className={pinError?'text-rose-400':'text-zinc-400'}/>
- </div>
- <h2 className="font-black text-xl">Unlock Scorer</h2>
- <p className="text-zinc-600 text-xs font-black normal-case mt-1">Enter admin PIN to enable score editing</p>
- </div>
- <div className="relative">
- <input
- type={showPin?'text':'password'}
- value={pinInput}
- onChange={e=>setPinInput(e.target.value)}
- onKeyDown={e=>e.key==='Enter'&&submitPin()}
- className={`w-full bg-zinc-800 border-2 p-4 rounded-2xl font-black text-2xl text-center outline-none tracking-[0.5em] transition-all ${pinError?'border-rose-500 text-rose-400':'border-zinc-700 focus:border-emerald-500 text-white'}`}
- placeholder="····"
- autoFocus
- />
- <button onClick={()=>setShowPin(!showPin)} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
- {showPin?<EyeOff size={18}/>:<Eye size={18}/>}
- </button>
- </div>
- {pinError && <p className="text-rose-400 text-xs font-black text-center tracking-widest">INCORRECT PIN</p>}
- <div className="flex gap-3">
- <button onClick={()=>{setShowPinModal(false);setPinInput('');setPinError(false)}}
- className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-3 rounded-2xl font-black text-sm transition-colors">CANCEL</button>
- <button onClick={submitPin}
- className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-2xl font-black text-sm transition-colors">UNLOCK</button>
- </div>
- </div>
- </div>
- )}
  </div>
  )
 }

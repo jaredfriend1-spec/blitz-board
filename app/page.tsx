@@ -236,8 +236,49 @@ export default function LandingPage() {
 
   const clearDemo = async () => {
     await set(ref(db,'tournament'), null)
-    sessionStorage.removeItem('role')
-    setRole('none')
+    showToast('Demo cleared')
+  }
+
+  const runTournamentDemo = async () => {
+    setDemoLoading(true)
+    try {
+      await set(ref(db,'tournament'), null)
+      await set(ref(db,'tournament/meta'), {
+        isMock:true, mode:'tournament', tripName:'Augusta Invitational',
+        currentDay:'Day 1', totalDays:3
+      })
+      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map((h:any)=>h.par)})
+      const pidMap: Record<string,string> = {}
+      for (const p of DEMO_PLAYERS) {
+        const pRef = push(ref(db,'tournament/roster'))
+        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
+        pidMap[p.name] = pRef.key!
+      }
+      for (const p of DEMO_PLAYERS) {
+        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
+      }
+      const teamDefs = [
+        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
+        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
+        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
+        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
+      ]
+      for (const t of teamDefs) {
+        const tRef = push(ref(db,'tournament/teams'))
+        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map((n:string)=>pidMap[n])})
+      }
+      await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25})
+      const m1 = push(ref(db,'tournament/matchups'))
+      await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
+      const m2 = push(ref(db,'tournament/matchups'))
+      await set(m2, {id:m2.key, type:'TvT', sideA:'Team Phil', sideB:'Team Brooks', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
+      setDemoLoading(false)
+      showToast('🏆 Tournament demo loaded!')
+    } catch(e) {
+      console.error(e)
+      setDemoLoading(false)
+      showToast('Demo failed — check connection')
+    }
   }
 
 
@@ -442,20 +483,6 @@ export default function LandingPage() {
  <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
  </Link>
- <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
- className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-purple-500/20 hover:border-purple-500/50 transition-all flex items-center gap-4 group disabled:opacity-50">
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <PlayCircle size={20} className="text-purple-400 group-hover:text-purple-300 transition-colors"/>
- </div>
- <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight text-purple-400 group-hover:text-purple-300 transition-colors">
- {demoLoading ? 'Loading...' : '🎮 Load Demo Round'}
- </h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">8 pros · Augusta National · All bet types</p>
- </div>
- {isMock && <span className="text-[9px] font-black text-purple-400 bg-purple-500/20 px-2 py-1 rounded-lg">ACTIVE</span>}
- </button>
-
  <button onClick={async () => {
  sessionStorage.removeItem('role')
  if (user) await signOut()
@@ -488,14 +515,24 @@ export default function LandingPage() {
  className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
  </div>
  )}
+ <div className="space-y-2">
  <button
  onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
  disabled={demoLoading || isMock}
- className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors">
+ className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
  <div className="font-black">⚡ Quick Match Demo</div>
  <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
  <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
  </button>
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
+ <div className="font-black">🏆 Tournament Demo</div>
+ <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ </button>
+ </div>
  <button onClick={() => setShowDemoModal(false)}
  className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
  Cancel
@@ -643,6 +680,34 @@ export default function LandingPage() {
  <ChevronRight size={16}/>
  </div>
  </Link>
+
+ {/* Demo Round — right below Quick Match */}
+ {!isMock ? (
+ <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
+ className="w-full bg-zinc-900/40 p-4 rounded-[2rem] border-2 border-purple-500/20 hover:border-purple-500/50 mb-4 transition-all flex items-center gap-4 group disabled:opacity-50">
+ <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ <PlayCircle size={22} className="text-purple-400 group-hover:text-purple-300 transition-colors"/>
+ </div>
+ <div className="relative z-10 flex-1">
+ <h2 className="text-xl font-black leading-tight text-purple-400 group-hover:text-purple-300 transition-colors">
+ {demoLoading ? 'Loading Demo...' : '🎮 Demo Round'}
+ </h2>
+ <p className="text-[10px] font-bold text-zinc-500 tracking-widest">Tiger · Rory · Rahm · Brooks · Augusta</p>
+ </div>
+ </button>
+ ) : (
+ <div className="bg-purple-500/10 border-2 border-purple-500/30 rounded-[2rem] px-5 py-4 mb-4 flex items-center justify-between">
+ <div>
+ <p className="text-purple-400 font-black text-sm">🎮 DEMO ACTIVE</p>
+ <p className="text-zinc-500 text-[10px] font-bold tracking-widest">Augusta National · 8 Pros</p>
+ </div>
+ <button onClick={clearDemo}
+ className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-400 px-4 py-2.5 rounded-xl text-xs font-black transition-all">
+ <X size={13}/> EXIT DEMO
+ </button>
+ </div>
+ )}
+
  {/* Main items grid */}
  {/* Master Dashboard — only visible to master admin */}
  {authRole === 'master' && (
@@ -692,20 +757,6 @@ export default function LandingPage() {
  <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
  </Link>
- <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
- className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-purple-500/20 hover:border-purple-500/50 transition-all flex items-center gap-4 group disabled:opacity-50">
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <PlayCircle size={20} className="text-purple-400 group-hover:text-purple-300 transition-colors"/>
- </div>
- <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight text-purple-400 group-hover:text-purple-300 transition-colors">
- {demoLoading ? 'Loading...' : '🎮 Load Demo Round'}
- </h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">8 pros · Augusta National · All bet types</p>
- </div>
- {isMock && <span className="text-[9px] font-black text-purple-400 bg-purple-500/20 px-2 py-1 rounded-lg">ACTIVE</span>}
- </button>
-
  <button onClick={async () => {
  sessionStorage.removeItem('role')
  if (user) await signOut()
@@ -738,14 +789,24 @@ export default function LandingPage() {
  className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
  </div>
  )}
+ <div className="space-y-2">
  <button
  onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
  disabled={demoLoading || isMock}
- className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors">
+ className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
  <div className="font-black">⚡ Quick Match Demo</div>
  <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
  <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
  </button>
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
+ <div className="font-black">🏆 Tournament Demo</div>
+ <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ </button>
+ </div>
  <button onClick={() => setShowDemoModal(false)}
  className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
  Cancel

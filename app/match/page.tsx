@@ -84,6 +84,8 @@ export default function QuickMatch() {
 
  // Toast
  const [toast, setToast] = useState<string|null>(null)
+ const clearDemo = async () => { await set(ref(db,'tournament'), null) }
+
  const showToast = (msg:string) => { setToast(msg); setTimeout(()=>setToast(null),2500) }
 
  const updateHole = (index: number, field: 'par'|'hcp', value: number) => {
@@ -554,6 +556,18 @@ export default function QuickMatch() {
 
  return (
  <div className="min-h-screen bg-black text-white font-sans">
+ {isMock && (
+ <div className="bg-purple-500/10 border-b border-purple-500/30 px-4 py-2.5 flex items-center justify-between">
+ <div className="flex items-center gap-2">
+ <span className="text-purple-400 text-xs font-black">🎮 DEMO MODE</span>
+ <span className="text-zinc-600 text-[10px] font-medium normal-case">Augusta National · Pro golfers</span>
+ </div>
+ <button onClick={clearDemo}
+ className="bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-black px-3 py-1.5 rounded-lg hover:bg-rose-500/30 transition-colors">
+ ✕ EXIT DEMO
+ </button>
+ </div>
+ )}
 
  {toast && (
  <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-800 border border-zinc-600 text-white text-sm font-black px-6 py-3 rounded-2xl shadow-2xl">
