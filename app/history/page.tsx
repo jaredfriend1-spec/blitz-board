@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set } from 'firebase/database'
 import {
