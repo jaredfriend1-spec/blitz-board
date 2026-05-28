@@ -578,7 +578,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       )}
 
       {/* ── MONEY LEADERBOARD ── */}
-      <AnalyticsSection title="💰 Money Leaderboard" icon={<DollarSign size={15}/>} accent="yellow" defaultOpen={true}>
+      <AnalyticsSection title="💰 Money Leaderboard" icon={<DollarSign size={15}/>} accent="yellow" defaultOpen={false}>
         <div className="p-4 space-y-3">
           {moneyLeaderboard.map((p, i) => {
             const net = p.moneyWon - p.moneyLost
