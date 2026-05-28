@@ -24,6 +24,7 @@ export default function QuickMatch() {
  const router = useRouter()
  const [step, setStep] = useState(0)
  const [loading, setLoading] = useState(false)
+ const [isMock, setIsMock] = useState(false)
  const [checkingExisting, setCheckingExisting] = useState(true)
  const [existingWarning, setExistingWarning] = useState(false)
  const [existingTripName, setExistingTripName] = useState('')
@@ -138,6 +139,8 @@ export default function QuickMatch() {
 
  const [addingToExisting, setAddingToExisting] = useState(false)
  useEffect(() => {
+ // Track demo mode
+ onValue(ref(db,'tournament/meta'), snap => setIsMock(!!snap?.val()?.isMock))
  // Check for existing tournament data
  get(ref(db,'tournament/meta')).then(async snap => {
  const m = snap.val()
