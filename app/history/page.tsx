@@ -530,8 +530,6 @@ ${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div
 
 
 return (
- <>
- return (
  <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans">
  <Link href="/"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
  <ArrowLeft size={18}/> HUB
@@ -869,7 +867,7 @@ return (
  ))}
  <td className="py-1.5 px-2 font-black text-sm text-blue-300">{(m.sB||[]).slice(start,start+9).reduce((a:number,b:number)=>a+(b||0),0)||'—'}</td>
  </tr>
- </>
+
  ) : (
  <>
  {[{label:m.sideA,scores:m.sA,color:'text-emerald-400'},{label:m.sideB,scores:m.sB,color:'text-blue-400'}].map(side => {
@@ -894,7 +892,7 @@ return (
  </tr>
  )
  })}
- </>
+
  )}
  {/* Hole winners */}
  <tr className="border-t border-zinc-800 bg-zinc-900/40">
