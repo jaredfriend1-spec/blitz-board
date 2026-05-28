@@ -1188,31 +1188,7 @@ export default function MasterPage() {
             {/* WHAT THEY SEE */}
             {analyticsTab === 'what' && (
               <div className="space-y-4">
-                <p className="text-zinc-600 text-xs font-medium normal-case">Tap sections to toggle, then hit Save.</p>
-
-                {/* Single save button at TOP - always visible */}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        await set(ref(db, 'analyticsFlags/scorer_sections'), scorerSections)
-                        showToast('✓ Scorer view saved!')
-                      } catch(e) { showToast('❌ Save failed') }
-                    }}
-                    className="bg-blue-500 hover:bg-blue-400 text-white py-3 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
-                    <Check size={13}/> Save Scorer
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await set(ref(db, 'analyticsFlags/player_sections'), playerSections)
-                        showToast('✓ Player view saved!')
-                      } catch(e) { showToast('❌ Save failed') }
-                    }}
-                    className="bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
-                    <Check size={13}/> Save Players
-                  </button>
-                </div>
+                <p className="text-zinc-600 text-xs font-medium normal-case">Tap sections to toggle. Save buttons are at the bottom of each list.</p>
 
                 {/* Scorer sections */}
                 <div>
