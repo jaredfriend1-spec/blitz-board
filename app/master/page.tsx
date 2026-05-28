@@ -852,9 +852,7 @@ export default function MasterPage() {
       if (d.player_access !== undefined) setPlayerAccess(!!d.player_access)
       if (d.scorer_sections) setScorerSections(d.scorer_sections)
       if (d.player_sections) setPlayerSections(d.player_sections)
-      setFlagsLoaded(true)
     })
-    onValue(ref(db,'users'), snap => {
       if (snap.val()) {
         const items = Object.entries(snap.val()).map(([uid, data]: any) => ({ uid, ...data }))
         setDbUsers(items)
