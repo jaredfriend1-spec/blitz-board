@@ -295,7 +295,7 @@ export default function HistoryPage() {
 
  const isMatch = arch._meta?.mode === 'match'
  const courseTitle = arch.course?.name || 'Blitz Board'
-  const subtitle = isMatch ? 'Quick Match' : (arch._meta?.tripName || '') + (arch._meta?.dayLabel ? ' · ' + arch._meta.dayLabel : '')
+  const subtitle = isMatch ? 'Quick Match' : `${arch._meta?.tripName || ''} · ${arch._meta?.dayLabel || ''}`.trim().replace(/^·\s*/, '')
  const pars: number[] = arch.course?.pars || Array(18).fill(4)
  const scores: Record<string, number[]> = arch.scores || {}
 
