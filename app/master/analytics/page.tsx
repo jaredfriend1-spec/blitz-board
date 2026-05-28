@@ -351,6 +351,102 @@ function computeAnalytics(history: any[]) {
     scores: p.grossScores.slice(-8)
   }))
 
+  // ── ROUND RECORDS ─────────────────────────────────────────────────
+  const roundRecords: {name:string, score:number, course:string, date:string}[] = []
+  history.forEach(arch => {
+    const roster: any[] = arch.roster ? Object.values(arch.roster) : []
+    const scores: Record<string,number[]> = arch.scores || {}
+    const pars: number[] = arch.course?.pars || Array(18).fill(4)
+    const courseName = arch.course?.name || 'Unknown'
+    const date = new Date(Number(arch.id)).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+    const nineHole = !!arch.course?.nineHole
+    const holeOffset = nineHole && arch.course?.nineHoleStart === 'back' ? 9 : 0
+    const numHoles = nineHole ? 9 : 18
+    roster.forEach((rp:any) => {
+      const sc = scores[rp.id] || []
+      const holeScores = sc.slice(holeOffset, holeOffset+numHoles).map(Number).filter(s=>s>0)
+      if (holeScores.length < numHoles*0.8) return
+      const gross = holeScores.reduce((a,b)=>a+b,0)
+      roundRecords.push({ name: rp.name, score: gross, course: courseName, date })
+    })
+  })
+  const allTimeLowest = [...roundRecords].sort((a,b)=>a.score-b.score).slice(0,10)
+  const allTimeHighest = [...roundRecords].sort((a,b)=>b.score-a.score).slice(0,10)
+  const lowestPerPlayer: Record<string,{score:number,course:string,date:string}> = {}
+  const highestPerPlayer: Record<string,{score:number,course:string,date:string}> = {}
+  roundRecords.forEach(r => {
+    if (!lowestPerPlayer[r.name] || r.score < lowestPerPlayer[r.name].score)
+      lowestPerPlayer[r.name] = {score:r.score, course:r.course, date:r.date}
+    if (!highestPerPlayer[r.name] || r.score > highestPerPlayer[r.name].score)
+      highestPerPlayer[r.name] = {score:r.score, course:r.course, date:r.date}
+  })
+
+  // ── BETTING STATS ─────────────────────────────────────────────────
+  let totalMatchups = 0
+  let totalNassau = 0, totalPvP = 0, total2v2 = 0, totalTvT = 0, totalWheel = 0
+  let totalGross = 0, totalNet = 0
+  let totalAutoPress = 0, totalNoPress = 0
+  let nassauAmounts: number[] = [], wheelAmounts: number[] = [], pressAmounts: number[] = []
+  let birdieAmounts: number[] = [], eagleAmounts: number[] = []
+  let totalOverall = 0, overallAmounts: number[] = []
+  let totalPotMoney = 0
+  const betSizesByRound: number[] = []
+
+  history.forEach(arch => {
+    const matchups: any[] = arch.matchups ? Object.values(arch.matchups) : []
+    const entryFee = Number(arch.money?.entryFee) || 0
+    const players: any[] = arch.roster ? Object.values(arch.roster) : []
+    totalPotMoney += entryFee * players.length
+
+    let roundBetTotal = 0
+    matchups.forEach((m:any) => {
+      totalMatchups++
+      const type = m.type || 'PvP'
+      if (type === 'PvP') totalPvP++
+      else if (type === '2v2') total2v2++
+      else if (type === 'TvT') totalTvT++
+      else if (type === 'Wheel') totalWheel++
+      if (type !== 'Wheel' && Number(m.nassau) > 0) totalNassau++
+
+      if (m.scoringType === 'GROSS') totalGross++
+      else totalNet++
+
+      if (m.autoPress) totalAutoPress++
+      else totalNoPress++
+
+      const nassau = Number(m.nassau) || 0
+      const press = Number(m.press) || 0
+      const birdie = Number(m.birdie) || 0
+      const eagle = Number(m.eagle) || 0
+      const overall = Number(m.overall) || 0
+      const wheelAmt = Number(m.wheelAmount) || 0
+
+      if (nassau > 0) { nassauAmounts.push(nassau); roundBetTotal += nassau * 3 }
+      if (press > 0) pressAmounts.push(press)
+      if (birdie > 0) birdieAmounts.push(birdie)
+      if (eagle > 0) eagleAmounts.push(eagle)
+      if (overall > 0) { totalOverall++; overallAmounts.push(overall); roundBetTotal += overall }
+      if (wheelAmt > 0) { wheelAmounts.push(wheelAmt); roundBetTotal += wheelAmt }
+    })
+    if (matchups.length > 0) betSizesByRound.push(roundBetTotal)
+  })
+
+  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*10)/10 : 0
+  const bettingStats = {
+    totalMatchups, totalRounds,
+    avgMatchupsPerRound: Math.round(totalMatchups / (history.length||1) * 10)/10,
+    formatBreakdown: { pvp: totalPvP, tvt: total2v2+totalTvT, wheel: totalWheel, nassau: totalNassau },
+    scoringBreakdown: { net: totalNet, gross: totalGross },
+    pressBreakdown: { auto: totalAutoPress, none: totalNoPress },
+    avgNassau: avg(nassauAmounts), avgPress: avg(pressAmounts),
+    avgBirdie: avg(birdieAmounts), avgEagle: avg(eagleAmounts),
+    avgWheel: avg(wheelAmounts), avgOverall: avg(overallAmounts),
+    avgBetPerRound: avg(betSizesByRound),
+    totalOverallBets: totalOverall, totalPotMoney,
+    nassauCount: nassauAmounts.length, wheelCount: wheelAmounts.length,
+    pressCount: pressAmounts.length,
+  }
+
   // Group badges
   const badges: Record<string,string[]> = {}
   if (moneyLeaderboard[0]) badges[moneyLeaderboard[0].name] = [...(badges[moneyLeaderboard[0].name]||[]), '💰 Top Earner']
@@ -361,9 +457,9 @@ function computeAnalytics(history: any[]) {
   if (biggest) badges[biggest.name] = [...(badges[biggest.name]||[]), '📉 Biggest Loser']
   if (consistency[consistency.length-1]) badges[consistency[consistency.length-1].name] = [...(badges[consistency[consistency.length-1].name]||[]), '🎢 Wild Card']
   if (consistency[0]) badges[consistency[0].name] = [...(badges[consistency[0].name]||[]), '🎯 Mr. Consistent']
-  if (sandbagIndex[0] && sandbagIndex[0].sandbag > 2) badges[sandbagIndex[0].name] = [...(badges[sandbagIndex[0].name]||[]), '🐟 Sandbagger']
+  if (sandbagIndex[0] && sandbagIndex[0].sandbag > 2) badges[sandbagIndex[0].name] = [...(badges[sandbagIndex[0].name]||[]), '⚠️ Sandbagger']
 
-  return { playerList, totalRounds, totalMoneyTracked, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges }
+  return { playerList, totalRounds, totalMoneyTracked, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges, allTimeLowest, allTimeHighest, lowestPerPlayer, highestPerPlayer, bettingStats }
 }
 
 
@@ -459,7 +555,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
     )
   }
 
-  const { playerList, totalRounds, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges } = data
+  const { playerList, totalRounds, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges, allTimeLowest, allTimeHighest, lowestPerPlayer, highestPerPlayer, bettingStats } = data
   const maxRounds = Math.max(...playerList.map(p => p.rounds))
   const maxMoney = Math.max(...moneyLeaderboard.map(p => Math.abs(p.moneyWon - p.moneyLost)))
 
@@ -607,7 +703,196 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
         </div>
       </AnalyticsSection>
 
-      {/* ── SKINS ── */}
+      {/* ── ROUND RECORDS ── */}
+      <AnalyticsSection title="🏅 Round Records — All Time" icon={<Trophy size={15}/>} accent="yellow">
+        <div className="p-4 space-y-4">
+          {/* Group bests */}
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">🔥 TOP 5 LOWEST ROUNDS EVER</p>
+            <div className="space-y-2">
+              {allTimeLowest.slice(0,5).map((r,i) => (
+                <div key={`${r.name}-${r.score}-${i}`} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-2.5">
+                  <span className={`text-sm ${i===0?'text-yellow-400':i===1?'text-zinc-300':i===2?'text-amber-600':'text-zinc-600'}`}>
+                    {i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}
+                  </span>
+                  <div className="flex-1">
+                    <span className="font-bold text-sm text-white">{r.name}</span>
+                    <span className="text-zinc-600 text-xs ml-2 font-medium normal-case">{r.course} · {r.date}</span>
+                  </div>
+                  <span className="text-emerald-400 font-black text-lg">{r.score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">💀 TOP 5 HIGHEST ROUNDS EVER</p>
+            <div className="space-y-2">
+              {allTimeHighest.slice(0,5).map((r,i) => (
+                <div key={`${r.name}-${r.score}-h-${i}`} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-2.5">
+                  <span className="text-zinc-600 text-sm">#{i+1}</span>
+                  <div className="flex-1">
+                    <span className="font-bold text-sm text-white">{r.name}</span>
+                    <span className="text-zinc-600 text-xs ml-2 font-medium normal-case">{r.course} · {r.date}</span>
+                  </div>
+                  <span className="text-rose-400 font-black text-lg">{r.score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Per-player best/worst */}
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">PER PLAYER — BEST vs WORST</p>
+            <div className="space-y-2">
+              {Object.entries(lowestPerPlayer).sort((a,b)=>a[1].score-b[1].score).map(([name, best]) => {
+                const worst = highestPerPlayer[name]
+                return (
+                  <div key={name} className="bg-zinc-900/60 rounded-xl px-4 py-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-sm">{name}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="text-center">
+                          <span className="text-emerald-400 font-black text-base">{best.score}</span>
+                          <span className="text-zinc-600 text-[9px] ml-1">BEST</span>
+                        </div>
+                        <span className="text-zinc-700">·</span>
+                        <div className="text-center">
+                          <span className="text-rose-400 font-black text-base">{worst?.score}</span>
+                          <span className="text-zinc-600 text-[9px] ml-1">WORST</span>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-zinc-400 font-black text-base">{worst && best ? worst.score - best.score : '—'}</span>
+                          <span className="text-zinc-600 text-[9px] ml-1">RANGE</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 h-1.5">
+                      <div className="bg-emerald-500 rounded-full" style={{flex: 1}}/>
+                      <div className="bg-zinc-700 rounded-full" style={{flex: worst && best ? (worst.score - best.score) : 1}}/>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </AnalyticsSection>
+
+      {/* ── BETTING STATS ── */}
+      <AnalyticsSection title="🎰 Betting Stats & Patterns" icon={<DollarSign size={15}/>} accent="yellow">
+        <div className="p-4 space-y-4">
+
+          {/* Overview numbers */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              {label:'TOTAL MATCHES', val:bettingStats.totalMatchups, color:'text-white'},
+              {label:'AVG/ROUND', val:bettingStats.avgMatchupsPerRound, color:'text-emerald-400'},
+              {label:'AVG BET/ROUND', val:`$${bettingStats.avgBetPerRound}`, color:'text-yellow-400'},
+            ].map(s => (
+              <div key={s.label} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-center">
+                <div className={`font-black text-xl ${s.color}`}>{s.val}</div>
+                <div className="text-zinc-600 text-[8px] font-semibold tracking-wide mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Format breakdown */}
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">MATCH FORMAT BREAKDOWN</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                {label:'1v1 (PvP)', count:bettingStats.formatBreakdown.pvp, color:'bg-blue-500', textColor:'text-blue-400'},
+                {label:'2v2 / TvT', count:bettingStats.formatBreakdown.tvt, color:'bg-purple-500', textColor:'text-purple-400'},
+                {label:'Wheel', count:bettingStats.formatBreakdown.wheel, color:'bg-emerald-500', textColor:'text-emerald-400'},
+                {label:'Nassau', count:bettingStats.formatBreakdown.nassau, color:'bg-amber-500', textColor:'text-amber-400'},
+              ].map(f => {
+                const pct = bettingStats.totalMatchups > 0 ? Math.round(f.count/bettingStats.totalMatchups*100) : 0
+                return (
+                  <div key={f.label} className="bg-zinc-900/60 rounded-xl p-3">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-zinc-400 text-xs font-semibold">{f.label}</span>
+                      <span className={`font-black text-base ${f.textColor}`}>{f.count}</span>
+                    </div>
+                    <div className="bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                      <div className={`${f.color} h-full rounded-full`} style={{width:`${pct}%`}}/>
+                    </div>
+                    <span className="text-zinc-600 text-[9px] font-medium">{pct}% of all matches</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Gross vs Net */}
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">NET vs GROSS GAMES</p>
+            <div className="bg-zinc-900/60 rounded-xl p-4">
+              <div className="flex gap-2 h-8 rounded-xl overflow-hidden mb-2">
+                <div className="bg-emerald-600 flex items-center justify-center text-[10px] font-black text-white rounded-l-xl" style={{flex:bettingStats.scoringBreakdown.net}}>
+                  NET {bettingStats.scoringBreakdown.net}
+                </div>
+                <div className="bg-zinc-600 flex items-center justify-center text-[10px] font-black text-white rounded-r-xl" style={{flex:bettingStats.scoringBreakdown.gross||0.01}}>
+                  {bettingStats.scoringBreakdown.gross > 0 ? `GROSS ${bettingStats.scoringBreakdown.gross}` : 'GROSS 0'}
+                </div>
+              </div>
+              <p className="text-zinc-600 text-[10px] font-medium normal-case">
+                {Math.round(bettingStats.scoringBreakdown.net/(bettingStats.totalMatchups||1)*100)}% of matches played net · {Math.round(bettingStats.scoringBreakdown.gross/(bettingStats.totalMatchups||1)*100)}% gross
+              </p>
+            </div>
+          </div>
+
+          {/* Auto-press */}
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">AUTO-PRESS USAGE</p>
+            <div className="bg-zinc-900/60 rounded-xl p-4">
+              <div className="flex gap-2 h-8 rounded-xl overflow-hidden mb-2">
+                <div className="bg-yellow-500 flex items-center justify-center text-[10px] font-black text-black rounded-l-xl" style={{flex:bettingStats.pressBreakdown.auto}}>
+                  ⚡ ON {bettingStats.pressBreakdown.auto}
+                </div>
+                <div className="bg-zinc-700 flex items-center justify-center text-[10px] font-black text-white rounded-r-xl" style={{flex:bettingStats.pressBreakdown.none||0.01}}>
+                  OFF {bettingStats.pressBreakdown.none}
+                </div>
+              </div>
+              <p className="text-zinc-600 text-[10px] font-medium normal-case">
+                {Math.round(bettingStats.pressBreakdown.auto/(bettingStats.totalMatchups||1)*100)}% of matches use auto-press
+              </p>
+            </div>
+          </div>
+
+          {/* Average bet sizes */}
+          <div>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">AVERAGE BET SIZES</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                {label:'Nassau (per 9)', val:bettingStats.avgNassau, count:bettingStats.nassauCount, color:'text-amber-400'},
+                {label:'Overall Bet', val:bettingStats.avgOverall, count:bettingStats.totalOverallBets, color:'text-purple-400'},
+                {label:'Press Amount', val:bettingStats.avgPress, count:bettingStats.pressCount, color:'text-yellow-400'},
+                {label:'Wheel (per pair)', val:bettingStats.avgWheel, count:bettingStats.wheelCount, color:'text-emerald-400'},
+                {label:'Birdie Bonus', val:bettingStats.avgBirdie, count:0, color:'text-red-400'},
+                {label:'Eagle Bonus', val:bettingStats.avgEagle, count:0, color:'text-yellow-300'},
+              ].filter(b => b.val > 0).map(b => (
+                <div key={b.label} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3">
+                  <div className={`font-black text-xl ${b.color}`}>${b.val}</div>
+                  <div className="text-zinc-500 text-[10px] font-semibold">{b.label}</div>
+                  {b.count > 0 && <div className="text-zinc-700 text-[9px] font-medium normal-case">{b.count} uses</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Overall bet popularity */}
+          {bettingStats.totalOverallBets > 0 && (
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
+              <p className="text-purple-400 text-[10px] font-semibold tracking-widest mb-1">💡 OVERALL BET INSIGHT</p>
+              <p className="text-zinc-500 text-xs font-medium normal-case">
+                The 18-hole overall bet has been used in <span className="text-purple-400 font-bold">{bettingStats.totalOverallBets}</span> of {bettingStats.totalMatchups} matches ({Math.round(bettingStats.totalOverallBets/bettingStats.totalMatchups*100)}%). Avg overall bet: <span className="text-purple-400 font-bold">${bettingStats.avgOverall}</span>
+              </p>
+            </div>
+          )}
+
+        </div>
+      </AnalyticsSection>
+
+
       <AnalyticsSection title="🦴 Skins Kings" icon={<Zap size={15}/>} accent="purple">
         <div className="p-4 space-y-3">
           {skinsLeaderboard.length === 0 && <p className="text-zinc-600 text-sm text-center py-4">No skins data yet</p>}
@@ -694,11 +979,14 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       </AnalyticsSection>
 
       {/* ── SANDBAG INDEX ── */}
-      <AnalyticsSection title="🐟 Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
+      <AnalyticsSection title="⚠️ Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
         <div className="p-4 space-y-3">
-          <p className="text-zinc-600 text-xs font-medium normal-case leading-relaxed">
-            Higher = plays better than handicap suggests. Possible sandbagger alert 👀
-          </p>
+          <div className="bg-zinc-900/60 border border-zinc-700 rounded-xl p-3 mb-1">
+            <p className="text-zinc-400 text-xs font-semibold mb-1">How to read this</p>
+            <p className="text-zinc-600 text-[11px] font-medium normal-case leading-relaxed">
+              Compares each player's average handicap vs how they actually score. A high positive number means they consistently play <span className="text-amber-400 font-bold">better</span> than their handicap — classic sandbagging. A negative means they play <span className="text-emerald-400 font-bold">worse</span> than their handicap (legitimate).
+            </p>
+          </div>
           {sandbagIndex.map((p, i) => (
             <div key={p.name} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
               <span className="text-zinc-600 text-[10px] font-black w-5">#{i+1}</span>
@@ -708,7 +996,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
               </div>
               <div className={`text-sm font-black px-2 py-1 rounded-lg ${p.sandbag > 3 ? 'bg-rose-500/20 text-rose-400' : p.sandbag > 1 ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
                 {p.sandbag > 0 ? '+' : ''}{p.sandbag}
-                {p.sandbag > 3 ? ' 🐟' : ''}
+                {p.sandbag > 3 ? ' ⚠️' : ''}
               </div>
             </div>
           ))}
