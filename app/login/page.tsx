@@ -32,8 +32,12 @@ export default function LoginPage() {
         setError('No account found with that email')
       } else if (e.code === 'auth/too-many-requests') {
         setError('Too many attempts. Try again later.')
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Invalid email address')
+      } else if (e.code === 'auth/network-request-failed') {
+        setError('Network error — check your connection')
       } else {
-        setError('Sign in failed. Please try again.')
+        setError(`Error: ${e.code || e.message || 'Unknown error'}`)
       }
     } finally {
       setLoading(false)
