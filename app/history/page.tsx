@@ -265,7 +265,8 @@ function RankBadge({ rank }: { rank: number }) {
 
 export default function HistoryPage() {
  const { role } = useAuth()
- const canDelete = role === 'scorer' || role === 'master'
+ const sessionRole = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null
+ const canDelete = role === 'scorer' || role === 'master' || sessionRole === 'admin' || sessionRole === 'master'
  const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
  const [deleteInput, setDeleteInput] = useState('')
  const [archives, setArchives] = useState<any[]>([])
