@@ -833,7 +833,9 @@ export default function MasterPage() {
   useEffect(() => {
     if (!authed) return
     onValue(ref(db,'analyticsFlags'), snap => {
-      if (snap.val()) setAnalyticsFlags((prev:any) => ({ ...prev, ...snap.val() }))
+      if (snap.val() !== null && snap.val() !== undefined) {
+        setAnalyticsFlags((prev:any) => ({ ...prev, ...snap.val() }))
+      }
     })
     onValue(ref(db,'users'), snap => {
       if (snap.val()) {
@@ -1081,31 +1083,51 @@ export default function MasterPage() {
               Control who can see Analytics and which sections are visible. Changes apply instantly.
             </p>
 
-            {/* Role access toggles */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">WHO CAN ACCESS ANALYTICS</p>
-              <div className="space-y-2">
-                {[
-                  {key:'analytics_scorer', label:'Scorer Admins', desc:'Jeff and other scorers can view analytics'},
-                  {key:'analytics_player', label:'Players', desc:'Anyone on the Player hub can view analytics'},
-                ].map(f => (
-                  <div key={f.key} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-                    <div className="flex-1 min-w-0 mr-3">
-                      <div className="font-semibold text-sm">{f.label}</div>
-                      <div className="text-zinc-600 text-[10px] font-medium normal-case">{f.desc}</div>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        const newVal = analyticsFlags[f.key] === false ? true : false
-                        await set(ref(db, `analyticsFlags/${f.key}`), newVal)
-                        setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
-                        showToast(`Analytics ${newVal ? 'enabled' : 'disabled'} for ${f.label}`)
-                      }}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
-                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]===false ? 'translate-x-1' : 'translate-x-7'}`}/>
-                    </button>
-                  </div>
-                ))}
+            {/* Scorer access */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                <div>
+                  <div className="font-bold text-sm text-blue-400">Scorer Admins</div>
+                  <div className="text-zinc-600 text-[10px] font-medium normal-case">Jeff and other scorers</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const cur = analyticsFlags['analytics_scorer']
+                    const newVal = cur === false ? true : !cur
+                    setAnalyticsFlags((prev:any) => ({ ...prev, analytics_scorer: newVal }))
+                    await set(ref(db, 'analyticsFlags/analytics_scorer'), newVal)
+                    showToast(`Scorer analytics: ${newVal ? 'ON ✓' : 'OFF'}`)
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-all flex-shrink-0 ${analyticsFlags['analytics_scorer']===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags['analytics_scorer']===false ? 'translate-x-1' : 'translate-x-7'}`}/>
+                </button>
+              </div>
+              <div className="px-4 py-2 text-zinc-600 text-[10px] font-medium normal-case">
+                {analyticsFlags['analytics_scorer']===false ? '🔴 Scorers cannot see Analytics' : '🟢 Scorers can see Analytics'}
+              </div>
+            </div>
+
+            {/* Player access */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                <div>
+                  <div className="font-bold text-sm text-amber-400">Players</div>
+                  <div className="text-zinc-600 text-[10px] font-medium normal-case">Anyone on the Player hub</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const cur = analyticsFlags['analytics_player']
+                    const newVal = cur === true ? false : true
+                    setAnalyticsFlags((prev:any) => ({ ...prev, analytics_player: newVal }))
+                    await set(ref(db, 'analyticsFlags/analytics_player'), newVal)
+                    showToast(`Player analytics: ${newVal ? 'ON ✓' : 'OFF'}`)
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-all flex-shrink-0 ${analyticsFlags['analytics_player']===true ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags['analytics_player']===true ? 'translate-x-7' : 'translate-x-1'}`}/>
+                </button>
+              </div>
+              <div className="px-4 py-2 text-zinc-600 text-[10px] font-medium normal-case">
+                {analyticsFlags['analytics_player']===true ? '🟢 Players can see Analytics' : '🔴 Players cannot see Analytics (default)'}
               </div>
             </div>
 
@@ -1134,10 +1156,11 @@ export default function MasterPage() {
                     </div>
                     <button
                       onClick={async () => {
-                        const newVal = analyticsFlags[f.key] === false ? true : false
-                        await set(ref(db, `analyticsFlags/${f.key}`), newVal)
+                        const cur = analyticsFlags[f.key]
+                        const newVal = cur === false ? true : !cur
                         setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
-                        showToast(`${f.label} ${newVal ? 'shown' : 'hidden'}`)
+                        await set(ref(db, 'analyticsFlags/' + f.key), newVal)
+                        showToast(`${f.label}: ${newVal ? 'visible' : 'hidden'}`)
                       }}
                       className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]===false ? 'translate-x-1' : 'translate-x-7'}`}/>
