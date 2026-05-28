@@ -585,7 +585,7 @@ export default function LandingPage() {
  </Link>
  {/* Main items grid */}
  {/* Master Dashboard — only visible to master admin */}
- {role === 'master' && (
+ {authRole === 'master' && (
  <Link href="/master"
  className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border-2 border-emerald-500/30 hover:border-emerald-500 p-4 rounded-2xl transition-all group mb-3 block">
  <div className="flex items-center gap-3">

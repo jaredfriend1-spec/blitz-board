@@ -1125,12 +1125,16 @@ export default function AnalyticsPage() {
   useEffect(() => {
     onValue(ref(db,'analyticsFlags'), snap => {
       if (snap.val()) setAnalyticsFlags((prev:any) => ({...prev,...snap.val()}))
+      setFlagsLoaded(true)
     })
+    // If no flags set yet, still mark as loaded
+    setTimeout(() => setFlagsLoaded(true), 2000)
   }, [])
 
-  // Access control - master always gets in, others depend on flags
+  // Access control
+  const [flagsLoaded, setFlagsLoaded] = useState(false)
   const authed = role === 'master' ||
-    (role === 'scorer' && analyticsFlags.analytics_scorer !== false) ||
+    (role === 'scorer' && (analyticsFlags.analytics_scorer !== false)) ||
     (role === null && analyticsFlags.analytics_player === true)
 
   useEffect(() => {
@@ -1145,13 +1149,16 @@ export default function AnalyticsPage() {
     })
   }, [authed])
 
-  if (loading) return (
+  // Wait for both auth AND flags before deciding access
+  const authAndFlagsReady = !loading && flagsLoaded
+
+  if (!authAndFlagsReady) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
       <div className="text-zinc-600 text-sm">Loading...</div>
     </div>
   )
 
-  if (!authed) {
+  if (authAndFlagsReady && !authed) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
         <div className="text-center">
@@ -1176,9 +1183,9 @@ export default function AnalyticsPage() {
             <p className="text-zinc-600 text-[10px] font-medium">{history.length} rounds · Master Admin only</p>
           </div>
         </div>
-        <Link href="/master"
+        <Link href="/"
           className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 text-xs font-semibold transition-colors">
-          <ArrowLeft size={14}/> Dashboard
+          <ArrowLeft size={14}/> Home
         </Link>
       </div>
 

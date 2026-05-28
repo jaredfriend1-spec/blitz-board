@@ -1096,13 +1096,13 @@ export default function MasterPage() {
                     </div>
                     <button
                       onClick={async () => {
-                        const newVal = !(analyticsFlags[f.key] !== false)
+                        const newVal = analyticsFlags[f.key] === false ? true : false
                         await set(ref(db, `analyticsFlags/${f.key}`), newVal)
                         setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
                         showToast(`Analytics ${newVal ? 'enabled' : 'disabled'} for ${f.label}`)
                       }}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]!==false ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]!==false ? 'translate-x-7' : 'translate-x-1'}`}/>
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
+                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]===false ? 'translate-x-1' : 'translate-x-7'}`}/>
                     </button>
                   </div>
                 ))}
@@ -1134,13 +1134,13 @@ export default function MasterPage() {
                     </div>
                     <button
                       onClick={async () => {
-                        const newVal = !(analyticsFlags[f.key] !== false)
+                        const newVal = analyticsFlags[f.key] === false ? true : false
                         await set(ref(db, `analyticsFlags/${f.key}`), newVal)
                         setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
                         showToast(`${f.label} ${newVal ? 'shown' : 'hidden'}`)
                       }}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]!==false ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]!==false ? 'translate-x-7' : 'translate-x-1'}`}/>
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
+                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]===false ? 'translate-x-1' : 'translate-x-7'}`}/>
                     </button>
                   </div>
                 ))}
