@@ -1134,9 +1134,11 @@ export default function AnalyticsPage() {
     setTimeout(() => setFlagsLoaded(true), 2000)
   }, [])
 
-  // Access control
+  // Access control - players use sessionStorage role 'player', not Firebase Auth
+  const sessionRole = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null
   const authed = role === 'master' ||
     (role === 'scorer' && scorerAccess) ||
+    (sessionRole === 'player' && playerAccess) ||
     (role === null && playerAccess)
 
   // Which sections to show based on role
@@ -1170,7 +1172,8 @@ export default function AnalyticsPage() {
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
         <div className="text-center">
           <Shield size={32} className="text-zinc-700 mx-auto mb-4"/>
-          <p className="text-zinc-600 font-semibold text-sm">Master Admin only</p>
+          <p className="text-zinc-600 font-semibold text-sm">Access restricted</p>
+          <p className="text-zinc-700 text-xs font-medium normal-case mt-1">Analytics is not enabled for your role</p>
           <Link href="/" className="text-emerald-400 text-xs font-semibold mt-4 block hover:text-emerald-300">
             ← Back to home
           </Link>

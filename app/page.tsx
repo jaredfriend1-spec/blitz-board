@@ -29,6 +29,8 @@ export default function LandingPage() {
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
  const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
  const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b.toUpperCase()))
+ const [scorerCanSeeAnalytics, setScorerCanSeeAnalytics] = useState(true)
+ const [playerCanSeeAnalytics, setPlayerCanSeeAnalytics] = useState(false)
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
  const [courseLibrary, setCourseLibrary] = useState<any[]>([])
  const [history, setHistory] = useState<any[]>([])
@@ -59,6 +61,11 @@ export default function LandingPage() {
 
  useEffect(() => {
  // Firebase data
+    onValue(ref(db,'analyticsFlags'), snap => {
+      const d = snap.val() || {}
+      if (d.scorer_access !== undefined) setScorerCanSeeAnalytics(!!d.scorer_access)
+      if (d.player_access !== undefined) setPlayerCanSeeAnalytics(!!d.player_access)
+    })
  onValue(ref(db, 'tournament/course'), snap => {
  if (snap.val()?.name) setCourseName(snap.val().name)
  })
@@ -361,6 +368,7 @@ export default function LandingPage() {
  { title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"},
  { title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"},
  { title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"},
+ ...(playerCanSeeAnalytics ? [{ title:"Analytics", desc:"Stats, records & betting trends", path:"/master/analytics", icon:<BarChart3 className="text-purple-400"size={28}/>, color:"border-purple-800/20 hover:border-purple-600", accent:"text-purple-400"}] : []),
  ]
 
  return (
@@ -509,14 +517,14 @@ export default function LandingPage() {
  color:"border-teal-800/20 hover:border-teal-600",
  accent:"text-teal-400"
  },
- {
+ ...(scorerCanSeeAnalytics ? [{
  title:"Analytics",
  desc:"Stats, records & betting trends",
  path:"/master/analytics",
  icon:<BarChart3 className="text-purple-400"size={28}/>,
  color:"border-purple-800/20 hover:border-purple-600",
  accent:"text-purple-400"
- },
+ }] : []),
  ]
 
  const setupItem = adminItems[0]
