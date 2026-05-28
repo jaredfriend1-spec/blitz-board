@@ -1210,7 +1210,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="px-4 py-3 flex gap-2 overflow-x-auto border-b border-zinc-900 bg-zinc-950/60">
+      <div className="px-4 py-3 flex gap-2 overflow-x-auto border-b border-zinc-900 bg-zinc-950 sticky top-[57px] z-20">
         {([
           { key: 'all', label: '⚡ All' },
           { key: 'match', label: '🏌️ Quick Matches' },
