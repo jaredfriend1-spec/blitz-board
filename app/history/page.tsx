@@ -272,7 +272,7 @@ export default function HistoryPage() {
  
  // ── ADD MATCHUPS STATE ──
  const [addMatchupsTo, setAddMatchupsTo] = useState<string | null>(null)
- const [newMatchType, setNewMatchType] = useState<'PvP' | '2v2'>('PvP')
+ const [newMatchType, setNewMatchType] = useState<'PvP' | '2v2' | 'Team' | 'Wheel'>('PvP')
  const [newMatchData, setNewMatchData] = useState<any>({
  sideA: '',
  sideA2: '',
@@ -311,33 +311,60 @@ export default function HistoryPage() {
  const saveNewMatchup = () => {
  if (!addMatchupsTo) return
  
- // Validate inputs
+ // Validate inputs based on type
+ if (newMatchType === 'Wheel') {
+ if (!newMatchData.wheelPlayers || newMatchData.wheelPlayers.length < 2) {
+ alert('Wheel needs at least 2 players')
+ return
+ }
+ } else if (newMatchType === 'Team') {
+ if (!newMatchData.sideA || !newMatchData.sideB) {
+ alert('Please select Team A and Team B')
+ return
+ }
+ } else if (newMatchType === '2v2') {
+ if (!newMatchData.sideA || !newMatchData.sideA2 || !newMatchData.sideB || !newMatchData.sideB2) {
+ alert('For 2v2, please select 2 players per side')
+ return
+ }
+ } else {
  if (!newMatchData.sideA || !newMatchData.sideB) {
  alert('Please select Side A and Side B players')
  return
  }
- if (newMatchType === '2v2' && (!newMatchData.sideA2 || !newMatchData.sideB2)) {
- alert('For 2v2, please select 2 players per side')
- return
  }
 
- const matchupToSave = {
+ const matchupToSave: any = {
  type: newMatchType,
- sideA: newMatchData.sideA,
- sideA2: newMatchData.sideA2 || undefined,
- sideB: newMatchData.sideB,
- sideB2: newMatchData.sideB2 || undefined,
- nassau: Number(newMatchData.nassau) || 5,
- press: Number(newMatchData.press) || 5,
- birdie: Number(newMatchData.birdie) || 0,
- eagle: Number(newMatchData.eagle) || 0,
- autoPress: newMatchData.autoPress !== false,
  scoringType: newMatchData.scoringType || 'NET',
- wheelPlayers: newMatchData.wheelPlayers || [],
- wheelAmount: Number(newMatchData.wheelAmount) || 10,
+ }
+
+ if (newMatchType === 'Wheel') {
+ matchupToSave.wheelPlayers = newMatchData.wheelPlayers || []
+ matchupToSave.wheelAmount = Number(newMatchData.wheelAmount) || 10
+ } else if (newMatchType === 'Team') {
+ matchupToSave.sideA = newMatchData.sideA
+ matchupToSave.sideB = newMatchData.sideB
+ matchupToSave.nassau = Number(newMatchData.nassau) || 5
+ matchupToSave.press = Number(newMatchData.press) || 5
+ matchupToSave.birdie = Number(newMatchData.birdie) || 0
+ matchupToSave.eagle = Number(newMatchData.eagle) || 0
+ matchupToSave.autoPress = newMatchData.autoPress !== false
+ } else {
+ matchupToSave.sideA = newMatchData.sideA
+ matchupToSave.sideA2 = newMatchData.sideA2 || undefined
+ matchupToSave.sideB = newMatchData.sideB
+ matchupToSave.sideB2 = newMatchData.sideB2 || undefined
+ matchupToSave.nassau = Number(newMatchData.nassau) || 5
+ matchupToSave.press = Number(newMatchData.press) || 5
+ matchupToSave.birdie = Number(newMatchData.birdie) || 0
+ matchupToSave.eagle = Number(newMatchData.eagle) || 0
+ matchupToSave.autoPress = newMatchData.autoPress !== false
  }
 
  try {
+ console.log('Saving matchup:', matchupToSave)
+ console.log('To path:', `history/${addMatchupsTo}/matchups`)
  push(ref(db, `history/${addMatchupsTo}/matchups`), matchupToSave)
  // Reset modal
  setAddMatchupsTo(null)
@@ -355,9 +382,10 @@ export default function HistoryPage() {
  wheelPlayers: [],
  wheelAmount: 10,
  })
+ alert('Matchup saved!')
  } catch (err) {
  console.error('Error saving matchup:', err)
- alert('Failed to save matchup')
+ alert(`Failed to save matchup: ${err}`)
  }
  }
 
@@ -1203,10 +1231,13 @@ return (
  <div>
  <label className="text-xs font-black text-zinc-400 tracking-widest">TYPE</label>
  <div className="grid grid-cols-2 gap-2 mt-2">
- {(['PvP', '2v2'] as const).map(type => (
+ {(['PvP', '2v2', 'Team', 'Wheel'] as const).map(type => (
  <button
  key={type}
- onClick={() => setNewMatchType(type)}
+ onClick={() => {
+ setNewMatchType(type as any)
+ setNewMatchData({...newMatchData, wheelPlayers: []})
+ }}
  className={`py-2 rounded-xl font-black text-xs transition-all ${
  newMatchType === type
  ? 'bg-amber-500 text-black'
@@ -1221,6 +1252,79 @@ return (
 
  {/* Player selectors */}
  <div className="space-y-3">
+ {/* TEAM type — select teams instead of players */}
+ {newMatchType === 'Team' && (
+ <>
+ <div>
+ <label className="text-xs font-black text-emerald-400 tracking-widest">TEAM A</label>
+ <select
+ value={newMatchData.sideA}
+ onChange={(e) => setNewMatchData({...newMatchData, sideA: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select team</option>
+ {recap.teamResults.map(t => (
+ <option key={t.id} value={t.name}>{t.name}</option>
+ ))}
+ </select>
+ </div>
+ <div>
+ <label className="text-xs font-black text-blue-400 tracking-widest">TEAM B</label>
+ <select
+ value={newMatchData.sideB}
+ onChange={(e) => setNewMatchData({...newMatchData, sideB: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select team</option>
+ {recap.teamResults.map(t => (
+ <option key={t.id} value={t.name}>{t.name}</option>
+ ))}
+ </select>
+ </div>
+ </>
+ )}
+
+ {/* WHEEL type — select multiple players */}
+ {newMatchType === 'Wheel' && (
+ <>
+ <div>
+ <label className="text-xs font-black text-purple-400 tracking-widest">PLAYERS IN WHEEL</label>
+ <div className="mt-2 space-y-2 bg-zinc-800 p-3 rounded-xl max-h-40 overflow-y-auto">
+ {recap.leaderboard.map(p => (
+ <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+ <input
+ type="checkbox"
+ checked={newMatchData.wheelPlayers?.includes(p.name) || false}
+ onChange={(e) => {
+ if (e.target.checked) {
+ setNewMatchData({...newMatchData, wheelPlayers: [...(newMatchData.wheelPlayers || []), p.name]})
+ } else {
+ setNewMatchData({...newMatchData, wheelPlayers: (newMatchData.wheelPlayers || []).filter((n: string) => n !== p.name)})
+ }
+ }}
+ className="w-4 h-4"
+ />
+ <span className="text-xs text-white">{p.name}</span>
+ </label>
+ ))}
+ </div>
+ <p className="text-[9px] text-zinc-500 mt-1">{newMatchData.wheelPlayers?.length || 0} selected</p>
+ </div>
+ <div>
+ <label className="text-xs font-black text-purple-400 tracking-widest">AMOUNT PER PAIR</label>
+ <input
+ type="number"
+ value={newMatchData.wheelAmount}
+ onChange={(e) => setNewMatchData({...newMatchData, wheelAmount: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ />
+ </div>
+ </>
+ )}
+
+ {/* PvP and 2v2 — select players */}
+ {(newMatchType === 'PvP' || newMatchType === '2v2') && (
+ <>
  {/* Side A */}
  <div>
  <label className="text-xs font-black text-emerald-400 tracking-widest">SIDE A</label>
@@ -1284,9 +1388,12 @@ return (
  </select>
  </div>
  )}
+ </>
+ )}
  </div>
 
- {/* Match amounts */}
+ {/* Match amounts — not needed for Wheel */}
+ {newMatchType !== 'Wheel' && (
  <div className="grid grid-cols-3 gap-2">
  <div>
  <label className="text-xs font-black text-zinc-400 tracking-widest">NASSAU</label>
@@ -1316,8 +1423,10 @@ return (
  />
  </div>
  </div>
+ )}
 
  {/* Scoring type */}
+ {newMatchType !== 'Wheel' && (
  <div>
  <label className="text-xs font-black text-zinc-400 tracking-widest mb-2 block">SCORING</label>
  <div className="grid grid-cols-2 gap-2">
@@ -1336,8 +1445,10 @@ return (
  ))}
  </div>
  </div>
+ )}
 
- {/* Auto-press toggle */}
+ {/* Auto-press toggle — PvP and 2v2 only */}
+ {(newMatchType === 'PvP' || newMatchType === '2v2') && (
  <div className="flex items-center justify-between bg-zinc-800 px-3 py-2 rounded-xl">
  <span className="text-xs font-black text-zinc-400">Auto-Press</span>
  <button
@@ -1351,6 +1462,7 @@ return (
  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatchData.autoPress ? 'translate-x-4' : ''}`} />
  </button>
  </div>
+ )}
  </div>
 
  {/* Modal footer */}
