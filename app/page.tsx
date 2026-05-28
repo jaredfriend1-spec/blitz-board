@@ -527,6 +527,14 @@ export default function LandingPage() {
  color:"border-emerald-800/20 hover:border-emerald-600",
  accent:"text-emerald-400"
  },
+ {
+ title:"Analytics",
+ desc:"Stats, records & betting trends",
+ path:"/master/analytics",
+ icon:<BarChart3 className="text-purple-400"size={28}/>,
+ color:"border-purple-800/20 hover:border-purple-600",
+ accent:"text-purple-400"
+ },
  ]
 
  const setupItem = adminItems[0]

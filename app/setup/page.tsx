@@ -1,18 +1,14 @@
 "use client"
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
 import Link from 'next/link'
 import { ArrowLeft, Users, Flag, Swords, DollarSign, ShieldAlert, Archive, ChevronRight, CheckCircle2, Circle, Play, Layers, Lock, Eye, EyeOff } from 'lucide-react'
 
-const ADMIN_PIN = "jeff"
-
 export default function SetupCenter() {
-  // PIN gate
-  const [unlocked, setUnlocked] = useState(false)
-  const [pin, setPin] = useState('')
-  const [pinError, setPinError] = useState(false)
-  const [showPin, setShowPin] = useState(false)
+  const { role, loading } = useAuth()
+  const unlocked = role === 'scorer' || role === 'master'
 
   // Live status for quick access dots
   const [courseReady, setCourseReady] = useState(false)
@@ -44,18 +40,6 @@ export default function SetupCenter() {
     setStepsComplete([tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length)
   }, [tripReady,courseReady,rosterReady,moneyReady,matchupsReady])
 
-  const submitPin = () => {
-    if (pin === ADMIN_PIN) {
-      sessionStorage.setItem('setup-unlocked', 'true')
-      setUnlocked(true)
-      setPinError(false)
-    } else {
-      setPinError(true)
-      setPin('')
-      setTimeout(() => setPinError(false), 2000)
-    }
-  }
-
   const allDone = stepsComplete === 5
 
   const quickLinks = [
@@ -67,72 +51,22 @@ export default function SetupCenter() {
     { title:"Side Bets", icon:<Swords size={20}/>, href:"/setup/matchups", done:matchupsReady, color:"text-amber-400" },
   ]
 
-  // ── PIN GATE ────────────────────────────────────────────────────
-  if (!unlocked) {
-    return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 font-sans">
-        <div className="w-full max-w-sm space-y-6">
+  if (loading) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-zinc-600 text-sm">Loading...</div>
+    </div>
+  )
 
-          {/* Back */}
-          <Link href="/" className="text-emerald-500 font-black flex items-center gap-2 text-sm hover:text-emerald-400 transition-colors mb-4">
-            <ArrowLeft size={16}/> HUB
-          </Link>
-
-          {/* Lock icon */}
-          <div className="text-center">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all ${pinError ? 'bg-rose-500/20 border-2 border-rose-500/50 animate-bounce' : 'bg-zinc-900 border-2 border-zinc-700'}`}>
-              <Lock size={28} className={pinError ? 'text-rose-400' : 'text-zinc-400'}/>
-            </div>
-            <h1 className="text-3xl font-black tracking-tight">Setup Center</h1>
-            <p className="text-zinc-600 text-xs font-black tracking-widest normal-case mt-1">Admin access required</p>
-          </div>
-
-          {/* PIN input */}
-          <div className="space-y-3">
-            <div className="relative">
-              <input
-                type={showPin ? 'text' : 'password'}
-                value={pin}
-                onChange={e => setPin(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && submitPin()}
-                className={`w-full bg-zinc-900 border-2 p-5 rounded-2xl font-black text-2xl text-center outline-none tracking-[0.5em] transition-all ${
-                  pinError
-                    ? 'border-rose-500 text-rose-400'
-                    : 'border-zinc-700 focus:border-emerald-500 text-white'
-                }`}
-                placeholder="····"
-                autoFocus
-              />
-              <button
-                onClick={() => setShowPin(!showPin)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
-              >
-                {showPin ? <EyeOff size={18}/> : <Eye size={18}/>}
-              </button>
-            </div>
-
-            {pinError && (
-              <p className="text-rose-400 text-xs font-black text-center tracking-widest">INCORRECT PIN</p>
-            )}
-
-            <button
-              onClick={submitPin}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-2xl font-black text-lg transition-colors shadow-lg"
-            >
-              ENTER
-            </button>
-          </div>
-
-          <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
-            AUTHORIZED PERSONNEL ONLY
-          </p>
-        </div>
+  if (!unlocked) return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-6">
+      <div className="text-center">
+        <p className="text-zinc-500 font-semibold text-sm mb-4">Sign in required</p>
+        <a href="/login" className="bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold text-sm">Sign In</a>
       </div>
-    )
-  }
+    </div>
+  )
 
-  // ── SETUP CENTER (unlocked) ───────────────────────────────────────
-  return (
+    return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans uppercase italic">
       <div className="max-w-2xl mx-auto">
         <Link href="/" className="flex items-center text-emerald-400 mb-8 font-black text-sm hover:text-emerald-300 transition-colors">

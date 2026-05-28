@@ -1115,7 +1115,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
 export default function AnalyticsPage() {
   const [history, setHistory] = useState<any[]>([])
   const { role, loading } = useAuth()
-  const authed = role === 'master'
+  const authed = role === 'master' || role === 'scorer'
 
   useEffect(() => {
     if (!authed) return

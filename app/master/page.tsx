@@ -803,6 +803,9 @@ export default function MasterPage() {
   const [inviteRole, setInviteRole] = useState<'scorer'|'master'>('scorer')
   const [inviting, setInviting] = useState(false)
   const [resetSent, setResetSent] = useState<string|null>(null)
+  const [newUserUid, setNewUserUid] = useState('')
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserRole, setNewUserRole] = useState<'scorer'|'master'>('scorer')
 
   const [editingPlayer, setEditingPlayer] = useState<string|null>(null)
   const [editName, setEditName] = useState('')
@@ -851,29 +854,6 @@ export default function MasterPage() {
   }, [authed])
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
-
-  // ── STATS ────────────────────────────────────────────────────────
-  const totalRounds = history.length
-  const allPlayers: Record<string,{name:string,rounds:number,skins:number,totalScore:number,holes:number}> = {}
-  history.forEach(arch => {
-    const roster = arch.roster ? Object.values(arch.roster) as any[] : []
-    const scores = arch.scores || {}
-    const pars = arch.course?.pars || Array(18).fill(4)
-    const totalPar = pars.reduce((a:number,b:number)=>a+b,0)
-    roster.forEach((p:any) => {
-      if (!allPlayers[p.name]) allPlayers[p.name] = {name:p.name,rounds:0,skins:0,totalScore:0,holes:0}
-      allPlayers[p.name].rounds++
-      const s = scores[p.id] || []
-      const tot = s.reduce((a:number,b:number)=>a+(Number(b)||0),0)
-      if (tot > 0) { allPlayers[p.name].totalScore += tot; allPlayers[p.name].holes += 18 }
-    })
-  })
-  const playerStats = Object.values(allPlayers).sort((a,b)=>b.rounds-a.rounds)
-  const totalMoneyTracked = history.reduce((acc,arch) => {
-    const money = arch.money || {}
-    return acc + (money.entryFee||0) * (arch.roster ? Object.keys(arch.roster).length : 0)
-  },0)
-  const mostActivePlayer = playerStats[0]
 
   // ── LOGIN SCREEN ─────────────────────────────────────────────────
   if (loading) {
@@ -964,102 +944,13 @@ export default function MasterPage() {
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
 
         {/* ── AT A GLANCE ── */}
-        <Section title="At a Glance" icon={<BarChart3 size={16}/>}>
-          <div className="p-4 grid grid-cols-2 gap-3">
-            <StatCard label="TOTAL ROUNDS" value={totalRounds} sub="All time"/>
-            <StatCard label="MONEY TRACKED" value={`$${totalMoneyTracked.toLocaleString()}`} sub="Entry fees" color="text-yellow-400"/>
-            <StatCard label="MOST ACTIVE" value={mostActivePlayer?.name||'—'} sub={`${mostActivePlayer?.rounds||0} rounds`} color="text-blue-400"/>
-            <StatCard label="COURSE LIBRARY" value={courseLibrary.length} sub="Saved courses" color="text-purple-400"/>
-            <StatCard label="ROSTER SIZE" value={globalRoster.length} sub="Global players" color="text-orange-400"/>
-            <StatCard label="HISTORY RECORDS" value={history.length} sub="Archived matches" color="text-pink-400"/>
-          </div>
-        </Section>
+        
 
         {/* ── PLAYER STATS ── */}
-        <Section title="Player Stats" icon={<Trophy size={16}/>} defaultOpen={false}>
-          <div className="p-4">
-            <div className="space-y-2">
-              {playerStats.map((p, i) => (
-                <div key={p.name} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-zinc-600 text-xs font-black w-5">{i+1}</span>
-                    <div>
-                      <div className="font-bold text-sm">{p.name}</div>
-                      <div className="text-zinc-600 text-xs font-medium normal-case">{p.rounds} round{p.rounds!==1?'s':''}</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-emerald-400 font-bold text-sm">
-                      {p.holes > 0 ? (p.totalScore/p.holes*18).toFixed(1) : '—'}
-                    </div>
-                    <div className="text-zinc-600 text-[10px]">avg score</div>
-                  </div>
-                </div>
-              ))}
-              {playerStats.length === 0 && <p className="text-zinc-600 text-sm text-center py-4">No match history yet</p>}
-            </div>
-          </div>
-        </Section>
+        
 
         {/* ── GLOBAL ROSTER ── */}
-        <Section title={`Global Roster (${globalRoster.length})`} icon={<Users size={16}/>}>
-          <div className="p-4 space-y-3">
-            {/* Add new player */}
-            {addingPlayer ? (
-              <div className="flex gap-2 items-center">
-                <input value={newPlayerName} onChange={e=>setNewPlayerName(e.target.value.toUpperCase())}
-                  placeholder="NAME" autoFocus
-                  className="flex-1 bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl font-bold text-sm outline-none"/>
-                <input type="number" value={newPlayerHcp} onChange={e=>setNewPlayerHcp(Number(e.target.value))}
-                  className="w-16 bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl font-bold text-sm outline-none text-center"
-                  placeholder="HCP"/>
-                <button onClick={async()=>{
-                  if(!newPlayerName.trim())return
-                  const r=push(ref(db,'globalRoster'))
-                  await set(r,{id:r.key,name:newPlayerName.trim(),handicap:newPlayerHcp})
-                  setNewPlayerName('');setNewPlayerHcp(0);setAddingPlayer(false)
-                  showToast('✓ Player added')
-                }} className="bg-emerald-500 text-black px-3 py-2.5 rounded-xl font-bold text-sm"><Check size={14}/></button>
-                <button onClick={()=>setAddingPlayer(false)} className="text-zinc-600 px-2 py-2.5"><X size={14}/></button>
-              </div>
-            ) : (
-              <button onClick={()=>setAddingPlayer(true)}
-                className="w-full flex items-center justify-center gap-2 border border-dashed border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 py-2.5 rounded-xl font-semibold text-sm transition-all">
-                <Plus size={14}/> Add Player
-              </button>
-            )}
-            {/* Player list */}
-            <div className="space-y-2">
-              {globalRoster.map(p => (
-                <div key={p.id} className="flex items-center gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5">
-                  {editingPlayer === p.id ? (
-                    <>
-                      <input value={editName} onChange={e=>setEditName(e.target.value.toUpperCase())} autoFocus
-                        className="flex-1 bg-black border border-emerald-500 px-2 py-1 rounded-lg font-bold text-sm outline-none"/>
-                      <input type="number" value={editHcp} onChange={e=>setEditHcp(Number(e.target.value))}
-                        className="w-14 bg-black border border-zinc-700 px-2 py-1 rounded-lg font-bold text-sm text-center outline-none"/>
-                      <button onClick={async()=>{
-                        await set(ref(db,`globalRoster/${p.id}`),{id:p.id,name:editName.trim(),handicap:editHcp})
-                        setEditingPlayer(null);showToast('✓ Updated')
-                      }} className="text-emerald-400"><Check size={14}/></button>
-                      <button onClick={()=>setEditingPlayer(null)} className="text-zinc-600"><X size={14}/></button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex-1 font-semibold text-sm">{p.name}</span>
-                      <span className="text-zinc-500 text-xs font-semibold">HCP {p.handicap||0}</span>
-                      <button onClick={()=>{setEditingPlayer(p.id);setEditName(p.name);setEditHcp(p.handicap||0)}}
-                        className="text-zinc-600 hover:text-emerald-400 transition-colors"><Edit3 size={13}/></button>
-                      <button onClick={()=>setConfirmDelete({id:p.id,label:p.name,path:`globalRoster/${p.id}`})}
-                        className="text-zinc-700 hover:text-rose-400 transition-colors"><Trash2 size={13}/></button>
-                    </>
-                  )}
-                </div>
-              ))}
-              {globalRoster.length===0 && <p className="text-zinc-600 text-xs text-center py-2">No players in roster</p>}
-            </div>
-          </div>
-        </Section>
+        
 
         {/* ── COURSE LIBRARY ── */}
         <Section title={`Course Library (${courseLibrary.length})`} icon={<Flag size={16}/>} defaultOpen={false}>
@@ -1239,41 +1130,43 @@ export default function MasterPage() {
             <div>
               <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">ADD NEW ADMIN USER</p>
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
-                <p className="text-zinc-600 text-xs font-medium normal-case leading-relaxed">
-                  First create the account in Firebase Console → Authentication → Add user. Then paste their UID and email here to grant app access.
-                </p>
-                <div className="space-y-2">
-                  <input
-                    placeholder="Firebase UID (from Auth console)"
-                    className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs font-mono text-white outline-none"
-                    id="new-uid-input"
-                  />
-                  <input
-                    placeholder="Email address"
-                    className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs text-white outline-none"
-                    id="new-email-input"
-                  />
-                  <div className="flex gap-2">
-                    <select
-                      className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none flex-1">
-                      <option value="scorer">Scorer Admin</option>
-                      <option value="master">Master Admin</option>
-                    </select>
-                    <button
-                      onClick={async () => {
-                        const uidInput = (document.getElementById('new-uid-input') as HTMLInputElement)?.value?.trim()
-                        const emailInput = (document.getElementById('new-email-input') as HTMLInputElement)?.value?.trim()
-                        const roleSelect = (document.querySelector('select[class*="zinc-800"]') as HTMLSelectElement)?.value
-                        if (!uidInput || !emailInput) return showToast('Enter UID and email')
-                        await set(ref(db, `users/${uidInput}`), { role: roleSelect || 'scorer', email: emailInput })
-                        ;(document.getElementById('new-uid-input') as HTMLInputElement).value = ''
-                        ;(document.getElementById('new-email-input') as HTMLInputElement).value = ''
-                        showToast('✓ User added')
-                      }}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5">
-                      <UserPlus size={13}/> Add
-                    </button>
-                  </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                  <p className="text-amber-400 text-[10px] font-semibold tracking-wider mb-1">TWO STEP PROCESS</p>
+                  <p className="text-zinc-500 text-xs font-medium normal-case leading-relaxed">
+                    1. Go to <span className="text-white font-semibold">Firebase Console → Authentication → Add user</span> and create their account.<br/>
+                    2. Copy their UID from the Users tab and paste it below.
+                  </p>
+                </div>
+                <input
+                  value={newUserUid}
+                  onChange={e => setNewUserUid(e.target.value)}
+                  placeholder="Firebase UID (paste from Auth console)"
+                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs font-mono text-white outline-none"
+                />
+                <input
+                  value={newUserEmail}
+                  onChange={e => setNewUserEmail(e.target.value)}
+                  placeholder="Email address"
+                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs text-white outline-none"
+                />
+                <div className="flex gap-2">
+                  <select
+                    value={newUserRole}
+                    onChange={e => setNewUserRole(e.target.value as 'scorer'|'master')}
+                    className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none flex-1">
+                    <option value="scorer">Scorer Admin</option>
+                    <option value="master">Master Admin</option>
+                  </select>
+                  <button
+                    onClick={async () => {
+                      if (!newUserUid.trim() || !newUserEmail.trim()) return showToast('Enter both UID and email')
+                      await set(ref(db, `users/${newUserUid.trim()}`), { role: newUserRole, email: newUserEmail.trim() })
+                      setNewUserUid(''); setNewUserEmail('')
+                      showToast('✓ User added — they can now sign in')
+                    }}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5">
+                    <UserPlus size={13}/> Add
+                  </button>
                 </div>
               </div>
             </div>
@@ -1343,36 +1236,7 @@ export default function MasterPage() {
         </Section>
 
 {/* ── FIREBASE INFO ── */}
-        <Section title="Database Info" icon={<Database size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-3">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-zinc-500 font-semibold">Project</span>
-                <span className="font-mono text-xs text-zinc-400">mcc-blitz-live</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500 font-semibold">History records</span>
-                <span className="text-emerald-400 font-bold">{history.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500 font-semibold">Roster players</span>
-                <span className="text-emerald-400 font-bold">{globalRoster.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500 font-semibold">Courses saved</span>
-                <span className="text-emerald-400 font-bold">{courseLibrary.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500 font-semibold">Security rules</span>
-                <span className="text-amber-400 font-bold text-xs">Open (upgrade pending)</span>
-              </div>
-            </div>
-            <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white py-3 rounded-xl font-semibold text-sm transition-colors">
-              <Database size={14}/> Open Firebase Console ↗
-            </a>
-          </div>
-        </Section>
+        
 
       </div>
     </div>
