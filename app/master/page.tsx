@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/components/AuthProvider'
-import { signOut } from '@/lib/auth'
+import { signOut, resetPassword } from '@/lib/auth'
+import { auth } from '@/lib/firebase'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set, push, remove, get } from 'firebase/database'
 import Link from 'next/link'
@@ -10,7 +11,7 @@ import {
   Trash2, Plus, Edit3, Check, X, ChevronDown, ChevronRight,
   Database, Zap, DollarSign, Trophy, Flag, RefreshCw,
   Lock, LogOut, Download, Archive, Target,
-  AlertTriangle, Activity, Clock, Hash
+  AlertTriangle, Activity, Clock, Hash, Mail, UserPlus, UserX, KeyRound
 } from 'lucide-react'
 
 
@@ -796,6 +797,13 @@ export default function MasterPage() {
   const [savedFormats, setSavedFormats] = useState<any[]>([])
 
   // Edit states
+  // User management state
+  const [dbUsers, setDbUsers] = useState<any[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'scorer'|'master'>('scorer')
+  const [inviting, setInviting] = useState(false)
+  const [resetSent, setResetSent] = useState<string|null>(null)
+
   const [editingPlayer, setEditingPlayer] = useState<string|null>(null)
   const [editName, setEditName] = useState('')
   const [editHcp, setEditHcp] = useState(0)
@@ -816,6 +824,12 @@ export default function MasterPage() {
 
   useEffect(() => {
     if (!authed) return
+    onValue(ref(db,'users'), snap => {
+      if (snap.val()) {
+        const items = Object.entries(snap.val()).map(([uid, data]: any) => ({ uid, ...data }))
+        setDbUsers(items)
+      } else setDbUsers([])
+    })
     onValue(ref(db,'history'), snap => {
       if (snap.val()) {
         const items = Object.entries(snap.val())
@@ -1158,6 +1172,143 @@ export default function MasterPage() {
                 </div>
               )
             })}
+          </div>
+        </Section>
+
+        {/* ── USER MANAGEMENT ── */}
+        <Section title="👤 User Management" icon={<Users size={16}/>} defaultOpen={false}>
+          <div className="p-4 space-y-4">
+
+            {/* Current users */}
+            <div>
+              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">ACTIVE ACCOUNTS</p>
+              <div className="space-y-2">
+                {dbUsers.map(u => (
+                  <div key={u.uid} className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${u.role === 'master' ? 'bg-emerald-500/20' : 'bg-blue-500/20'}`}>
+                          <Shield size={14} className={u.role === 'master' ? 'text-emerald-400' : 'text-blue-400'}/>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-sm">{u.email || u.uid.slice(0,12)+'...'}</div>
+                          <div className={`text-[10px] font-bold uppercase tracking-wider ${u.role === 'master' ? 'text-emerald-400' : 'text-blue-400'}`}>{u.role}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {/* Change role */}
+                        <select
+                          value={u.role}
+                          onChange={async e => {
+                            await set(ref(db, `users/${u.uid}/role`), e.target.value)
+                            showToast('✓ Role updated')
+                          }}
+                          className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-semibold px-2 py-1 rounded-lg outline-none">
+                          <option value="scorer">Scorer</option>
+                          <option value="master">Master</option>
+                        </select>
+                        {/* Send reset */}
+                        <button
+                          onClick={async () => {
+                            if (!u.email) return showToast('No email on record')
+                            try {
+                              await resetPassword(u.email)
+                              setResetSent(u.uid)
+                              setTimeout(() => setResetSent(null), 3000)
+                              showToast(`✓ Reset email sent to ${u.email}`)
+                            } catch { showToast('Failed to send reset email') }
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-amber-400 transition-colors"
+                          title="Send password reset">
+                          {resetSent === u.uid ? <Check size={14} className="text-emerald-400"/> : <KeyRound size={14}/>}
+                        </button>
+                        {/* Remove from app (delete from users node, not Firebase Auth) */}
+                        {u.role !== 'master' && (
+                          <button
+                            onClick={() => setConfirmDelete({id:u.uid, label:u.email||u.uid, path:`users/${u.uid}`})}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-700 hover:text-rose-400 transition-colors"
+                            title="Remove access">
+                            <UserX size={14}/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Add new user */}
+            <div>
+              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">ADD NEW ADMIN USER</p>
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <p className="text-zinc-600 text-xs font-medium normal-case leading-relaxed">
+                  First create the account in Firebase Console → Authentication → Add user. Then paste their UID and email here to grant app access.
+                </p>
+                <div className="space-y-2">
+                  <input
+                    placeholder="Firebase UID (from Auth console)"
+                    className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs font-mono text-white outline-none"
+                    id="new-uid-input"
+                  />
+                  <input
+                    placeholder="Email address"
+                    className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs text-white outline-none"
+                    id="new-email-input"
+                  />
+                  <div className="flex gap-2">
+                    <select
+                      className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none flex-1">
+                      <option value="scorer">Scorer Admin</option>
+                      <option value="master">Master Admin</option>
+                    </select>
+                    <button
+                      onClick={async () => {
+                        const uidInput = (document.getElementById('new-uid-input') as HTMLInputElement)?.value?.trim()
+                        const emailInput = (document.getElementById('new-email-input') as HTMLInputElement)?.value?.trim()
+                        const roleSelect = (document.querySelector('select[class*="zinc-800"]') as HTMLSelectElement)?.value
+                        if (!uidInput || !emailInput) return showToast('Enter UID and email')
+                        await set(ref(db, `users/${uidInput}`), { role: roleSelect || 'scorer', email: emailInput })
+                        ;(document.getElementById('new-uid-input') as HTMLInputElement).value = ''
+                        ;(document.getElementById('new-email-input') as HTMLInputElement).value = ''
+                        showToast('✓ User added')
+                      }}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5">
+                      <UserPlus size={13}/> Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Password reset shortcut */}
+            <div>
+              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">SEND PASSWORD RESET</p>
+              <div className="flex gap-2">
+                <input
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="user@email.com"
+                  className="flex-1 bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-sm text-white outline-none"
+                />
+                <button
+                  onClick={async () => {
+                    if (!inviteEmail.trim()) return
+                    setInviting(true)
+                    try {
+                      await resetPassword(inviteEmail.trim())
+                      showToast(`✓ Reset email sent to ${inviteEmail}`)
+                      setInviteEmail('')
+                    } catch { showToast('Failed — check the email address') }
+                    setInviting(false)
+                  }}
+                  disabled={inviting}
+                  className="bg-blue-500 hover:bg-blue-400 disabled:bg-zinc-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5">
+                  <Mail size={13}/> {inviting ? 'Sending...' : 'Send Reset'}
+                </button>
+              </div>
+            </div>
+
           </div>
         </Section>
 
