@@ -352,7 +352,7 @@ function computeAnalytics(history: any[]) {
   }))
 
   // ── ROUND RECORDS ─────────────────────────────────────────────────
-  const roundRecords: {name:string, score:number, course:string, date:string}[] = []
+  const roundRecords: {name:string, score:number, course:string, date:string, nineHole:boolean}[] = []
   history.forEach(arch => {
     const roster: any[] = arch.roster ? Object.values(arch.roster) : []
     const scores: Record<string,number[]> = arch.scores || {}
@@ -367,18 +367,26 @@ function computeAnalytics(history: any[]) {
       const holeScores = sc.slice(holeOffset, holeOffset+numHoles).map(Number).filter(s=>s>0)
       if (holeScores.length < numHoles*0.8) return
       const gross = holeScores.reduce((a,b)=>a+b,0)
-      roundRecords.push({ name: rp.name, score: gross, course: courseName, date })
+      roundRecords.push({ name: rp.name, score: gross, course: courseName, date, nineHole })
     })
   })
-  const allTimeLowest = [...roundRecords].sort((a,b)=>a.score-b.score).slice(0,10)
-  const allTimeHighest = [...roundRecords].sort((a,b)=>b.score-a.score).slice(0,10)
-  const lowestPerPlayer: Record<string,{score:number,course:string,date:string}> = {}
-  const highestPerPlayer: Record<string,{score:number,course:string,date:string}> = {}
-  roundRecords.forEach(r => {
+
+  // Separate 9-hole and 18-hole records
+  const records18 = roundRecords.filter(r => !r.nineHole)
+  const records9 = roundRecords.filter(r => r.nineHole)
+  const allTimeLowest = [...records18].sort((a,b)=>a.score-b.score).slice(0,10)
+  const allTimeHighest = [...records18].sort((a,b)=>b.score-a.score).slice(0,10)
+  const allTimeLowest9 = [...records9].sort((a,b)=>a.score-b.score).slice(0,5)
+  const allTimeHighest9 = [...records9].sort((a,b)=>b.score-a.score).slice(0,5)
+
+  // Per-player best/worst — separated by hole count
+  const lowestPerPlayer: Record<string,{score:number,course:string,date:string,nineHole:boolean}> = {}
+  const highestPerPlayer: Record<string,{score:number,course:string,date:string,nineHole:boolean}> = {}
+  records18.forEach(r => {
     if (!lowestPerPlayer[r.name] || r.score < lowestPerPlayer[r.name].score)
-      lowestPerPlayer[r.name] = {score:r.score, course:r.course, date:r.date}
+      lowestPerPlayer[r.name] = {score:r.score, course:r.course, date:r.date, nineHole:false}
     if (!highestPerPlayer[r.name] || r.score > highestPerPlayer[r.name].score)
-      highestPerPlayer[r.name] = {score:r.score, course:r.course, date:r.date}
+      highestPerPlayer[r.name] = {score:r.score, course:r.course, date:r.date, nineHole:false}
   })
 
   // ── BETTING STATS ─────────────────────────────────────────────────
@@ -459,7 +467,7 @@ function computeAnalytics(history: any[]) {
   if (consistency[0]) badges[consistency[0].name] = [...(badges[consistency[0].name]||[]), '🎯 Mr. Consistent']
   if (sandbagIndex[0] && sandbagIndex[0].sandbag > 2) badges[sandbagIndex[0].name] = [...(badges[sandbagIndex[0].name]||[]), '⚠️ Sandbagger']
 
-  return { playerList, totalRounds, totalMoneyTracked, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges, allTimeLowest, allTimeHighest, lowestPerPlayer, highestPerPlayer, bettingStats }
+  return { playerList, totalRounds, totalMoneyTracked, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges, allTimeLowest, allTimeHighest, allTimeLowest9, allTimeHighest9, lowestPerPlayer, highestPerPlayer, bettingStats }
 }
 
 
@@ -555,7 +563,7 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
     )
   }
 
-  const { playerList, totalRounds, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges, allTimeLowest, allTimeHighest, lowestPerPlayer, highestPerPlayer, bettingStats } = data
+  const { playerList, totalRounds, moneyLeaderboard, scoringLeaderboard, winRateLeaderboard, skinsLeaderboard, handicapTrends, sandbagIndex, consistency, partnerships, h2h, scoreTrends, badges, allTimeLowest, allTimeHighest, allTimeLowest9, allTimeHighest9, lowestPerPlayer, highestPerPlayer, bettingStats } = data
   const maxRounds = Math.max(...playerList.map(p => p.rounds))
   const maxMoney = Math.max(...moneyLeaderboard.map(p => Math.abs(p.moneyWon - p.moneyLost)))
 
@@ -706,9 +714,10 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
       {/* ── ROUND RECORDS ── */}
       <AnalyticsSection title="🏅 Round Records — All Time" icon={<Trophy size={15}/>} accent="yellow">
         <div className="p-4 space-y-4">
-          {/* Group bests */}
+
+          {/* 18-hole records */}
           <div>
-            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">🔥 TOP 5 LOWEST ROUNDS EVER</p>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">🔥 LOWEST — 18 HOLES</p>
             <div className="space-y-2">
               {allTimeLowest.slice(0,5).map((r,i) => (
                 <div key={`${r.name}-${r.score}-${i}`} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-2.5">
@@ -722,10 +731,12 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
                   <span className="text-emerald-400 font-black text-lg">{r.score}</span>
                 </div>
               ))}
+              {allTimeLowest.length === 0 && <p className="text-zinc-600 text-xs text-center py-2">No 18-hole rounds yet</p>}
             </div>
           </div>
+
           <div>
-            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">💀 TOP 5 HIGHEST ROUNDS EVER</p>
+            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">💀 HIGHEST — 18 HOLES</p>
             <div className="space-y-2">
               {allTimeHighest.slice(0,5).map((r,i) => (
                 <div key={`${r.name}-${r.score}-h-${i}`} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-2.5">
@@ -737,43 +748,91 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
                   <span className="text-rose-400 font-black text-lg">{r.score}</span>
                 </div>
               ))}
+              {allTimeHighest.length === 0 && <p className="text-zinc-600 text-xs text-center py-2">No 18-hole rounds yet</p>}
             </div>
           </div>
-          {/* Per-player best/worst */}
-          <div>
-            <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">PER PLAYER — BEST vs WORST</p>
-            <div className="space-y-2">
-              {Object.entries(lowestPerPlayer).sort((a,b)=>a[1].score-b[1].score).map(([name, best]) => {
-                const worst = highestPerPlayer[name]
-                return (
-                  <div key={name} className="bg-zinc-900/60 rounded-xl px-4 py-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-sm">{name}</span>
-                      <div className="flex items-center gap-3">
-                        <div className="text-center">
-                          <span className="text-emerald-400 font-black text-base">{best.score}</span>
-                          <span className="text-zinc-600 text-[9px] ml-1">BEST</span>
-                        </div>
-                        <span className="text-zinc-700">·</span>
-                        <div className="text-center">
-                          <span className="text-rose-400 font-black text-base">{worst?.score}</span>
-                          <span className="text-zinc-600 text-[9px] ml-1">WORST</span>
-                        </div>
-                        <div className="text-center">
-                          <span className="text-zinc-400 font-black text-base">{worst && best ? worst.score - best.score : '—'}</span>
-                          <span className="text-zinc-600 text-[9px] ml-1">RANGE</span>
-                        </div>
+
+          {/* 9-hole records — only show if any exist */}
+          {allTimeLowest9.length > 0 && (
+            <>
+              <div className="border-t border-zinc-800 pt-3">
+                <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">🔥 LOWEST — 9 HOLES</p>
+                <div className="space-y-2">
+                  {allTimeLowest9.map((r,i) => (
+                    <div key={`9l-${i}`} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-2.5">
+                      <span className={`text-sm ${i===0?'text-yellow-400':i===1?'text-zinc-300':i===2?'text-amber-600':'text-zinc-600'}`}>
+                        {i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}
+                      </span>
+                      <div className="flex-1">
+                        <span className="font-bold text-sm text-white">{r.name}</span>
+                        <span className="text-zinc-600 text-xs ml-2 font-medium normal-case">{r.course} · {r.date}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-emerald-400 font-black text-lg">{r.score}</span>
+                        <span className="text-zinc-600 text-[9px] ml-1">/ 9</span>
                       </div>
                     </div>
-                    <div className="flex gap-1 h-1.5">
-                      <div className="bg-emerald-500 rounded-full" style={{flex: 1}}/>
-                      <div className="bg-zinc-700 rounded-full" style={{flex: worst && best ? (worst.score - best.score) : 1}}/>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">💀 HIGHEST — 9 HOLES</p>
+                <div className="space-y-2">
+                  {allTimeHighest9.map((r,i) => (
+                    <div key={`9h-${i}`} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-2.5">
+                      <span className="text-zinc-600 text-sm">#{i+1}</span>
+                      <div className="flex-1">
+                        <span className="font-bold text-sm text-white">{r.name}</span>
+                        <span className="text-zinc-600 text-xs ml-2 font-medium normal-case">{r.course} · {r.date}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-rose-400 font-black text-lg">{r.score}</span>
+                        <span className="text-zinc-600 text-[9px] ml-1">/ 9</span>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Per-player best/worst — 18 hole only */}
+          {Object.keys(lowestPerPlayer).length > 0 && (
+            <div>
+              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">PER PLAYER — BEST vs WORST (18 HOLES)</p>
+              <div className="space-y-2">
+                {Object.entries(lowestPerPlayer).sort((a,b)=>a[1].score-b[1].score).map(([name, best]) => {
+                  const worst = highestPerPlayer[name]
+                  return (
+                    <div key={name} className="bg-zinc-900/60 rounded-xl px-4 py-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-sm">{name}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="text-center">
+                            <span className="text-emerald-400 font-black text-base">{best.score}</span>
+                            <span className="text-zinc-600 text-[9px] ml-1">BEST</span>
+                          </div>
+                          <span className="text-zinc-700">·</span>
+                          <div className="text-center">
+                            <span className="text-rose-400 font-black text-base">{worst?.score || '—'}</span>
+                            <span className="text-zinc-600 text-[9px] ml-1">WORST</span>
+                          </div>
+                          <div className="text-center">
+                            <span className="text-zinc-400 font-black text-base">{worst && best ? worst.score - best.score : '—'}</span>
+                            <span className="text-zinc-600 text-[9px] ml-1">RANGE</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 h-1.5">
+                        <div className="bg-emerald-500 rounded-full" style={{flex: 1}}/>
+                        <div className="bg-zinc-700 rounded-full" style={{flex: worst && best ? (worst.score - best.score) : 1}}/>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </AnalyticsSection>
 
