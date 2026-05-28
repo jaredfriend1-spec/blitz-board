@@ -1,5 +1,6 @@
 import './globals.css'
 import BottomNav from '@/components/BottomNav'
+import { AuthProvider } from '@/components/AuthProvider'
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
