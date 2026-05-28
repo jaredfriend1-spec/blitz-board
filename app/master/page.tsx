@@ -797,13 +797,27 @@ export default function MasterPage() {
   const [savedFormats, setSavedFormats] = useState<any[]>([])
 
   // Edit states
-  // Analytics flags state
-  const [analyticsFlags, setAnalyticsFlags] = useState<Record<string,boolean>>({
-    analytics_scorer:true, analytics_player:false,
-    money_board:true, match_records:true, scoring_avgs:true, skins:true,
-    h2h:true, partnerships:true, handicap:true, integrity:true,
-    consistency:true, trends:true, records:true, betting:true
-  })
+  // Analytics access control
+  const [scorerAccess, setScorerAccess] = useState(true)
+  const [playerAccess, setPlayerAccess] = useState(false)
+  const SECTIONS = [
+    {key:'money_board', label:'💰 Money Leaderboard'},
+    {key:'match_records', label:'⚡ Match Records'},
+    {key:'scoring_avgs', label:'🏌️ Scoring Averages'},
+    {key:'skins', label:'🦴 Skins Kings'},
+    {key:'h2h', label:'🥊 Head to Head'},
+    {key:'partnerships', label:'🤝 Best Partnerships'},
+    {key:'handicap', label:'📐 Handicap Analysis'},
+    {key:'integrity', label:'⚠️ Handicap Integrity'},
+    {key:'consistency', label:'🎯 Consistency Index'},
+    {key:'trends', label:'📈 Score Trends'},
+    {key:'records', label:'🏅 Round Records'},
+    {key:'betting', label:'🎰 Betting Stats'},
+  ]
+  const defaultSections = Object.fromEntries(SECTIONS.map(s => [s.key, true]))
+  const [scorerSections, setScorerSections] = useState<Record<string,boolean>>(defaultSections)
+  const [playerSections, setPlayerSections] = useState<Record<string,boolean>>(defaultSections)
+  const [analyticsTab, setAnalyticsTab] = useState<'who'|'what'>('who')
 
   // User management state
   const [dbUsers, setDbUsers] = useState<any[]>([])
@@ -833,9 +847,11 @@ export default function MasterPage() {
   useEffect(() => {
     if (!authed) return
     onValue(ref(db,'analyticsFlags'), snap => {
-      if (snap.val() !== null && snap.val() !== undefined) {
-        setAnalyticsFlags((prev:any) => ({ ...prev, ...snap.val() }))
-      }
+      const d = snap.val() || {}
+      if (d.scorer_access !== undefined) setScorerAccess(!!d.scorer_access)
+      if (d.player_access !== undefined) setPlayerAccess(!!d.player_access)
+      if (d.scorer_sections) setScorerSections(prev => ({...prev, ...d.scorer_sections}))
+      if (d.player_sections) setPlayerSections(prev => ({...prev, ...d.player_sections}))
     })
     onValue(ref(db,'users'), snap => {
       if (snap.val()) {
@@ -1077,98 +1093,141 @@ export default function MasterPage() {
         </Section>
 
         {/* ── ANALYTICS ACCESS ── */}
-        <Section title="📊 Analytics Access" icon={<BarChart3 size={16}/>} defaultOpen={false}>
+        <Section title="📊 Analytics Access Control" icon={<BarChart3 size={16}/>} defaultOpen={false}>
           <div className="p-4 space-y-4">
-            <p className="text-zinc-500 text-xs font-medium normal-case">
-              Control who can see Analytics and which sections are visible. Changes apply instantly.
-            </p>
 
-            {/* Scorer access */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-                <div>
-                  <div className="font-bold text-sm text-blue-400">Scorer Admins</div>
-                  <div className="text-zinc-600 text-[10px] font-medium normal-case">Jeff and other scorers</div>
-                </div>
-                <button
-                  onClick={async () => {
-                    const cur = analyticsFlags['analytics_scorer']
-                    const newVal = cur === false ? true : !cur
-                    setAnalyticsFlags((prev:any) => ({ ...prev, analytics_scorer: newVal }))
-                    await set(ref(db, 'analyticsFlags/analytics_scorer'), newVal)
-                    showToast(`Scorer analytics: ${newVal ? 'ON ✓' : 'OFF'}`)
-                  }}
-                  className={`relative w-12 h-6 rounded-full transition-all flex-shrink-0 ${analyticsFlags['analytics_scorer']===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags['analytics_scorer']===false ? 'translate-x-1' : 'translate-x-7'}`}/>
-                </button>
-              </div>
-              <div className="px-4 py-2 text-zinc-600 text-[10px] font-medium normal-case">
-                {analyticsFlags['analytics_scorer']===false ? '🔴 Scorers cannot see Analytics' : '🟢 Scorers can see Analytics'}
-              </div>
+            {/* Tabs */}
+            <div className="flex bg-zinc-900 rounded-xl p-1 gap-1">
+              <button onClick={() => setAnalyticsTab('who')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${analyticsTab==='who' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                👥 Who Can See
+              </button>
+              <button onClick={() => setAnalyticsTab('what')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${analyticsTab==='what' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                👁️ What They See
+              </button>
             </div>
 
-            {/* Player access */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-                <div>
-                  <div className="font-bold text-sm text-amber-400">Players</div>
-                  <div className="text-zinc-600 text-[10px] font-medium normal-case">Anyone on the Player hub</div>
-                </div>
-                <button
-                  onClick={async () => {
-                    const cur = analyticsFlags['analytics_player']
-                    const newVal = cur === true ? false : true
-                    setAnalyticsFlags((prev:any) => ({ ...prev, analytics_player: newVal }))
-                    await set(ref(db, 'analyticsFlags/analytics_player'), newVal)
-                    showToast(`Player analytics: ${newVal ? 'ON ✓' : 'OFF'}`)
-                  }}
-                  className={`relative w-12 h-6 rounded-full transition-all flex-shrink-0 ${analyticsFlags['analytics_player']===true ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags['analytics_player']===true ? 'translate-x-7' : 'translate-x-1'}`}/>
-                </button>
-              </div>
-              <div className="px-4 py-2 text-zinc-600 text-[10px] font-medium normal-case">
-                {analyticsFlags['analytics_player']===true ? '🟢 Players can see Analytics' : '🔴 Players cannot see Analytics (default)'}
-              </div>
-            </div>
+            {/* WHO CAN SEE */}
+            {analyticsTab === 'who' && (
+              <div className="space-y-3">
+                <p className="text-zinc-600 text-xs font-medium normal-case">Turn Analytics on or off for each role. Changes save instantly to Firebase.</p>
 
-            {/* Section visibility */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">WHICH SECTIONS ARE VISIBLE</p>
-              <div className="space-y-2">
-                {[
-                  {key:'money_board', label:'Money Leaderboard', desc:'Net won/lost per player'},
-                  {key:'match_records', label:'Match Records', desc:'W/L records by format'},
-                  {key:'scoring_avgs', label:'Scoring Averages', desc:'Avg scores, birdies, eagles'},
-                  {key:'skins', label:'Skins Kings', desc:'Skins won & money'},
-                  {key:'h2h', label:'Head to Head', desc:'Player vs player records'},
-                  {key:'partnerships', label:'Best Partnerships', desc:'2v2 partner win rates'},
-                  {key:'handicap', label:'Handicap Analysis', desc:'HCP trends over time'},
-                  {key:'integrity', label:'Handicap Integrity', desc:'Sandbagging detector'},
-                  {key:'consistency', label:'Consistency Index', desc:'Score variance'},
-                  {key:'trends', label:'Score Trends', desc:'Last 8 rounds chart'},
-                  {key:'records', label:'Round Records', desc:'Best/worst rounds ever'},
-                  {key:'betting', label:'Betting Stats', desc:'Format & bet analytics'},
-                ].map(f => (
-                  <div key={f.key} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5">
-                    <div className="flex-1 min-w-0 mr-3">
-                      <div className="font-semibold text-sm">{f.label}</div>
-                      <div className="text-zinc-600 text-[10px] font-medium normal-case">{f.desc}</div>
+                {/* Scorer */}
+                <div className={`border-2 rounded-xl overflow-hidden transition-colors ${scorerAccess ? 'border-blue-500/40' : 'border-zinc-800'}`}>
+                  <div className="flex items-center justify-between px-4 py-4 bg-zinc-950">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${scorerAccess ? 'bg-blue-500/20' : 'bg-zinc-800'}`}>
+                        <Shield size={18} className={scorerAccess ? 'text-blue-400' : 'text-zinc-600'}/>
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm">Scorer Admins</div>
+                        <div className="text-zinc-500 text-[10px] font-medium normal-case">Jeff and other scorers</div>
+                      </div>
                     </div>
                     <button
                       onClick={async () => {
-                        const cur = analyticsFlags[f.key]
-                        const newVal = cur === false ? true : !cur
-                        setAnalyticsFlags((prev:any) => ({ ...prev, [f.key]: newVal }))
-                        await set(ref(db, 'analyticsFlags/' + f.key), newVal)
-                        showToast(`${f.label}: ${newVal ? 'visible' : 'hidden'}`)
+                        const newVal = !scorerAccess
+                        setScorerAccess(newVal)
+                        await set(ref(db, 'analyticsFlags/scorer_access'), newVal)
+                        showToast('Scorer analytics: ' + (newVal ? 'ON ✓' : 'OFF'))
                       }}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${analyticsFlags[f.key]===false ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
-                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${analyticsFlags[f.key]===false ? 'translate-x-1' : 'translate-x-7'}`}/>
+                      className={`relative w-14 h-7 rounded-full transition-all ${scorerAccess ? 'bg-blue-500' : 'bg-zinc-700'}`}>
+                      <div className={`absolute top-1.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${scorerAccess ? 'translate-x-8' : 'translate-x-1.5'}`}/>
                     </button>
                   </div>
-                ))}
+                  <div className={`px-4 py-2 text-[11px] font-semibold ${scorerAccess ? 'bg-blue-500/10 text-blue-400' : 'bg-zinc-900 text-zinc-600'}`}>
+                    {scorerAccess ? '🟢 Scorers CAN see Analytics' : '🔴 Scorers CANNOT see Analytics'}
+                  </div>
+                </div>
+
+                {/* Player */}
+                <div className={`border-2 rounded-xl overflow-hidden transition-colors ${playerAccess ? 'border-amber-500/40' : 'border-zinc-800'}`}>
+                  <div className="flex items-center justify-between px-4 py-4 bg-zinc-950">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${playerAccess ? 'bg-amber-500/20' : 'bg-zinc-800'}`}>
+                        <Users size={18} className={playerAccess ? 'text-amber-400' : 'text-zinc-600'}/>
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm">Players</div>
+                        <div className="text-zinc-500 text-[10px] font-medium normal-case">Anyone on the Player hub</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const newVal = !playerAccess
+                        setPlayerAccess(newVal)
+                        await set(ref(db, 'analyticsFlags/player_access'), newVal)
+                        showToast('Player analytics: ' + (newVal ? 'ON ✓' : 'OFF'))
+                      }}
+                      className={`relative w-14 h-7 rounded-full transition-all ${playerAccess ? 'bg-amber-500' : 'bg-zinc-700'}`}>
+                      <div className={`absolute top-1.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${playerAccess ? 'translate-x-8' : 'translate-x-1.5'}`}/>
+                    </button>
+                  </div>
+                  <div className={`px-4 py-2 text-[11px] font-semibold ${playerAccess ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-900 text-zinc-600'}`}>
+                    {playerAccess ? '🟢 Players CAN see Analytics' : '🔴 Players CANNOT see Analytics (default off)'}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* WHAT THEY SEE */}
+            {analyticsTab === 'what' && (
+              <div className="space-y-4">
+                <p className="text-zinc-600 text-xs font-medium normal-case">Control which sections each role sees. Independent per role.</p>
+
+                {/* Scorer sections */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={12} className="text-blue-400"/>
+                    <p className="text-blue-400 text-[10px] font-black tracking-widest">SCORER VIEW</p>
+                  </div>
+                  <div className="space-y-1">
+                    {SECTIONS.map(s => (
+                      <button key={s.key}
+                        onClick={async () => {
+                          const newVal = !scorerSections[s.key]
+                          const updated = {...scorerSections, [s.key]: newVal}
+                          setScorerSections(updated)
+                          await set(ref(db, 'analyticsFlags/scorer_sections/' + s.key), newVal)
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${scorerSections[s.key] ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-zinc-900/60 border border-zinc-800'}`}>
+                        <span className={`text-xs font-semibold ${scorerSections[s.key] ? 'text-white' : 'text-zinc-600'}`}>{s.label}</span>
+                        <div className={`w-4 h-4 rounded flex items-center justify-center ${scorerSections[s.key] ? 'bg-blue-500' : 'bg-zinc-700'}`}>
+                          {scorerSections[s.key] && <Check size={10} className="text-white"/>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Player sections */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users size={12} className="text-amber-400"/>
+                    <p className="text-amber-400 text-[10px] font-black tracking-widest">PLAYER VIEW</p>
+                  </div>
+                  <div className="space-y-1">
+                    {SECTIONS.map(s => (
+                      <button key={s.key}
+                        onClick={async () => {
+                          const newVal = !playerSections[s.key]
+                          const updated = {...playerSections, [s.key]: newVal}
+                          setPlayerSections(updated)
+                          await set(ref(db, 'analyticsFlags/player_sections/' + s.key), newVal)
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${playerSections[s.key] ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-zinc-900/60 border border-zinc-800'}`}>
+                        <span className={`text-xs font-semibold ${playerSections[s.key] ? 'text-white' : 'text-zinc-600'}`}>{s.label}</span>
+                        <div className={`w-4 h-4 rounded flex items-center justify-center ${playerSections[s.key] ? 'bg-amber-500' : 'bg-zinc-700'}`}>
+                          {playerSections[s.key] && <Check size={10} className="text-white"/>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         </Section>
 

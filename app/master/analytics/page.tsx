@@ -552,7 +552,7 @@ function AnalyticsSection({ title, icon, children, accent = 'emerald', defaultOp
   )
 }
 
-function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analyticsFlags: Record<string,boolean> }) {
+function AnalyticsDashboard({ history, activeSections }: { history: any[], activeSections: Record<string,boolean> }) {
   const data = useMemo(() => computeAnalytics(history), [history])
   if (!data || !data.playerList.length) {
     return (
@@ -587,7 +587,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       )}
 
       {/* ── MONEY LEADERBOARD ── */}
-      {analyticsFlags.money_board!==false && <AnalyticsSection title="💰 Money Leaderboard" icon={<DollarSign size={15}/>} accent="yellow" defaultOpen={false}>
+      {activeSections.money_board!==false && <AnalyticsSection title="💰 Money Leaderboard" icon={<DollarSign size={15}/>} accent="yellow" defaultOpen={false}>
         <div className="p-4 space-y-3">
           {moneyLeaderboard.map((p, i) => {
             const net = p.moneyWon - p.moneyLost
@@ -614,7 +614,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── MATCH WIN/LOSS ── */}
-      {analyticsFlags.match_records!==false && <AnalyticsSection title="⚡ Match Records" icon={<Trophy size={15}/>} accent="emerald">
+      {activeSections.match_records!==false && <AnalyticsSection title="⚡ Match Records" icon={<Trophy size={15}/>} accent="emerald">
         <div className="p-4 space-y-3">
           {winRateLeaderboard.map((p, i) => (
             <div key={p.name} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
@@ -635,7 +635,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── SCORING STATS ── */}
-      {analyticsFlags.scoring_avgs!==false && <AnalyticsSection title="🏌️ Scoring Averages" icon={<Target size={15}/>} accent="blue">
+      {activeSections.scoring_avgs!==false && <AnalyticsSection title="🏌️ Scoring Averages" icon={<Target size={15}/>} accent="blue">
         <div className="p-4 space-y-3">
           {scoringLeaderboard.map((p, i) => {
             const avg = p.grossScores.length ? Math.round(p.grossScores.reduce((s,n)=>s+n,0)/p.grossScores.length*10)/10 : 0
@@ -713,7 +713,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── ROUND RECORDS ── */}
-      {analyticsFlags.records!==false && <AnalyticsSection title="🏅 Round Records — All Time" icon={<Trophy size={15}/>} accent="yellow">
+      {activeSections.records!==false && <AnalyticsSection title="🏅 Round Records — All Time" icon={<Trophy size={15}/>} accent="yellow">
         <div className="p-4 space-y-4">
 
           {/* 18-hole records */}
@@ -838,7 +838,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── BETTING STATS ── */}
-      {analyticsFlags.betting!==false && <AnalyticsSection title="🎰 Betting Stats & Patterns" icon={<DollarSign size={15}/>} accent="yellow">
+      {activeSections.betting!==false && <AnalyticsSection title="🎰 Betting Stats & Patterns" icon={<DollarSign size={15}/>} accent="yellow">
         <div className="p-4 space-y-4">
 
           {/* Overview numbers */}
@@ -953,7 +953,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
 
-      {analyticsFlags.skins!==false && <AnalyticsSection title="🦴 Skins Kings" icon={<Zap size={15}/>} accent="purple">
+      {activeSections.skins!==false && <AnalyticsSection title="🦴 Skins Kings" icon={<Zap size={15}/>} accent="purple">
         <div className="p-4 space-y-3">
           {skinsLeaderboard.length === 0 && <p className="text-zinc-600 text-sm text-center py-4">No skins data yet</p>}
           {skinsLeaderboard.map((p, i) => {
@@ -978,7 +978,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── HEAD TO HEAD ── */}
-      {analyticsFlags.h2h!==false && <AnalyticsSection title="🥊 Head to Head Records" icon={<Users size={15}/>} accent="orange">
+      {activeSections.h2h!==false && <AnalyticsSection title="🥊 Head to Head Records" icon={<Users size={15}/>} accent="orange">
         <div className="p-4 space-y-2">
           {h2h.slice(0,10).map(match => (
             <div key={match.matchup} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
@@ -1001,7 +1001,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── BEST PARTNERSHIPS ── */}
-      {analyticsFlags.partnerships!==false && <AnalyticsSection title="🤝 Best Partnerships" icon={<Users size={15}/>} accent="teal">
+      {activeSections.partnerships!==false && <AnalyticsSection title="🤝 Best Partnerships" icon={<Users size={15}/>} accent="teal">
         <div className="p-4 space-y-2">
           {partnerships.slice(0,8).map((p, i) => (
             <div key={p.names} className="flex items-center gap-3 bg-zinc-900/60 rounded-xl px-4 py-3">
@@ -1019,7 +1019,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── HANDICAP ANALYSIS ── */}
-      {analyticsFlags.handicap!==false && <AnalyticsSection title="📐 Handicap Analysis" icon={<Hash size={15}/>} accent="blue">
+      {activeSections.handicap!==false && <AnalyticsSection title="📐 Handicap Analysis" icon={<Hash size={15}/>} accent="blue">
         <div className="p-4 space-y-4">
           <div className="space-y-2">
             <p className="text-zinc-500 text-[10px] font-semibold tracking-widest">CURRENT HANDICAPS</p>
@@ -1039,7 +1039,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── SANDBAG INDEX ── */}
-      {analyticsFlags.integrity!==false && <AnalyticsSection title="⚠️ Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
+      {activeSections.integrity!==false && <AnalyticsSection title="⚠️ Handicap Integrity Index" icon={<AlertTriangle size={15}/>} accent="rose">
         <div className="p-4 space-y-3">
           <div className="bg-zinc-900/60 border border-zinc-700 rounded-xl p-3 mb-1">
             <p className="text-zinc-400 text-xs font-semibold mb-1">How to read this</p>
@@ -1064,7 +1064,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── CONSISTENCY ── */}
-      {analyticsFlags.consistency!==false && <AnalyticsSection title="🎯 Consistency Index" icon={<Activity size={15}/>} accent="emerald">
+      {activeSections.consistency!==false && <AnalyticsSection title="🎯 Consistency Index" icon={<Activity size={15}/>} accent="emerald">
         <div className="p-4 space-y-2">
           <p className="text-zinc-600 text-xs font-medium normal-case">Lower std deviation = more consistent player</p>
           {consistency.map((p, i) => (
@@ -1084,7 +1084,7 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
       </AnalyticsSection>}
 
       {/* ── SCORING TRENDS ── */}
-      {analyticsFlags.trends!==false && <AnalyticsSection title="📈 Score Trends (Last 8 Rounds)" icon={<BarChart3 size={15}/>} accent="blue">
+      {activeSections.trends!==false && <AnalyticsSection title="📈 Score Trends (Last 8 Rounds)" icon={<BarChart3 size={15}/>} accent="blue">
         <div className="p-4 space-y-3">
           {scoreTrends.filter(p => p.scores.length >= 2).map(p => {
             const avg = Math.round(p.scores.reduce((a,b)=>a+b,0)/p.scores.length)
@@ -1115,27 +1115,34 @@ function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analy
 export default function AnalyticsPage() {
   const [history, setHistory] = useState<any[]>([])
   const { role, loading } = useAuth()
-  const [analyticsFlags, setAnalyticsFlags] = useState<Record<string,boolean>>({
-    analytics_scorer:true, analytics_player:false,
-    money_board:true, match_records:true, scoring_avgs:true, skins:true,
-    h2h:true, partnerships:true, handicap:true, integrity:true,
-    consistency:true, trends:true, records:true, betting:true
-  })
+  const defaultSections = {money_board:true,match_records:true,scoring_avgs:true,skins:true,h2h:true,partnerships:true,handicap:true,integrity:true,consistency:true,trends:true,records:true,betting:true}
+  const [scorerAccess, setScorerAccess] = useState(true)
+  const [playerAccess, setPlayerAccess] = useState(false)
+  const [scorerSections, setScorerSections] = useState<Record<string,boolean>>(defaultSections)
+  const [playerSections, setPlayerSections] = useState<Record<string,boolean>>(defaultSections)
+  const [flagsLoaded, setFlagsLoaded] = useState(false)
 
   useEffect(() => {
     onValue(ref(db,'analyticsFlags'), snap => {
-      if (snap.val()) setAnalyticsFlags((prev:any) => ({...prev,...snap.val()}))
+      const d = snap.val() || {}
+      if (d.scorer_access !== undefined) setScorerAccess(!!d.scorer_access)
+      if (d.player_access !== undefined) setPlayerAccess(!!d.player_access)
+      if (d.scorer_sections) setScorerSections((prev:any) => ({...prev,...d.scorer_sections}))
+      if (d.player_sections) setPlayerSections((prev:any) => ({...prev,...d.player_sections}))
       setFlagsLoaded(true)
     })
-    // If no flags set yet, still mark as loaded
     setTimeout(() => setFlagsLoaded(true), 2000)
   }, [])
 
   // Access control
-  const [flagsLoaded, setFlagsLoaded] = useState(false)
   const authed = role === 'master' ||
-    (role === 'scorer' && (analyticsFlags.analytics_scorer !== false)) ||
-    (role === null && analyticsFlags.analytics_player === true)
+    (role === 'scorer' && scorerAccess) ||
+    (role === null && playerAccess)
+
+  // Which sections to show based on role
+  const activeSections = role === 'master' ? defaultSections :
+    role === 'scorer' ? scorerSections : playerSections
+
 
   useEffect(() => {
     if (!authed) return
@@ -1189,7 +1196,7 @@ export default function AnalyticsPage() {
         </Link>
       </div>
 
-      <AnalyticsDashboard history={history} analyticsFlags={analyticsFlags}/>
+      <AnalyticsDashboard history={history} activeSections={activeSections}/>
     </div>
   )
 }
