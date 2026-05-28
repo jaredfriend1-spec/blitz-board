@@ -867,7 +867,7 @@ return (
  ))}
  <td className="py-1.5 px-2 font-black text-sm text-blue-300">{(m.sB||[]).slice(start,start+9).reduce((a:number,b:number)=>a+(b||0),0)||'—'}</td>
  </tr>
-
+ </>
  ) : (
  <>
  {[{label:m.sideA,scores:m.sA,color:'text-emerald-400'},{label:m.sideB,scores:m.sB,color:'text-blue-400'}].map(side => {
