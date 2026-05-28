@@ -684,15 +684,21 @@ export default function LandingPage() {
  {/* Demo Round — right below Quick Match */}
  {!isMock ? (
  <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
- className="w-full bg-zinc-900/40 p-4 rounded-[2rem] border-2 border-purple-500/20 hover:border-purple-500/50 mb-4 transition-all flex items-center gap-4 group disabled:opacity-50">
+ className={`group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 border-purple-500/20 hover:border-purple-500/50 mb-4 transition-all active:scale-95 flex items-center gap-4 shadow-xl relative overflow-hidden disabled:opacity-50`}>
+ <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
+ <PlayCircle size={80} className="text-purple-400"/>
+ </div>
  <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
  <PlayCircle size={22} className="text-purple-400 group-hover:text-purple-300 transition-colors"/>
  </div>
  <div className="relative z-10 flex-1">
- <h2 className="text-xl font-black leading-tight text-purple-400 group-hover:text-purple-300 transition-colors">
+ <h2 className="text-xl font-black leading-tight group-hover:text-purple-300 transition-colors text-purple-400">
  {demoLoading ? 'Loading Demo...' : '🎮 Demo Round'}
  </h2>
  <p className="text-[10px] font-bold text-zinc-500 tracking-widest">Tiger · Rory · Rahm · Brooks · Augusta</p>
+ </div>
+ <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-all flex-shrink-0">
+ <ChevronRight size={16}/>
  </div>
  </button>
  ) : (

@@ -263,6 +263,10 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 export default function HistoryPage() {
+ const { role } = useAuth()
+ const canDelete = role === 'scorer' || role === 'master'
+ const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
+ const [deleteInput, setDeleteInput] = useState('')
  const [archives, setArchives] = useState<any[]>([])
  const [expandedId, setExpandedId] = useState<string | null>(null)
  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
@@ -283,10 +287,17 @@ export default function HistoryPage() {
  }, [])
 
  const deleteHistory = (id: string) => {
- const pw = prompt("ENTER ADMIN PASSWORD:")
- if (pw !== "jeff") return
- if (confirm("PERMANENTLY DELETE THIS TOURNAMENT RECORD?")) {
- set(ref(db, `history/${id}`), null)
+ if (!canDelete) return
+ setDeleteConfirm(id)
+ setDeleteInput('')
+ }
+
+ const confirmDelete = () => {
+ if (deleteInput.toLowerCase() !== 'delete') return
+ if (deleteConfirm) {
+ set(ref(db, `history/${deleteConfirm}`), null)
+ setDeleteConfirm(null)
+ setDeleteInput('')
  }
  }
 
