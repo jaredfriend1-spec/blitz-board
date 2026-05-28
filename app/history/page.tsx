@@ -289,7 +289,6 @@ export default function HistoryPage() {
  }, [])
 
  const deleteHistory = (id: string) => {
- if (!canDelete) return
  setDeleteConfirm(id)
  setDeleteInput('')
  }
