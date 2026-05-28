@@ -892,7 +892,7 @@ return (
  </tr>
  )
  })}
-
+ </>
  )}
  {/* Hole winners */}
  <tr className="border-t border-zinc-800 bg-zinc-900/40">
