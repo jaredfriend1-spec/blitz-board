@@ -1,5 +1,7 @@
 "use client"
 import { useState, useEffect, useMemo } from 'react'
+import { useAuth } from '@/components/AuthProvider'
+import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set, push, remove, get } from 'firebase/database'
 import Link from 'next/link'
@@ -784,18 +786,9 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
 
 
 export default function MasterPage() {
-  const [authed, setAuthed] = useState(false)
-
-  useEffect(() => {
-    // Auto-authenticate if already logged in as master from home screen
-    if (typeof window !== 'undefined' && sessionStorage.getItem('role') === 'master') {
-      setAuthed(true)
-    }
-  }, [])
-  const [pin, setPin] = useState('')
-  const [showPin, setShowPin] = useState(false)
-  const [pinError, setPinError] = useState(false)
-
+  const { user, role, loading } = useAuth()
+  const authed = role === 'master'
+ 
   // Data
   const [history, setHistory] = useState<any[]>([])
   const [globalRoster, setGlobalRoster] = useState<any[]>([])
@@ -878,6 +871,14 @@ export default function MasterPage() {
   const mostActivePlayer = playerStats[0]
 
   // ── LOGIN SCREEN ─────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-zinc-600 text-sm font-medium">Loading...</div>
+      </div>
+    )
+  }
+
   if (!authed) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">

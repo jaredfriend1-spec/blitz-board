@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useMemo } from 'react'
+import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
 import Link from 'next/link'
@@ -1113,13 +1114,8 @@ function AnalyticsDashboard({ history }: { history: any[] }) {
 
 export default function AnalyticsPage() {
   const [history, setHistory] = useState<any[]>([])
-  const [authed, setAuthed] = useState(false)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && sessionStorage.getItem('role') === 'master') {
-      setAuthed(true)
-    }
-  }, [])
+  const { role, loading } = useAuth()
+  const authed = role === 'master'
 
   useEffect(() => {
     if (!authed) return
@@ -1132,6 +1128,12 @@ export default function AnalyticsPage() {
       } else setHistory([])
     })
   }, [authed])
+
+  if (loading) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-zinc-600 text-sm">Loading...</div>
+    </div>
+  )
 
   if (!authed) {
     return (

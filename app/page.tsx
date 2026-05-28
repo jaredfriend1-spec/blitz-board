@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '@/components/AuthProvider'
+import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set, get, push } from 'firebase/database'
 import {
@@ -15,6 +17,7 @@ const ADMIN_PIN = "jeff"
 const MASTER_PIN = "jfriend024"
 
 export default function LandingPage() {
+ const { user, role: authRole, loading: authLoading } = useAuth()
  const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
  const [courseName, setCourseName] = useState('')
  const [tripName, setTripName] = useState('')
@@ -533,7 +536,11 @@ export default function LandingPage() {
  <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
  </Link>
- <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
+ <button onClick={async () => {
+ sessionStorage.removeItem('role')
+ if (user) await signOut()
+ setRole('none')
+ }}
  className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
  <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
  <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
@@ -716,7 +723,11 @@ export default function LandingPage() {
  <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
  </Link>
- <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
+ <button onClick={async () => {
+ sessionStorage.removeItem('role')
+ if (user) await signOut()
+ setRole('none')
+ }}
  className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
  <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
  <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
@@ -745,7 +756,11 @@ export default function LandingPage() {
  <p className="text-zinc-600 text-[10px] font-medium">Full control · Jared only</p>
  </div>
  </div>
- <button onClick={() => { sessionStorage.removeItem('role'); setRole('none') }}
+ <button onClick={async () => {
+ sessionStorage.removeItem('role')
+ if (user) await signOut()
+ setRole('none')
+ }}
  className="text-zinc-600 hover:text-zinc-400 text-xs font-semibold transition-colors flex items-center gap-1">
  <RefreshCw size={12}/> Exit
  </button>

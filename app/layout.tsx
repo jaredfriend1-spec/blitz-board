@@ -155,7 +155,7 @@ export default function RootLayout({
           </button>
         </div>
 
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <BottomNav />
       </body>
     </html>
