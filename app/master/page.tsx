@@ -853,6 +853,7 @@ export default function MasterPage() {
       if (d.scorer_sections) setScorerSections(d.scorer_sections)
       if (d.player_sections) setPlayerSections(d.player_sections)
     })
+    onValue(ref(db,'users'), snap => {
       if (snap.val()) {
         const items = Object.entries(snap.val()).map(([uid, data]: any) => ({ uid, ...data }))
         setDbUsers(items)
