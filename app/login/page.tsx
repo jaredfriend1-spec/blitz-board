@@ -22,7 +22,7 @@ export default function LoginPage() {
     setError('')
     try {
       const { role } = await signIn(email.trim(), password)
-      if (role === 'master') router.push('/master')
+      if (role === 'master') router.push('/')
       else if (role === 'scorer') router.push('/')
       else setError('Your account does not have access to this app.')
     } catch (e: any) {
