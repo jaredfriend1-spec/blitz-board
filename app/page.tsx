@@ -13,8 +13,6 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-const ADMIN_PIN = "jeff"
-const MASTER_PIN = "jfriend024"
 
 export default function LandingPage() {
  const { user, role: authRole, loading: authLoading } = useAuth()
@@ -48,13 +46,6 @@ export default function LandingPage() {
  const showModal = (opts: typeof modal) => setModal(opts)
  const closeModal = () => setModal(null)
 
- // PIN state
- const [showPinModal, setShowPinModal] = useState(false)
- const pinTargetRef = React.useRef<'admin'|'master'>('admin')
- const setPinTarget = (t: 'admin'|'master') => { pinTargetRef.current = t }
- const [pin, setPin] = useState('')
- const [pinError, setPinError] = useState(false)
- const [showPin, setShowPin] = useState(false)
 
  // Watch Firebase Auth — auto-login when authenticated
  useEffect(() => {
@@ -100,30 +91,6 @@ export default function LandingPage() {
  setRole('player')
  }
 
- const chooseAdmin = () => {
- setPinTarget('admin')
- setShowPinModal(true)
- }
-
- const submitPin = () => {
- if (pinTargetRef.current === 'master' && pin === MASTER_PIN) {
- sessionStorage.setItem('role', 'master')
- setRole('master')
- setShowPinModal(false)
- setPin('')
- setPinError(false)
- } else if (pin === ADMIN_PIN) {
- sessionStorage.setItem('role', 'admin')
- setRole('admin')
- setShowPinModal(false)
- setPin('')
- setPinError(false)
- } else {
- setPinError(true)
- setPin('')
- setTimeout(() => setPinError(false), 2000)
- }
- }
 
  const archiveMatch = () => {
  showModal({
@@ -339,22 +306,6 @@ export default function LandingPage() {
  </div>
  <ChevronRight size={20} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
  </button>
-
- <button
- onClick={chooseAdmin}
- className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
- >
- <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
- <ShieldAlert size={28} className="text-emerald-400"/>
- </div>
- <div className="text-left">
- <div className="text-xl font-black text-white">Tournament Admin</div>
- <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
- Setup, score & manage matches
- </div>
- </div>
- <Lock size={16} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
- </button>
  </div>
  <Link href="/login"
  className="w-full flex items-center gap-4 bg-zinc-800/40 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-5 rounded-[2rem] transition-all group">
@@ -387,11 +338,7 @@ export default function LandingPage() {
  </Link>
  <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
  BLITZ BOARD · {new Date().getFullYear()}
- <button
-          onClick={() => { setPinTarget('master'); setShowPinModal(true) }}
-          className="block w-full text-center text-zinc-800 hover:text-zinc-600 text-[10px] font-medium transition-colors py-1">
-          ⬡ master admin
-          </button>
+ 
  </p>
 
  </div>
@@ -430,50 +377,6 @@ export default function LandingPage() {
  </div>
  )}
 
- {/* PIN Modal */}
- {showPinModal && (
- <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/80 backdrop-blur-sm overflow-y-auto">
- <div className="w-full max-w-sm bg-zinc-900 rounded-[2.5rem] border-2 border-zinc-700 shadow-2xl p-8 space-y-6">
- <div className="text-center">
- <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
- pinError ? 'bg-rose-500/20 border-2 border-rose-500/50 animate-bounce' : 'bg-zinc-800 border-2 border-zinc-700'
- }`}>
- <Lock size={24} className={pinError ? 'text-rose-400' : 'text-zinc-400'}/>
- </div>
- <h2 className="font-black text-xl">Admin Access</h2>
- <p className="text-zinc-600 text-xs font-black normal-case mt-1">Enter your admin PIN</p>
- </div>
- <div className="relative">
- <input
- type={showPin ? 'text' : 'password'}
- value={pin}
- onChange={e => setPin(e.target.value)}
- onKeyDown={e => e.key === 'Enter' && submitPin()}
- className={`w-full bg-zinc-800 border-2 p-4 rounded-2xl font-black text-2xl text-center outline-none tracking-[0.5em] ${
- pinError ? 'border-rose-500 text-rose-400' : 'border-zinc-700 focus:border-emerald-500 text-white'
- }`}
- placeholder="····"
- autoFocus
- />
- <button onClick={() => setShowPin(!showPin)}
- className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
- {showPin ? <EyeOff size={18}/> : <Eye size={18}/>}
- </button>
- </div>
- {pinError && <p className="text-rose-400 text-xs font-black text-center tracking-widest">INCORRECT PIN</p>}
- <div className="flex gap-3">
- <button onClick={() => { setShowPinModal(false); setPin(''); setPinError(false) }}
- className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-3 rounded-2xl font-black text-sm transition-colors">
- CANCEL
- </button>
- <button onClick={submitPin}
- className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-2xl font-black text-sm transition-colors">
- ENTER
- </button>
- </div>
- </div>
- </div>
- )}
  </div>
  )
  }
