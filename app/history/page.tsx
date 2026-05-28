@@ -543,6 +543,9 @@ ${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div
 
 
 return (
+ <>
+ return (
+ <>
  <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans">
  <Link href="/"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
  <ArrowLeft size={18}/> HUB
@@ -1133,7 +1136,6 @@ return (
  </div>
  </div>
  </div>
- )
  {/* Delete confirmation modal */}
  {deleteConfirm && (
  <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
@@ -1170,6 +1172,8 @@ return (
  </div>
  </div>
  )}
+ </>
+ )
 
 }
 
