@@ -552,7 +552,7 @@ function AnalyticsSection({ title, icon, children, accent = 'emerald', defaultOp
   )
 }
 
-function AnalyticsDashboard({ history }: { history: any[] }) {
+function AnalyticsDashboard({ history, analyticsFlags }: { history: any[], analyticsFlags: Record<string,boolean> }) {
   const data = useMemo(() => computeAnalytics(history), [history])
   if (!data || !data.playerList.length) {
     return (
@@ -1182,7 +1182,7 @@ export default function AnalyticsPage() {
         </Link>
       </div>
 
-      <AnalyticsDashboard history={history}/>
+      <AnalyticsDashboard history={history} analyticsFlags={analyticsFlags}/>
     </div>
   )
 }
