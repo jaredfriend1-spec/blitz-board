@@ -3,13 +3,12 @@ import { getDatabase } from "firebase/database";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCjfk446ITuRjxLfPLbNABNmmBN-9I51g",
+  apiKey: "AIzaSyB2JIhNld6NCGXVHKSI65Lsjf9FxY3GW2Q",
   authDomain: "mcc-blitz-live.firebaseapp.com",
   projectId: "mcc-blitz-live",
   storageBucket: "mcc-blitz-live.firebasestorage.app",
-  messagingSenderId: "171009874823",
-  appId: "1:171009874823:web:cb48f2e1a38f3e37a5d122",
-  measurementId: "G-PY2Q7G58DW",
+  messagingSenderId: "526005051898",
+  appId: "1:526005051898:web:d1c09f12a49d49d7f10443",
   databaseURL: "https://mcc-blitz-live-default-rtdb.firebaseio.com/"
 };
 
