@@ -850,8 +850,9 @@ export default function MasterPage() {
       const d = snap.val() || {}
       if (d.scorer_access !== undefined) setScorerAccess(!!d.scorer_access)
       if (d.player_access !== undefined) setPlayerAccess(!!d.player_access)
-      if (d.scorer_sections) setScorerSections(prev => ({...prev, ...d.scorer_sections}))
-      if (d.player_sections) setPlayerSections(prev => ({...prev, ...d.player_sections}))
+      if (d.scorer_sections) setScorerSections(d.scorer_sections)
+      if (d.player_sections) setPlayerSections(d.player_sections)
+      setFlagsLoaded(true)
     })
     onValue(ref(db,'users'), snap => {
       if (snap.val()) {
@@ -1126,18 +1127,25 @@ export default function MasterPage() {
                       </div>
                     </div>
                     <button
-                      onClick={async () => {
-                        const newVal = !scorerAccess
-                        setScorerAccess(newVal)
-                        await set(ref(db, 'analyticsFlags/scorer_access'), newVal)
-                        showToast('Scorer analytics: ' + (newVal ? 'ON ✓' : 'OFF'))
-                      }}
+                      onClick={() => setScorerAccess(v => !v)}
                       className={`relative w-14 h-7 rounded-full transition-all ${scorerAccess ? 'bg-blue-500' : 'bg-zinc-700'}`}>
                       <div className={`absolute top-1.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${scorerAccess ? 'translate-x-8' : 'translate-x-1.5'}`}/>
                     </button>
                   </div>
                   <div className={`px-4 py-2 text-[11px] font-semibold ${scorerAccess ? 'bg-blue-500/10 text-blue-400' : 'bg-zinc-900 text-zinc-600'}`}>
                     {scorerAccess ? '🟢 Scorers CAN see Analytics' : '🔴 Scorers CANNOT see Analytics'}
+                  </div>
+                  <div className="px-4 pb-3">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await set(ref(db, 'analyticsFlags/scorer_access'), scorerAccess)
+                          showToast('✓ Scorer access saved!')
+                        } catch(e) { showToast('❌ Save failed') }
+                      }}
+                      className="w-full bg-blue-500 hover:bg-blue-400 text-white py-2.5 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-2">
+                      <Check size={13}/> Save Scorer Access
+                    </button>
                   </div>
                 </div>
 
@@ -1154,18 +1162,25 @@ export default function MasterPage() {
                       </div>
                     </div>
                     <button
-                      onClick={async () => {
-                        const newVal = !playerAccess
-                        setPlayerAccess(newVal)
-                        await set(ref(db, 'analyticsFlags/player_access'), newVal)
-                        showToast('Player analytics: ' + (newVal ? 'ON ✓' : 'OFF'))
-                      }}
+                      onClick={() => setPlayerAccess(v => !v)}
                       className={`relative w-14 h-7 rounded-full transition-all ${playerAccess ? 'bg-amber-500' : 'bg-zinc-700'}`}>
                       <div className={`absolute top-1.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${playerAccess ? 'translate-x-8' : 'translate-x-1.5'}`}/>
                     </button>
                   </div>
                   <div className={`px-4 py-2 text-[11px] font-semibold ${playerAccess ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-900 text-zinc-600'}`}>
                     {playerAccess ? '🟢 Players CAN see Analytics' : '🔴 Players CANNOT see Analytics (default off)'}
+                  </div>
+                  <div className="px-4 pb-3">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await set(ref(db, 'analyticsFlags/player_access'), playerAccess)
+                          showToast('✓ Player access saved!')
+                        } catch(e) { showToast('❌ Save failed') }
+                      }}
+                      className="w-full bg-amber-500 hover:bg-amber-400 text-black py-2.5 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-2">
+                      <Check size={13}/> Save Player Access
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1174,7 +1189,31 @@ export default function MasterPage() {
             {/* WHAT THEY SEE */}
             {analyticsTab === 'what' && (
               <div className="space-y-4">
-                <p className="text-zinc-600 text-xs font-medium normal-case">Control which sections each role sees. Independent per role.</p>
+                <p className="text-zinc-600 text-xs font-medium normal-case">Tap sections to toggle, then hit Save.</p>
+
+                {/* Single save button at TOP - always visible */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await set(ref(db, 'analyticsFlags/scorer_sections'), scorerSections)
+                        showToast('✓ Scorer view saved!')
+                      } catch(e) { showToast('❌ Save failed') }
+                    }}
+                    className="bg-blue-500 hover:bg-blue-400 text-white py-3 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
+                    <Check size={13}/> Save Scorer
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await set(ref(db, 'analyticsFlags/player_sections'), playerSections)
+                        showToast('✓ Player view saved!')
+                      } catch(e) { showToast('❌ Save failed') }
+                    }}
+                    className="bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-1.5">
+                    <Check size={13}/> Save Players
+                  </button>
+                </div>
 
                 {/* Scorer sections */}
                 <div>
@@ -1182,14 +1221,11 @@ export default function MasterPage() {
                     <Shield size={12} className="text-blue-400"/>
                     <p className="text-blue-400 text-[10px] font-black tracking-widest">SCORER VIEW</p>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 mb-3">
                     {SECTIONS.map(s => (
                       <button key={s.key}
-                        onClick={async () => {
-                          const newVal = !scorerSections[s.key]
-                          const updated = {...scorerSections, [s.key]: newVal}
-                          setScorerSections(updated)
-                          await set(ref(db, 'analyticsFlags/scorer_sections/' + s.key), newVal)
+                        onClick={() => {
+                          setScorerSections(prev => ({...prev, [s.key]: !prev[s.key]}))
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${scorerSections[s.key] ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-zinc-900/60 border border-zinc-800'}`}>
                         <span className={`text-xs font-semibold ${scorerSections[s.key] ? 'text-white' : 'text-zinc-600'}`}>{s.label}</span>
@@ -1199,6 +1235,18 @@ export default function MasterPage() {
                       </button>
                     ))}
                   </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await set(ref(db, 'analyticsFlags/scorer_sections'), scorerSections)
+                        showToast('✓ Scorer view saved!')
+                      } catch(e) {
+                        showToast('❌ Save failed — check connection')
+                      }
+                    }}
+                    className="w-full bg-blue-500 hover:bg-blue-400 text-white py-3 rounded-xl font-black text-sm transition-colors flex items-center justify-center gap-2">
+                    <Check size={15}/> Save Scorer View
+                  </button>
                 </div>
 
                 {/* Player sections */}
@@ -1207,14 +1255,11 @@ export default function MasterPage() {
                     <Users size={12} className="text-amber-400"/>
                     <p className="text-amber-400 text-[10px] font-black tracking-widest">PLAYER VIEW</p>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 mb-3">
                     {SECTIONS.map(s => (
                       <button key={s.key}
-                        onClick={async () => {
-                          const newVal = !playerSections[s.key]
-                          const updated = {...playerSections, [s.key]: newVal}
-                          setPlayerSections(updated)
-                          await set(ref(db, 'analyticsFlags/player_sections/' + s.key), newVal)
+                        onClick={() => {
+                          setPlayerSections(prev => ({...prev, [s.key]: !prev[s.key]}))
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${playerSections[s.key] ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-zinc-900/60 border border-zinc-800'}`}>
                         <span className={`text-xs font-semibold ${playerSections[s.key] ? 'text-white' : 'text-zinc-600'}`}>{s.label}</span>
@@ -1224,6 +1269,18 @@ export default function MasterPage() {
                       </button>
                     ))}
                   </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await set(ref(db, 'analyticsFlags/player_sections'), playerSections)
+                        showToast('✓ Player view saved!')
+                      } catch(e) {
+                        showToast('❌ Save failed — check connection')
+                      }
+                    }}
+                    className="w-full bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl font-black text-sm transition-colors flex items-center justify-center gap-2">
+                    <Check size={15}/> Save Player View
+                  </button>
                 </div>
               </div>
             )}
