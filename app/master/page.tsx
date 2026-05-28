@@ -797,6 +797,12 @@ export default function MasterPage() {
   const [savedFormats, setSavedFormats] = useState<any[]>([])
 
   // Edit states
+  // Feature flags state
+  const [featureFlags, setFeatureFlags] = useState<Record<string,boolean>>({
+    analytics: true, history: true, payouts: true, results: true,
+    roster: true, guide: true, demo: true
+  })
+
   // User management state
   const [dbUsers, setDbUsers] = useState<any[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
@@ -824,6 +830,9 @@ export default function MasterPage() {
 
   useEffect(() => {
     if (!authed) return
+    onValue(ref(db,'featureFlags'), snap => {
+      if (snap.val()) setFeatureFlags(prev => ({ ...prev, ...snap.val() }))
+    })
     onValue(ref(db,'users'), snap => {
       if (snap.val()) {
         const items = Object.entries(snap.val()).map(([uid, data]: any) => ({ uid, ...data }))
@@ -1060,6 +1069,43 @@ export default function MasterPage() {
                 </div>
               )
             })}
+          </div>
+        </Section>
+
+        {/* ── FEATURE FLAGS ── */}
+        <Section title="🎛️ Feature Visibility" icon={<Settings size={16}/>} defaultOpen={false}>
+          <div className="p-4 space-y-3">
+            <p className="text-zinc-500 text-xs font-medium normal-case">
+              Toggle which features are visible to players and scorers. Changes apply instantly — no deploy needed.
+            </p>
+            <div className="space-y-2">
+              {([
+                {key:'analytics', label:'Analytics', desc:'Stats, records & betting trends', who:'Scorer + Players'},
+                {key:'history', label:'History', desc:'Past tournament results', who:'All users'},
+                {key:'payouts', label:'Side Bets & Payouts', desc:'Match payouts & evidence', who:'All users'},
+                {key:'results', label:'Tournament Results', desc:'Leaderboard & rankings', who:'All users'},
+                {key:'roster', label:'Roster Manager', desc:'Player list management', who:'Scorer'},
+                {key:'guide', label:'How It Works Guide', desc:'Feature walkthrough', who:'All users'},
+                {key:'demo', label:'Live Demo Button', desc:'Demo mode on home screen', who:'All users'},
+              ] as const).map(f => (
+                <div key={f.key} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
+                  <div className="flex-1 min-w-0 mr-3">
+                    <div className="font-semibold text-sm">{f.label}</div>
+                    <div className="text-zinc-600 text-[10px] font-medium normal-case">{f.desc} · <span className="text-zinc-700">{f.who}</span></div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newVal = !featureFlags[f.key]
+                      await set(ref(db, `featureFlags/${f.key}`), newVal)
+                      setFeatureFlags(prev => ({ ...prev, [f.key]: newVal }))
+                      showToast(`${f.label} ${newVal ? 'enabled' : 'disabled'}`)
+                    }}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${featureFlags[f.key] ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${featureFlags[f.key] ? 'translate-x-7' : 'translate-x-1'}`}/>
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </Section>
 

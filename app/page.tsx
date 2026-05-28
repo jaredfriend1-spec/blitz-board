@@ -29,6 +29,7 @@ export default function LandingPage() {
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
  const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
  const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b.toUpperCase()))
+ const [featureFlags, setFeatureFlags] = useState<Record<string,boolean>>({analytics:true,history:true,payouts:true,results:true,roster:true,guide:true,demo:true})
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
  const [courseLibrary, setCourseLibrary] = useState<any[]>([])
  const [history, setHistory] = useState<any[]>([])
@@ -50,8 +51,8 @@ export default function LandingPage() {
  // Watch Firebase Auth — auto-login when authenticated
  useEffect(() => {
  if (authLoading) return
- if (authRole === 'master') { setRole('master'); return }
- if (authRole === 'scorer') { setRole('admin'); return }
+  if (authRole === 'master') { setRole('admin'); return } // master → admin hub + dashboard button
+  if (authRole === 'scorer') { setRole('admin'); return } // scorer → admin hub
  // Fall back to session for guests
  const stored = sessionStorage.getItem('role')
  if (stored === 'player') setRole('player')
@@ -70,6 +71,7 @@ export default function LandingPage() {
  setActiveMode(m.mode || '')
  })
  // Master data listeners
+    onValue(ref(db,'featureFlags'), snap => { if(snap.val()) setFeatureFlags(prev=>({...prev,...snap.val()})) })
  onValue(ref(db, 'globalRoster'), snap => {
  if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
  else setGlobalRoster([])
@@ -270,6 +272,15 @@ export default function LandingPage() {
   }
 
 
+ // Show loading while Firebase Auth resolves
+ if (authLoading) {
+ return (
+ <div className="min-h-screen bg-black flex items-center justify-center">
+ <div className="text-zinc-700 text-sm font-medium">Loading...</div>
+ </div>
+ )
+ }
+
  // ── ROLE SELECTION SCREEN ──────────────────────────────────────
  if (role === 'none') {
  return (
@@ -321,13 +332,13 @@ export default function LandingPage() {
 
 
 
- <button onClick={loadDemo} disabled={demoLoading}
+ {featureFlags.demo!==false && <button onClick={loadDemo} disabled={demoLoading}
  className="w-full flex items-center justify-center gap-2 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-500/30 hover:border-emerald-500/50 px-4 py-4 rounded-2xl transition-all group disabled:opacity-50">
  <PlayCircle size={16} className="text-emerald-500 flex-shrink-0"/>
  <span className="font-semibold text-sm text-emerald-500 group-hover:text-emerald-400 transition-colors">
  {demoLoading ? 'Loading demo...' : 'See a Live Demo'}
  </span>
- </button>
+ </button>}
 
  <Link href="/guide"
  className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
@@ -384,10 +395,10 @@ export default function LandingPage() {
  // ── PLAYER HUB ─────────────────────────────────────────────────
  if (role === 'player') {
  const playerItems = [
- { title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
- { title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"},
- { title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"},
- { title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"},
+ { key:'scorer', title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
+ ...(featureFlags.results!==false?[{ key:'results', title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"}]:[]),
+ ...(featureFlags.payouts!==false?[{ key:'payouts', title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"}]:[]),
+ ...(featureFlags.history!==false?[{ key:'history', title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"}]:[]),
  ]
 
  return (
@@ -528,6 +539,15 @@ export default function LandingPage() {
  accent:"text-emerald-400"
  },
  {
+ key:'courses',
+ title:"Course Library",
+ desc:"Saved courses · Scan scorecards",
+ path:"/courses",
+ icon:<Flag className="text-teal-400"size={28}/>,
+ color:"border-teal-800/20 hover:border-teal-600",
+ accent:"text-teal-400"
+ },
+ {
  title:"Analytics",
  desc:"Stats, records & betting trends",
  path:"/master/analytics",
@@ -537,8 +557,12 @@ export default function LandingPage() {
  },
  ]
 
- const setupItem = adminItems[0]
- const mainItems = adminItems.slice(1)
+ const filteredAdminItems = adminItems.filter((item:any) => {
+ if(item.key==='wizard'||item.key==='scorer') return true
+ return featureFlags[item.key]!==false
+ })
+ const setupItem = filteredAdminItems[0]
+ const mainItems = filteredAdminItems.slice(1)
 
  return (
  <div className="min-h-screen bg-zinc-950 text-white font-sans">
