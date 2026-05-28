@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
-import { ref, onValue, set } from 'firebase/database'
+import { ref, onValue, set, push } from 'firebase/database'
 import {
  ArrowLeft, Archive, Calendar, Users, Trophy, Zap,
  Trash2, ChevronDown, ChevronUp, Medal, Target,
@@ -269,6 +269,9 @@ export default function HistoryPage() {
  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
  const [exportingId, setExportingId] = useState<string | null>(null)
  const [expandedWheelPairHistKey, setExpandedWheelPairHistKey] = useState<string | null>(null)
+ const [addMatchupsTo, setAddMatchupsTo] = useState<string | null>(null)
+ const [newMatchType, setNewMatchType] = useState<'PvP' | '2v2'>('PvP')
+ const [newMatchData, setNewMatchData] = useState({ sideA: '', sideB: '', sideA2: '', sideB2: '', nassau: 5, press: 5, birdie: 2, eagle: 5, scoringType: 'NET' as 'NET'|'GROSS', autoPress: true })
 
  useEffect(() => {
  onValue(ref(db, 'history'), snap => {
@@ -287,6 +290,52 @@ export default function HistoryPage() {
  if (window.confirm('Permanently delete this record? Cannot be undone.')) {
  set(ref(db, 'history/' + id), null)
  }
+ }
+
+ const saveNewMatchup = () => {
+ if (!addMatchupsTo) return
+ 
+ if (newMatchType === 'PvP') {
+ if (!newMatchData.sideA || !newMatchData.sideB) return alert('SELECT BOTH PLAYERS')
+ if (newMatchData.sideA === newMatchData.sideB) return alert('PLAYERS MUST BE DIFFERENT')
+ const mRef = push(ref(db, `history/${addMatchupsTo}/matchups`))
+ set(mRef, { 
+ id: mRef.key, 
+ type: 'PvP', 
+ sideA: newMatchData.sideA, 
+ sideB: newMatchData.sideB, 
+ nassau: newMatchData.nassau, 
+ press: newMatchData.press, 
+ birdie: newMatchData.birdie, 
+ eagle: newMatchData.eagle, 
+ scoringType: newMatchData.scoringType, 
+ autoPress: newMatchData.autoPress 
+ })
+ } else if (newMatchType === '2v2') {
+ const picks = [newMatchData.sideA, newMatchData.sideA2, newMatchData.sideB, newMatchData.sideB2]
+ if (picks.some(p => !p)) return alert('SELECT ALL 4 PLAYERS')
+ if (new Set(picks).size !== 4) return alert('ALL 4 PLAYERS MUST BE DIFFERENT')
+ const mRef = push(ref(db, `history/${addMatchupsTo}/matchups`))
+ set(mRef, { 
+ id: mRef.key, 
+ type: '2v2', 
+ sideA: newMatchData.sideA, 
+ sideA2: newMatchData.sideA2, 
+ sideB: newMatchData.sideB, 
+ sideB2: newMatchData.sideB2, 
+ nassau: newMatchData.nassau, 
+ press: newMatchData.press, 
+ birdie: newMatchData.birdie, 
+ eagle: newMatchData.eagle, 
+ scoringType: newMatchData.scoringType, 
+ autoPress: newMatchData.autoPress 
+ })
+ }
+ 
+ // Reset form
+ setAddMatchupsTo(null)
+ setNewMatchType('PvP')
+ setNewMatchData({ sideA: '', sideB: '', sideA2: '', sideB2: '', nassau: 5, press: 5, birdie: 2, eagle: 5, scoringType: 'NET', autoPress: true })
  }
 
 
@@ -1090,10 +1139,16 @@ return (
  </Section>
  )}
 
- {/* ── FOOTER: EXPORT + DELETE ── */}
+ {/* ── FOOTER: EXPORT + DELETE + ADD MATCHUPS ── */}
  <div className="px-5 py-4 border-t border-zinc-900 flex items-center justify-between gap-3">
  <p className="text-[9px] text-zinc-600 font-medium">{date}</p>
  <div className="flex items-center gap-2">
+ <button
+ onClick={() => setAddMatchupsTo(arch.id)}
+ className="flex items-center gap-1.5 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-700/50 hover:border-blue-500 text-blue-400 hover:text-blue-300 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+ >
+ <Sword size={13}/> Add Matchups
+ </button>
  <button
  onClick={() => exportPDF(arch, recap, date)}
  disabled={exportingId === arch.id}
@@ -1122,7 +1177,129 @@ return (
  </div>
  )
 
-}
+ {/* ── ADD MATCHUPS MODAL ── */}
+ {addMatchupsTo && archives.find(a => a.id === addMatchupsTo) && (
+ <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+ <div className="bg-zinc-900 rounded-3xl border-2 border-blue-500/30 max-w-md w-full max-h-[90vh] overflow-y-auto p-6">
+ <h2 className="text-2xl font-black mb-4 text-blue-400">Add Side Matchup</h2>
+ 
+ <div className="space-y-4">
+ {/* Match Type */}
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-2">MATCH TYPE</label>
+ <div className="flex gap-2">
+ <button onClick={() => setNewMatchType('PvP')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${newMatchType === 'PvP' ? 'bg-blue-500 text-white border-blue-400' : 'bg-zinc-800 text-zinc-400 border-zinc-700'} border`}>1v1</button>
+ <button onClick={() => setNewMatchType('2v2')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${newMatchType === '2v2' ? 'bg-blue-500 text-white border-blue-400' : 'bg-zinc-800 text-zinc-400 border-zinc-700'} border`}>2v2</button>
+ </div>
+ </div>
+ 
+ {(() => {
+ const arch = archives.find(a => a.id === addMatchupsTo)
+ const players = arch?.roster ? Object.values(arch.roster).map((p: any) => p.name) : []
+ return (
+ <>
+ {newMatchType === 'PvP' ? (
+ <>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-2">PLAYER A</label>
+ <select value={newMatchData.sideA} onChange={(e) => setNewMatchData({...newMatchData, sideA: e.target.value})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-sm">
+ <option value="">SELECT PLAYER</option>
+ {players.map(name => <option key={name} value={name}>{name}</option>)}
+ </select>
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-2">PLAYER B</label>
+ <select value={newMatchData.sideB} onChange={(e) => setNewMatchData({...newMatchData, sideB: e.target.value})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-sm">
+ <option value="">SELECT PLAYER</option>
+ {players.map(name => <option key={name} value={name}>{name}</option>)}
+ </select>
+ </div>
+ </>
+ ) : (
+ <>
+ <div className="grid grid-cols-2 gap-2">
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">TEAM A P1</label>
+ <select value={newMatchData.sideA} onChange={(e) => setNewMatchData({...newMatchData, sideA: e.target.value})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-xs">
+ <option value="">SELECT</option>
+ {players.map(name => <option key={name} value={name}>{name}</option>)}
+ </select>
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">TEAM A P2</label>
+ <select value={newMatchData.sideA2} onChange={(e) => setNewMatchData({...newMatchData, sideA2: e.target.value})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-xs">
+ <option value="">SELECT</option>
+ {players.map(name => <option key={name} value={name}>{name}</option>)}
+ </select>
+ </div>
+ </div>
+ <div className="grid grid-cols-2 gap-2">
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">TEAM B P1</label>
+ <select value={newMatchData.sideB} onChange={(e) => setNewMatchData({...newMatchData, sideB: e.target.value})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-xs">
+ <option value="">SELECT</option>
+ {players.map(name => <option key={name} value={name}>{name}</option>)}
+ </select>
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">TEAM B P2</label>
+ <select value={newMatchData.sideB2} onChange={(e) => setNewMatchData({...newMatchData, sideB2: e.target.value})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-xs">
+ <option value="">SELECT</option>
+ {players.map(name => <option key={name} value={name}>{name}</option>)}
+ </select>
+ </div>
+ </div>
+ </>
+ )}
+ </>
+ )
+ })()}
+ 
+ <div className="grid grid-cols-2 gap-3">
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">NASSAU</label>
+ <input type="number" value={newMatchData.nassau} onChange={(e) => setNewMatchData({...newMatchData, nassau: Number(e.target.value)})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-sm" />
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">PRESS</label>
+ <input type="number" value={newMatchData.press} onChange={(e) => setNewMatchData({...newMatchData, press: Number(e.target.value)})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-sm" />
+ </div>
+ </div>
+ 
+ {newMatchType === 'PvP' && (
+ <div className="grid grid-cols-2 gap-3">
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">BIRDIE</label>
+ <input type="number" value={newMatchData.birdie} onChange={(e) => setNewMatchData({...newMatchData, birdie: Number(e.target.value)})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-sm" />
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-1">EAGLE</label>
+ <input type="number" value={newMatchData.eagle} onChange={(e) => setNewMatchData({...newMatchData, eagle: Number(e.target.value)})} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-white font-bold text-sm" />
+ </div>
+ </div>
+ )}
+ 
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-2">SCORING</label>
+ <div className="flex gap-2">
+ <button onClick={() => setNewMatchData({...newMatchData, scoringType: 'NET'})} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${newMatchData.scoringType === 'NET' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-400'} border border-current`}>NET</button>
+ <button onClick={() => setNewMatchData({...newMatchData, scoringType: 'GROSS'})} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${newMatchData.scoringType === 'GROSS' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-400'} border border-current`}>GROSS</button>
+ </div>
+ </div>
+ 
+ <label className="flex items-center gap-3 cursor-pointer bg-zinc-800 p-3 rounded-lg">
+ <input type="checkbox" checked={newMatchData.autoPress} onChange={(e) => setNewMatchData({...newMatchData, autoPress: e.target.checked})} className="w-4 h-4" />
+ <span className="text-sm font-bold text-zinc-300">Auto Press Enabled</span>
+ </label>
+ 
+ <div className="flex gap-3 pt-4">
+ <button onClick={() => { setAddMatchupsTo(null); setNewMatchData({ sideA: '', sideB: '', sideA2: '', sideB2: '', nassau: 5, press: 5, birdie: 2, eagle: 5, scoringType: 'NET', autoPress: true }) }} className="flex-1 py-2 rounded-lg font-bold text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-all">Cancel</button>
+ <button onClick={saveNewMatchup} className="flex-1 py-2 rounded-lg font-bold text-sm bg-blue-600 hover:bg-blue-500 text-white border border-blue-500 transition-all">Save Matchup</button>
+ </div>
+ </div>
+ </div>
+ )}
+ 
 
 // ── SECTION WRAPPER ───────────────────────────────────────────────
 function Section({ title, icon, color, children }: {
