@@ -20,11 +20,6 @@ export default function SetupCenter() {
 
   // Check session — stays unlocked for the browser session
   useEffect(() => {
-    const stored = sessionStorage.getItem('setup-unlocked')
-    if (stored === 'true') setUnlocked(true)
-  }, [])
-
-  useEffect(() => {
     if (!unlocked) return
     onValue(ref(db,'tournament/course'), snap => setCourseReady(!!(snap.val()?.holes?.length === 18)))
     onValue(ref(db,'tournament/meta'), snap => { const m = snap.val(); setTripReady(!!(m?.tripName && m?.totalDays > 0)) })
