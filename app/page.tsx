@@ -606,7 +606,7 @@ export default function LandingPage() {
  color:"border-teal-800/20 hover:border-teal-600",
  accent:"text-teal-400"
  },
- ...(scorerCanSeeAnalytics ? [{
+ ...((authRole === 'master' || scorerCanSeeAnalytics) ? [{
  title:"Analytics",
  desc:"Stats, records & betting trends",
  path:"/master/analytics",
@@ -684,7 +684,7 @@ export default function LandingPage() {
  {/* Demo Round — right below Quick Match */}
  {!isMock ? (
  <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
- className={`group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 border-purple-500/20 hover:border-purple-500/50 mb-4 transition-all active:scale-95 flex items-center gap-4 shadow-xl relative overflow-hidden disabled:opacity-50`}>
+ className={`group w-full text-left bg-zinc-900/40 p-5 rounded-[2rem] border-2 border-purple-500/20 hover:border-purple-500/50 mb-4 transition-all active:scale-95 flex items-center gap-4 shadow-xl relative overflow-hidden disabled:opacity-50`}>
  <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
  <PlayCircle size={80} className="text-purple-400"/>
  </div>
