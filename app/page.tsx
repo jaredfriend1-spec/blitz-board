@@ -56,13 +56,17 @@ export default function LandingPage() {
  const [pinError, setPinError] = useState(false)
  const [showPin, setShowPin] = useState(false)
 
+ // Watch Firebase Auth — auto-login when authenticated
  useEffect(() => {
- // Check existing session role
+ if (authLoading) return
+ if (authRole === 'master') { setRole('master'); return }
+ if (authRole === 'scorer') { setRole('admin'); return }
+ // Fall back to session for guests
  const stored = sessionStorage.getItem('role')
- if (stored === 'admin') setRole('admin')
- else if (stored === 'player') setRole('player')
- else if (stored === 'master') setRole('master')
+ if (stored === 'player') setRole('player')
+ }, [authRole, authLoading])
 
+ useEffect(() => {
  // Firebase data
  onValue(ref(db, 'tournament/course'), snap => {
  if (snap.val()?.name) setCourseName(snap.val().name)
@@ -352,6 +356,18 @@ export default function LandingPage() {
  <Lock size={16} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
  </button>
  </div>
+ <Link href="/login"
+ className="w-full flex items-center gap-4 bg-zinc-800/40 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-5 rounded-[2rem] transition-all group">
+ <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
+ <Shield size={24} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
+ </div>
+ <div className="text-left flex-1">
+ <div className="text-xl font-black text-zinc-400 group-hover:text-white">Admin Sign In</div>
+ <div className="text-[10px] font-black text-zinc-600 tracking-widest normal-case mt-0.5">Sign in with email & password</div>
+ </div>
+ <ChevronRight size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+ </Link>
+
 
 
  <button onClick={loadDemo} disabled={demoLoading}
