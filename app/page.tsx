@@ -217,7 +217,7 @@ export default function LandingPage() {
         par5:[{type:'net'},{type:'net'}],
       })
       const m1 = push(ref(db,'tournament/matchups'))
-      await set(m1, {id:m1.key, type:'PvP', sideA:'TIGER WOODS', sideB:'RORY MCILROY', nassau:5, press:5, autoPress:true, birdie:2, eagle:5, scoringType:'NET'})
+      await set(m1, {id:m1.key, type:'PvP', sideA:'TIGER WOODS', sideB:'RORY MCILROY', nassau:5, press:5, autoPress:true, birdie:2, eagle:5, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:5, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
       const m2 = push(ref(db,'tournament/matchups'))
       await set(m2, {id:m2.key, type:'2v2', sideA:'TIGER WOODS', sideA2:'RORY MCILROY', sideB:'JON RAHM', sideB2:'SCOTTIE SCHEFFLER', nassau:10, press:10, autoPress:true, birdie:3, eagle:6, scoringType:'NET'})
       const m3 = push(ref(db,'tournament/matchups'))
@@ -269,7 +269,7 @@ export default function LandingPage() {
       }
       await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
       const m1 = push(ref(db,'tournament/matchups'))
-      await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
+      await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:10, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
       const m2 = push(ref(db,'tournament/matchups'))
       await set(m2, {id:m2.key, type:'TvT', sideA:'Team Phil', sideB:'Team Brooks', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
       setDemoLoading(false)
