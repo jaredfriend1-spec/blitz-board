@@ -60,18 +60,21 @@ function calculateWheel(
  wheelNassau: number = 5,
  wheelPress: number = 5,
  wheelAutoPress: boolean = true,
+ handicapPercent: number = 100,
 ) {
  const isGross = scoringType === 'GROSS'
  const resolved = wheelPlayers.map(name => players.find(p => p.name === name)).filter(Boolean)
  if (resolved.length < 3) return null
+ const hcpPct = handicapPercent / 100
 
- const allHcps = isGross ? [0] : resolved.map(p => Number(p.handicap) || 0)
+ const allHcps = isGross ? [0] : resolved.map(p => Math.round((Number(p.handicap) || 0) * hcpPct))
  const baseHcp = Math.min(...allHcps)
 
  const getStrokes = (playerHcp: number, holeIdx: number) => {
  if (isGross) return 0
+ const adjustedHcp = Math.round(playerHcp * hcpPct)
  const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx + 1)
- const diff = Math.max(0, playerHcp - baseHcp)
+ const diff = Math.max(0, adjustedHcp - baseHcp)
  let s = Math.floor(diff / 18)
  if (hcpRating <= (diff % 18)) s++
  return s
@@ -192,6 +195,69 @@ function calculateWheel(
  }
 }
 
+// ── PER-MATCH SKINS CALCULATOR ────────────────────────────────────
+function calculateMatchSkins(
+ matchPlayers: any[],
+ scores: Record<string, number[]>,
+ course: any,
+ m: any,
+) {
+ if (!m.doSkins || !matchPlayers.length) return null
+ const numHoles = course.nineHole ? 9 : 18
+ const holeOffset = course.nineHole && course.nineHoleStart === 'back' ? 9 : 0
+ const hcpPct = (m.handicapPercent ?? 100) / 100
+ const allAdjHcps = matchPlayers.map((p: any) => Math.round((Number(p.handicap) || 0) * hcpPct))
+ const baseAdjHcp = Math.min(...allAdjHcps)
+
+ // Gross skins
+ const grossSkinsMap: (any|null)[] = Array(numHoles).fill(null)
+ const grossSkinsCount: Record<string, number> = {}
+ for (let h = 0; h < numHoles; h++) {
+ const hIdx = holeOffset + h
+ const holeScores = matchPlayers.map((p: any) => ({ name: p.name, s: (scores[p.id] || [])[hIdx] || 0 })).filter(x => x.s > 0)
+ if (holeScores.length > 0) {
+ const min = Math.min(...holeScores.map(x => x.s))
+ const winners = holeScores.filter(x => x.s === min)
+ if (winners.length === 1) { grossSkinsMap[h] = winners[0]; grossSkinsCount[winners[0].name] = (grossSkinsCount[winners[0].name] || 0) + 1 }
+ }
+ }
+
+ // Net skins
+ const netSkinsMap: (any|null)[] = Array(numHoles).fill(null)
+ const netSkinsCount: Record<string, number> = {}
+ if (m.netSkinsEnabled) {
+ for (let h = 0; h < numHoles; h++) {
+ const hIdx = holeOffset + h
+ const hcpRating = Number(course.holes?.[hIdx]?.hcp) || (hIdx + 1)
+ const holeNetScores = matchPlayers.map((p: any) => {
+ const g = (scores[p.id] || [])[hIdx] || 0
+ if (!g) return null
+ const adjHcp = Math.round((Number(p.handicap) || 0) * hcpPct)
+ const diff = Math.max(0, adjHcp - baseAdjHcp)
+ let strokes = Math.floor(diff / 18); if (hcpRating <= (diff % 18)) strokes++
+ return { name: p.name, net: g - strokes }
+ }).filter(Boolean) as any[]
+ if (holeNetScores.length > 0) {
+ const min = Math.min(...holeNetScores.map(x => x.net))
+ const winners = holeNetScores.filter(x => x.net === min)
+ if (winners.length === 1) { netSkinsMap[h] = winners[0]; netSkinsCount[winners[0].name] = (netSkinsCount[winners[0].name] || 0) + 1 }
+ }
+ }
+ }
+
+ const skinsPot = matchPlayers.length * (m.skinsAmount || 0)
+ const splitG = m.skinsSplitGross ?? 100
+ const splitN = m.skinsSplitNet ?? 0
+ const grossPot = m.netSkinsEnabled ? Math.round(skinsPot * splitG / 100 * 100) / 100 : skinsPot
+ const netPot = m.netSkinsEnabled ? Math.round(skinsPot * splitN / 100 * 100) / 100 : 0
+ const totalGross = Object.values(grossSkinsCount).reduce((a, b) => a + b, 0)
+ const totalNet = Object.values(netSkinsCount).reduce((a, b) => a + b, 0)
+ const perGross = totalGross > 0 ? Math.round(grossPot / totalGross * 100) / 100 : 0
+ const perNet = totalNet > 0 ? Math.round(netPot / totalNet * 100) / 100 : 0
+
+ return { grossSkinsMap, grossSkinsCount, netSkinsMap, netSkinsCount, skinsPot, grossPot, netPot, perGross, perNet, totalGross, totalNet, numHoles }
+}
+
 export default function PayoutsPage() {
  const [scores, setScores] = useState<Record<string, number[]>>({})
  const [expandedWheelPair, setExpandedWheelPair] = useState<string|null>(null)
@@ -240,13 +306,15 @@ export default function PayoutsPage() {
 
  const isGross = m.scoringType === 'GROSS'
  const useAutoPress = m.autoPress !== false
- const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Number(p.handicap) || 0)
+ const hcpPct = (m.handicapPercent ?? 100) / 100
+ const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Math.round((Number(p.handicap) || 0) * hcpPct))
  const baseHcp = Math.min(...allHcps)
 
  const getStrokes = (playerHcp: number, holeIdx: number) => {
  if (isGross) return 0
+ const adjustedHcp = Math.round(playerHcp * hcpPct)
  const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx + 1)
- const diff = Math.max(0, playerHcp - baseHcp)
+ const diff = Math.max(0, adjustedHcp - baseHcp)
  let s = Math.floor(diff / 18)
  if (hcpRating <= (diff % 18)) s++
  return s
@@ -640,6 +708,7 @@ export default function PayoutsPage() {
  m.wheelNassau || 5,
  m.wheelPress || 5,
  m.wheelAutoPress !== false,
+ m.handicapPercent ?? 100,
  )
  if (!wheelRes) return null
  return (
@@ -654,6 +723,8 @@ export default function PayoutsPage() {
  <span key={p} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-xl text-xs font-black">{p}</span>
  ))}
  <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-xl text-xs font-black">{m.wheelFormat==='nassau'?`N:$${m.wheelNassau}`:`$${m.wheelAmount}`}/PAIR · {m.scoringType||'NET'} · {m.wheelFormat==='nassau'?'NASSAU':(course.nineHole?'STRAIGHT 9':'STRAIGHT 18')}</span>
+ {(m.handicapPercent ?? 100) !== 100 && <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-xl text-xs font-black">{m.handicapPercent}% HCP</span>}
+ {m.doSkins && <span className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded-xl text-xs font-black">{m.netSkinsEnabled ? 'GROSS+NET SKINS' : 'GROSS SKINS'} ${m.skinsAmount}/player</span>}
  </div>
  </div>
 
@@ -859,6 +930,50 @@ export default function PayoutsPage() {
  </div>
  ))}
  </div>
+
+ {/* Wheel skins */}
+ {(() => {
+ const wheelPl = (m.wheelPlayers||[]).map((name:string) => players.find(p => p.name === name)).filter(Boolean)
+ const sk = calculateMatchSkins(wheelPl, scores, course, m)
+ if (!sk) return null
+ return (
+ <div className="mt-4 space-y-3">
+ <div className="bg-black border border-emerald-500/30 rounded-2xl p-4">
+ <div className="flex items-center justify-between mb-3">
+ <span className="text-emerald-400 font-black text-xs tracking-widest flex items-center gap-2"><Zap size={12}/>{m.netSkinsEnabled ? 'GROSS ' : ''}SKINS · {sk.totalGross} WON</span>
+ <span className="text-zinc-500 text-[10px] font-black">${sk.perGross}/skin · Pot ${sk.grossPot}</span>
+ </div>
+ <div className="grid grid-cols-9 gap-1 mb-2">
+ {sk.grossSkinsMap.slice(0, Math.min(9, sk.numHoles)).map((w:any, i:number) => (
+ <div key={i} className={`rounded-lg p-1.5 text-center border ${w ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800'}`}>
+ <div className="text-[8px] text-zinc-600 font-black">{i+1}</div>
+ <div className={`text-[8px] font-black mt-0.5 ${w ? 'text-emerald-400' : 'text-zinc-800'}`}>{w ? w.name.split(' ')[0] : '—'}</div>
+ </div>
+ ))}
+ </div>
+ {sk.numHoles === 18 && <div className="grid grid-cols-9 gap-1 mb-2">{sk.grossSkinsMap.slice(9,18).map((w:any,i:number) => (<div key={i+9} className={`rounded-lg p-1.5 text-center border ${w?'border-emerald-500/50 bg-emerald-500/10':'border-zinc-800'}`}><div className="text-[8px] text-zinc-600 font-black">{i+10}</div><div className={`text-[8px] font-black mt-0.5 ${w?'text-emerald-400':'text-zinc-800'}`}>{w?w.name.split(' ')[0]:'—'}</div></div>))}</div>}
+ {Object.entries(sk.grossSkinsCount).map(([name,count]:any) => (
+ <div key={name} className="flex justify-between text-xs font-black py-1 border-t border-zinc-900">
+ <span className="text-zinc-300">{name}</span><span className="text-emerald-400">{count} skin{count>1?'s':''} · ${Math.round(count*sk.perGross*100)/100}</span>
+ </div>
+ ))}
+ </div>
+ {m.netSkinsEnabled && sk.totalNet > 0 && (
+ <div className="bg-black border border-blue-500/30 rounded-2xl p-4">
+ <div className="flex items-center justify-between mb-3">
+ <span className="text-blue-400 font-black text-xs tracking-widest flex items-center gap-2"><Target size={12}/>NET SKINS · {sk.totalNet} WON</span>
+ <span className="text-zinc-500 text-[10px] font-black">${sk.perNet}/skin · Pot ${sk.netPot}</span>
+ </div>
+ {Object.entries(sk.netSkinsCount).map(([name,count]:any) => (
+ <div key={name} className="flex justify-between text-xs font-black py-1 border-t border-zinc-900">
+ <span className="text-zinc-300">{name}</span><span className="text-blue-400">{count} skin{count>1?'s':''} · ${Math.round(count*sk.perNet*100)/100}</span>
+ </div>
+ ))}
+ </div>
+ )}
+ </div>
+ )
+ })()}
  </div>
  </div>
  )
@@ -895,6 +1010,8 @@ export default function PayoutsPage() {
  {res.strokesB > 0 && <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-lg text-[10px] font-black">{m.sideB} +{res.strokesB}</span>}
  <span className="bg-zinc-900 px-2 py-1 rounded-lg text-[10px] font-black text-zinc-400">Nassau ${m.nassau}</span>
  <span className="bg-zinc-900 px-2 py-1 rounded-lg text-[10px] font-black text-blue-400">Bird ${m.birdie} · Eagle ${m.eagle||(m.birdie*2)||0}</span>
+ {(m.handicapPercent ?? 100) !== 100 && <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg text-[10px] font-black">{m.handicapPercent}% HCP</span>}
+ {m.doSkins && <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded-lg text-[10px] font-black">{m.netSkinsEnabled ? 'GROSS+NET SKINS' : 'GROSS SKINS'} ${m.skinsAmount}/player</span>}
  </div>
  </div>
 
@@ -957,6 +1074,87 @@ export default function PayoutsPage() {
  </div>
  </div>
  )}
+
+ {/* ── PER-MATCH SKINS RESULTS ── */}
+ {(() => {
+ const allMatchNames = m.type === '2v2'
+ ? [m.sideA, m.sideA2, m.sideB, m.sideB2].filter(Boolean)
+ : m.type === 'TvT'
+ ? [...(teams.find((t:any) => t.name === m.sideA)?.playerIds || []), ...(teams.find((t:any) => t.name === m.sideB)?.playerIds || [])].map((id:string) => players.find((p:any) => p.id === id)?.name).filter(Boolean)
+ : [m.sideA, m.sideB].filter(Boolean)
+ const matchPl = allMatchNames.map((name:string) => players.find((p:any) => p.name === name)).filter(Boolean)
+ const sk = calculateMatchSkins(matchPl, scores, course, m)
+ if (!sk) return null
+ return (
+ <div className="px-4 sm:px-8 pb-4 space-y-3">
+ {/* Gross Skins */}
+ <div className="bg-black border border-emerald-500/30 rounded-2xl p-4">
+ <div className="flex items-center justify-between mb-3">
+ <span className="text-emerald-400 font-black text-xs tracking-widest flex items-center gap-2"><Zap size={12}/> {m.netSkinsEnabled ? 'GROSS ' : ''}SKINS · {sk.totalGross} WON</span>
+ <span className="text-zinc-500 text-[10px] font-black">${sk.perGross}/skin · Pot ${sk.grossPot}</span>
+ </div>
+ <div className="grid grid-cols-9 gap-1 mb-3">
+ {sk.grossSkinsMap.slice(0, Math.min(9, sk.numHoles)).map((w, i) => (
+ <div key={i} className={`rounded-lg p-1.5 text-center border ${w ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800'}`}>
+ <div className="text-[8px] text-zinc-600 font-black">{i+1}</div>
+ <div className={`text-[8px] font-black mt-0.5 ${w ? 'text-emerald-400' : 'text-zinc-800'}`}>{w ? w.name.split(' ')[0] : '—'}</div>
+ </div>
+ ))}
+ </div>
+ {sk.numHoles === 18 && (
+ <div className="grid grid-cols-9 gap-1 mb-3">
+ {sk.grossSkinsMap.slice(9, 18).map((w, i) => (
+ <div key={i+9} className={`rounded-lg p-1.5 text-center border ${w ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800'}`}>
+ <div className="text-[8px] text-zinc-600 font-black">{i+10}</div>
+ <div className={`text-[8px] font-black mt-0.5 ${w ? 'text-emerald-400' : 'text-zinc-800'}`}>{w ? w.name.split(' ')[0] : '—'}</div>
+ </div>
+ ))}
+ </div>
+ )}
+ {Object.entries(sk.grossSkinsCount).map(([name, count]) => (
+ <div key={name} className="flex justify-between text-xs font-black py-1 border-t border-zinc-900">
+ <span className="text-zinc-300">{name}</span>
+ <span className="text-emerald-400">{count} skin{count > 1 ? 's' : ''} · ${Math.round(count * sk.perGross * 100) / 100}</span>
+ </div>
+ ))}
+ </div>
+
+ {/* Net Skins */}
+ {m.netSkinsEnabled && (
+ <div className="bg-black border border-blue-500/30 rounded-2xl p-4">
+ <div className="flex items-center justify-between mb-3">
+ <span className="text-blue-400 font-black text-xs tracking-widest flex items-center gap-2"><Target size={12}/> NET SKINS · {sk.totalNet} WON</span>
+ <span className="text-zinc-500 text-[10px] font-black">${sk.perNet}/skin · Pot ${sk.netPot}</span>
+ </div>
+ <div className="grid grid-cols-9 gap-1 mb-3">
+ {sk.netSkinsMap.slice(0, Math.min(9, sk.numHoles)).map((w, i) => (
+ <div key={i} className={`rounded-lg p-1.5 text-center border ${w ? 'border-blue-500/50 bg-blue-500/10' : 'border-zinc-800'}`}>
+ <div className="text-[8px] text-zinc-600 font-black">{i+1}</div>
+ <div className={`text-[8px] font-black mt-0.5 ${w ? 'text-blue-400' : 'text-zinc-800'}`}>{w ? w.name.split(' ')[0] : '—'}</div>
+ </div>
+ ))}
+ </div>
+ {sk.numHoles === 18 && (
+ <div className="grid grid-cols-9 gap-1 mb-3">
+ {sk.netSkinsMap.slice(9, 18).map((w, i) => (
+ <div key={i+9} className={`rounded-lg p-1.5 text-center border ${w ? 'border-blue-500/50 bg-blue-500/10' : 'border-zinc-800'}`}>
+ <div className="text-[8px] text-zinc-600 font-black">{i+10}</div>
+ <div className={`text-[8px] font-black mt-0.5 ${w ? 'text-blue-400' : 'text-zinc-800'}`}>{w ? w.name.split(' ')[0] : '—'}</div>
+ </div>
+ ))}
+ </div>
+ )}
+ {Object.entries(sk.netSkinsCount).map(([name, count]) => (
+ <div key={name} className="flex justify-between text-xs font-black py-1 border-t border-zinc-900">
+ <span className="text-zinc-300">{name}</span>
+ <span className="text-blue-400">{count} skin{count > 1 ? 's' : ''} · ${Math.round(count * sk.perNet * 100) / 100}</span>
+ </div>
+ ))}
+ </div>
+ )}
+ </div>
+ )
+ })()}
 
  {/* Net result */}
  <div className="mx-4 sm:mx-8 mb-8 flex flex-col sm:flex-row justify-between items-center bg-zinc-900 border-2 border-zinc-800 p-6 sm:p-8 rounded-3xl gap-4">

@@ -12,8 +12,10 @@ export default function ResultsPage() {
   const [teams, setTeams] = useState<any[]>([])
   const [money, setMoney] = useState({ entryFee: 25, skinsAllocation: 10 })
   const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
+  const [mode, setMode] = useState('')
 
   useEffect(() => {
+    onValue(ref(db, 'tournament/meta'), snap => setMode(snap.val()?.mode || ''))
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
@@ -213,7 +215,8 @@ export default function ResultsPage() {
               ))}
             </div>
 
-            {/* Skins map */}
+            {/* Skins map — tournament only */}
+            {mode === 'tournament' && money.skinsAllocation > 0 && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
               <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -237,9 +240,10 @@ export default function ResultsPage() {
                 ))}
               </div>
             </div>
+            )}
 
-            {/* Payout table */}
-            {Object.keys(ind.skinsCount).length > 0 && (
+            {/* Payout table — tournament only */}
+            {mode === 'tournament' && money.skinsAllocation > 0 && Object.keys(ind.skinsCount).length > 0 && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-2">
                   <Trophy size={16} className="text-amber-400"/>
