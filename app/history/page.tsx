@@ -853,9 +853,9 @@ return (
 
  {/* ── SECTION: HCP % BADGE ── */}
  {recap.handicapPercent !== undefined && recap.handicapPercent !== 100 && (
- <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-xl">
- <Target size={13} className="text-emerald-400"/>
- <span className="text-emerald-400 font-black text-xs">{recap.handicapPercent}% HANDICAP REDUCED</span>
+ <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 px-4 py-2 rounded-xl">
+ <Target size={13} className="text-amber-400"/>
+ <span className="text-amber-400 font-black text-xs">{recap.handicapPercent}% OF HCP</span>
  {recap.netSkinsEnabled && (
  <span className="text-zinc-500 font-black text-xs ml-2">· NET SKINS ON · {recap.skinsSplitGross}% GROSS / {recap.skinsSplitNet}% NET</span>
  )}

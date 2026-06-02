@@ -723,7 +723,7 @@ export default function PayoutsPage() {
  <span key={p} className="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-xl text-xs font-black">{p}</span>
  ))}
  <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-xl text-xs font-black">{m.wheelFormat==='nassau'?`N:$${m.wheelNassau}`:`$${m.wheelAmount}`}/PAIR · {m.scoringType||'NET'} · {m.wheelFormat==='nassau'?'NASSAU':(course.nineHole?'STRAIGHT 9':'STRAIGHT 18')}</span>
- {(m.handicapPercent ?? 100) !== 100 && <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-xl text-xs font-black">{m.handicapPercent}% HCP</span>}
+ {(m.handicapPercent ?? 100) !== 100 && <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-xl text-xs font-black">{m.handicapPercent}% of HCP</span>}
  {m.doSkins && <span className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded-xl text-xs font-black">{m.netSkinsEnabled ? 'GROSS+NET SKINS' : 'GROSS SKINS'} ${m.skinsAmount}/player</span>}
  </div>
  </div>
@@ -1010,7 +1010,7 @@ export default function PayoutsPage() {
  {res.strokesB > 0 && <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-lg text-[10px] font-black">{m.sideB} +{res.strokesB}</span>}
  <span className="bg-zinc-900 px-2 py-1 rounded-lg text-[10px] font-black text-zinc-400">Nassau ${m.nassau}</span>
  <span className="bg-zinc-900 px-2 py-1 rounded-lg text-[10px] font-black text-blue-400">Bird ${m.birdie} · Eagle ${m.eagle||(m.birdie*2)||0}</span>
- {(m.handicapPercent ?? 100) !== 100 && <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg text-[10px] font-black">{m.handicapPercent}% HCP</span>}
+ {(m.handicapPercent ?? 100) !== 100 && <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded-lg text-[10px] font-black">{m.handicapPercent}% of HCP</span>}
  {m.doSkins && <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded-lg text-[10px] font-black">{m.netSkinsEnabled ? 'GROSS+NET SKINS' : 'GROSS SKINS'} ${m.skinsAmount}/player</span>}
  </div>
  </div>

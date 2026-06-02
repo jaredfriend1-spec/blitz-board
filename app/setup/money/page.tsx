@@ -91,7 +91,9 @@ export default function MoneySetup() {
  <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 space-y-4">
  <div className="flex items-center justify-between">
  <label className="text-zinc-400 font-black text-sm tracking-widest">HANDICAP %</label>
- <span className="text-emerald-400 font-black text-sm">{money.handicapPercent}% Reduced</span>
+ <span className={`font-black text-sm ${money.handicapPercent < 100 ? 'text-amber-400' : 'text-zinc-500'}`}>
+ {money.handicapPercent < 100 ? `${money.handicapPercent}% of HCP` : 'Full Handicap'}
+ </span>
  </div>
  <div className="grid grid-cols-5 gap-2">
  {[100, 90, 80, 75, 50].map(pct => (

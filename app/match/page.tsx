@@ -1258,7 +1258,9 @@ export default function QuickMatch() {
  <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-3">
  <div className="flex items-center justify-between">
  <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
- <span className="text-sm font-black text-emerald-400">{matchDraft.handicapPercent}% Reduced</span>
+ <span className={`text-sm font-black ${matchDraft.handicapPercent < 100 ? 'text-amber-400' : 'text-zinc-500'}`}>
+ {matchDraft.handicapPercent < 100 ? `${matchDraft.handicapPercent}% of HCP` : 'Full Handicap'}
+ </span>
  </div>
  <div className="grid grid-cols-5 gap-1.5">
  {[100, 90, 80, 75, 50].map(pct => (

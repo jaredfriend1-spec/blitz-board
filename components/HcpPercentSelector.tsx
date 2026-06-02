@@ -18,7 +18,9 @@ export function HcpPercentSelector({
           HANDICAP %
         </label>
         <span className="text-sm font-black text-emerald-400">
-          {value}% Reduced
+        <span className={`text-sm font-black ${value < 100 ? 'text-amber-400' : 'text-zinc-500'}`}>
+          {value < 100 ? `${value}% of HCP` : 'Full Handicap'}
+        </span>
         </span>
       </div>
 
