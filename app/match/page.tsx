@@ -34,8 +34,8 @@ export default function QuickMatch() {
  const [courseName, setCourseName] = useState('')
  const [nineHole, setNineHole] = useState(false)
  const [nineHoleStart, setNineHoleStart] = useState<'front'|'back'>('front')
- const [doSkins, setDoSkins] = useState(false)
- const [skinsAmount, setSkinsAmount] = useState(5)
+ const [doSkins, setDoSkins] = useState(false) // kept for legacy compat
+ const [skinsAmount, setSkinsAmount] = useState(5) // kept for legacy compat
  const [holes, setHoles] = useState(Array.from({length:18}, (_, i) => ({ par: 4, hcp: i + 1 })))
  const [savedCourses, setSavedCourses] = useState<any[]>([])
  const [showCourseLibrary, setShowCourseLibrary] = useState(false)
@@ -47,6 +47,7 @@ export default function QuickMatch() {
  const [netSkinsEnabled, setNetSkinsEnabled] = useState(false)
  const [skinsSplitGross, setSkinsSplitGross] = useState(100)
  const [skinsSplitNet, setSkinsSplitNet] = useState(0)
+ const [isEditingExisting, setIsEditingExisting] = useState(false)
  const fileInputRef = typeof window !== 'undefined' ? { current: null as HTMLInputElement|null } : { current: null as HTMLInputElement|null }
 
  // Players
@@ -87,6 +88,8 @@ export default function QuickMatch() {
  netSkinsEnabled: false,
  skinsSplitGross: 100,
  skinsSplitNet: 0,
+ doSkins: false,
+ skinsAmount: 5,
  wheelPlayers:['','',''] as string[],
  wheelAmount:10,
  wheelFormat:'straight' as 'straight'|'nassau',
@@ -194,13 +197,10 @@ export default function QuickMatch() {
 
  // ── CONTINUE EXISTING QUICK MATCH ───────────────────────────────
  const continueEditSetup = async () => {
- // Check if scores already exist — warn but allow
  const scoresSnap = await get(ref(db,'tournament/scores'))
  if (scoresSnap.exists()) {
  const hasScores = Object.values(scoresSnap.val()||{}).some((s:any) => Array.isArray(s) && s.some((v:number)=>v>0))
- if (hasScores) {
- showToast('⚠️ Scores are saved — they will be preserved when you Go Live')
- }
+ if (hasScores) showToast('⚠️ Scores are saved — they will be preserved when you Go Live')
  }
  setLoading(true)
  const courseSnap = await get(ref(db,'tournament/course'))
@@ -224,6 +224,7 @@ export default function QuickMatch() {
  }
  const matchSnap = await get(ref(db,'tournament/matchups'))
  if (matchSnap.val()) setMatches(Object.values(matchSnap.val()) as any[])
+ setIsEditingExisting(true)
  setLoading(false)
  setExistingMatchMode(false)
  setStep(1)
@@ -379,21 +380,21 @@ export default function QuickMatch() {
  const filled = m.wheelPlayers.filter(Boolean)
  if (filled.length < 3) return showToast('Select at least 3 players for the wheel')
  if (new Set(filled).size !== filled.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  } else if (buildingType === '2v2') {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
  if (new Set(picks).size !== picks.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  } else if (buildingType === 'TvT') {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different teams')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  } else {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different players')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,doSkins:false,skinsAmount:5,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -402,7 +403,36 @@ export default function QuickMatch() {
  if (players.length === 0) return showToast('Add at least 2 players')
  setLoading(true)
 
- // If adding to existing round — ONLY update matchups, preserve all scores
+ // ── EDIT EXISTING: update everything EXCEPT scores ──────────────
+ if (isEditingExisting) {
+ await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par), nineHole, nineHoleStart })
+ // Re-save roster using EXISTING player IDs — scores are keyed to these IDs
+ await set(ref(db,'tournament/roster'), null)
+ for (const p of players) {
+ await set(ref(db,`tournament/roster/${p.id}`), { id:p.id, name:p.name, handicap:p.handicap })
+ }
+ // Re-save teams using EXISTING team IDs
+ if (!skipTeams && teamsCreated && teams.length > 0) {
+ await set(ref(db,'tournament/teams'), null)
+ for (const t of teams) {
+ await set(ref(db,`tournament/teams/${t.id}`), { id:t.id, name:t.name, playerIds:t.playerIds })
+ }
+ }
+ const formatToSave = formatMode === 'blitz' ? JEFFS_BLITZ : selectedSavedFormat ? selectedSavedFormat : { name:'Custom', ...customFormatBalls }
+ await set(ref(db,'tournament/format'), formatToSave)
+ await set(ref(db,'tournament/matchups'), null)
+ for (const m of matches) {
+ const mRef = push(ref(db,'tournament/matchups'))
+ await set(mRef, { id:mRef.key, ...m })
+ }
+ await set(ref(db,'tournament/money'), { entryFee:0, skinsAllocation:0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
+ showToast('✓ Setup updated — scores preserved')
+ setLoading(false)
+ router.push('/scorer')
+ return
+ }
+
+ // ── ADD MATCHES ONLY ─────────────────────────────────────────────
  if (addingToExisting) {
  await set(ref(db, 'tournament/matchups'), null)
  for (const m of matches) {
@@ -415,7 +445,7 @@ export default function QuickMatch() {
  return
  }
 
- // Fresh start — always archive if real match exists (safe default)
+ // ── FRESH START ──────────────────────────────────────────────────
  const existingMeta = await get(ref(db,'tournament/meta'))
  const existingMetaVal = existingMeta.val()
  if (existingMetaVal && !existingMetaVal.isMock && (existingMetaVal.mode || existingMetaVal.tripName)) {
@@ -430,40 +460,25 @@ export default function QuickMatch() {
  await set(ref(db,'tournament'), null)
  await set(ref(db,'tournament/meta'), { isMock:false, mode:'match', currentDay:'Match Day', totalDays:1 })
  await set(ref(db,'tournament/course'), { name:courseName.trim(), holes, pars:holes.map(h=>h.par), nineHole, nineHoleStart })
-
- // Players
  const pidMap: Record<string,string> = {}
  for (const p of players) {
  const pRef = push(ref(db,'tournament/roster'))
  await set(pRef, { id:pRef.key, name:p.name, handicap:p.handicap })
  pidMap[p.id] = pRef.key!
  }
-
- // Teams
  if (!skipTeams && teamsCreated && teams.length > 0) {
  for (const t of teams) {
  const tRef = push(ref(db,'tournament/teams'))
  await set(tRef, { id:tRef.key, name:t.name, playerIds:t.playerIds.map(pid=>pidMap[pid]) })
  }
  }
-
- // Format
- const formatToSave = formatMode === 'blitz'
- ? JEFFS_BLITZ
- : selectedSavedFormat
- ? selectedSavedFormat
- : { name: 'Custom', ...customFormatBalls }
+ const formatToSave = formatMode === 'blitz' ? JEFFS_BLITZ : selectedSavedFormat ? selectedSavedFormat : { name:'Custom', ...customFormatBalls }
  await set(ref(db,'tournament/format'), formatToSave)
-
- // Matches
  for (const m of matches) {
  const mRef = push(ref(db,'tournament/matchups'))
  await set(mRef, { id:mRef.key, ...m })
  }
-
- // Skins and handicap settings
- await set(ref(db,'tournament/money'), { entryFee: 0, skinsAllocation: doSkins ? skinsAmount : 0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
-
+ await set(ref(db,'tournament/money'), { entryFee:0, skinsAllocation:0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
  setLoading(false)
  router.push('/scorer')
  }
@@ -1474,6 +1489,57 @@ export default function QuickMatch() {
  </div>
  )}
 
+ {/* ── SKINS (per match) ── */}
+ <div className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-4 space-y-3">
+ <div className="flex items-center justify-between">
+ <div>
+ <p className="font-black text-sm text-zinc-300">Skins</p>
+ <p className="text-zinc-600 text-[10px] font-black normal-case mt-0.5">Best score per hole in this match</p>
+ </div>
+ <div className="flex gap-2">
+ <button onClick={() => setMatchDraft(d=>({...d,doSkins:false}))}
+ className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${!matchDraft.doSkins?'bg-zinc-600 border-zinc-500 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>No</button>
+ <button onClick={() => setMatchDraft(d=>({...d,doSkins:true}))}
+ className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${matchDraft.doSkins?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>Yes</button>
+ </div>
+ </div>
+ {matchDraft.doSkins && (
+ <div className="space-y-3">
+ <div>
+ <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-2">$ PER PLAYER</p>
+ <div className="flex gap-2">
+ {[2,5,10,20].map(amt => (
+ <button key={amt} onClick={() => setMatchDraft(d=>({...d,skinsAmount:amt}))}
+ className={`flex-1 py-2 rounded-xl font-black text-sm border-2 transition-all ${matchDraft.skinsAmount===amt?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-400'}`}>
+ ${amt}
+ </button>
+ ))}
+ <input type="number" value={matchDraft.skinsAmount}
+ onChange={e => setMatchDraft(d=>({...d,skinsAmount:Number(e.target.value)}))}
+ className="w-14 bg-black border border-zinc-700 p-2 rounded-xl font-black text-emerald-400 outline-none text-center text-sm"/>
+ </div>
+ </div>
+ <div className="flex items-center justify-between bg-zinc-800 px-3 py-2.5 rounded-xl">
+ <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
+ <button onClick={() => setMatchDraft(d=>({...d,netSkinsEnabled:!d.netSkinsEnabled}))}
+ className={`w-11 h-6 rounded-full flex items-center px-1 transition-all ${matchDraft.netSkinsEnabled?'bg-emerald-500':'bg-zinc-600'}`}>
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${matchDraft.netSkinsEnabled?'translate-x-5':''}`}/>
+ </button>
+ </div>
+ {matchDraft.netSkinsEnabled && (
+ <div className="grid grid-cols-2 gap-2">
+ {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(p => (
+ <button key={p.label} onClick={() => setMatchDraft(d=>({...d,skinsSplitGross:p.g,skinsSplitNet:p.n}))}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${matchDraft.skinsSplitGross===p.g&&matchDraft.skinsSplitNet===p.n?'bg-amber-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ <div>{p.label}</div><div className="text-[9px] opacity-75">{p.g}%/{p.n}%</div>
+ </button>
+ ))}
+ </div>
+ )}
+ </div>
+ )}
+ </div>
+
  <button onClick={saveMatch}
  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-2xl font-black transition-colors flex items-center justify-center gap-2">
  <Check size={18}/> ADD MATCH
@@ -1512,101 +1578,6 @@ export default function QuickMatch() {
  </div>
  )}
 
- {/* ── SKINS — shown on matches step ── */}
- {step === 4 && (
- <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
- <div className="flex items-center justify-between">
- <div>
- <p className="font-bold text-sm">Skins</p>
- <p className="text-zinc-500 text-xs font-medium normal-case mt-0.5">Lowest score on each hole wins the skin</p>
- </div>
- <div className="flex gap-2">
- <button onClick={() => setDoSkins(false)}
- className={`px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all ${!doSkins?'bg-zinc-700 border-zinc-500 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>
- No
- </button>
- <button onClick={() => setDoSkins(true)}
- className={`px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all ${doSkins?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>
- Yes
- </button>
- </div>
- </div>
- {doSkins && (
- <div className="space-y-4">
- <div>
- <p className="text-[10px] font-semibold text-zinc-500 tracking-widest mb-2">$ PER PLAYER</p>
- <div className="flex gap-2">
- {[2,5,10,20].map(amt => (
- <button key={amt} onClick={() => setSkinsAmount(amt)}
- className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${skinsAmount===amt?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-400'}`}>
- ${amt}
- </button>
- ))}
- <input type="number" value={skinsAmount}
- onChange={e => setSkinsAmount(Number(e.target.value))}
- className="w-16 bg-black border border-zinc-700 focus:border-emerald-500 p-2 rounded-xl font-bold text-emerald-400 outline-none text-center text-sm"
- />
- </div>
- <p className="text-zinc-500 text-xs font-medium normal-case mt-2">
- Total pot: <span className="text-emerald-400 font-bold">${skinsAmount * players.length}</span> ({players.length} players × ${skinsAmount})
- </p>
- </div>
-
- {/* ── HANDICAP % ── */}
- <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-3">
- <div className="flex items-center justify-between">
- <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
- <span className="text-sm font-black text-emerald-400">{handicapPercent}% Reduced</span>
- </div>
- <div className="grid grid-cols-5 gap-1.5">
- {[100, 90, 80, 75, 50].map(pct => (
- <button key={pct} onClick={() => setHandicapPercent(pct)}
- className={`py-2 rounded-xl font-black text-xs transition-all ${handicapPercent === pct ? 'bg-emerald-500 text-black' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}>
- {pct}%
- </button>
- ))}
- </div>
- <input type="range" min="0" max="100" step="5" value={handicapPercent}
- onChange={e => setHandicapPercent(Number(e.target.value))}
- className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"/>
- <div className="flex justify-between text-[9px] text-zinc-600 font-black">
- <span>0%</span><span>50%</span><span>100%</span>
- </div>
- </div>
-
- {/* ── NET SKINS TOGGLE ── */}
- <div className="flex items-center justify-between bg-zinc-800/50 px-4 py-3 rounded-xl border border-zinc-700">
- <div>
- <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
- <p className="text-[9px] text-zinc-600 font-black normal-case mt-0.5">Handicap strokes applied to skins</p>
- </div>
- <button onClick={() => setNetSkinsEnabled(!netSkinsEnabled)}
- className={`w-12 h-6 rounded-full flex items-center px-1 transition-all ${netSkinsEnabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
- <div className={`w-4 h-4 rounded-full bg-white transition-transform ${netSkinsEnabled ? 'translate-x-6' : ''}`}/>
- </button>
- </div>
-
- {/* ── SKINS SPLIT ── */}
- {netSkinsEnabled && (
- <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-2">
- <label className="text-xs font-black text-zinc-400 tracking-widest block">SKINS SPLIT (Gross / Net)</label>
- <div className="grid grid-cols-2 gap-2">
- {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(preset => (
- <button key={preset.label}
- onClick={() => { setSkinsSplitGross(preset.g); setSkinsSplitNet(preset.n) }}
- className={`py-2.5 rounded-xl font-black text-xs transition-all ${skinsSplitGross === preset.g && skinsSplitNet === preset.n ? 'bg-amber-500 text-black' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}>
- <div>{preset.label}</div>
- <div className="text-[9px] opacity-75 mt-0.5">{preset.g}% / {preset.n}%</div>
- </button>
- ))}
- </div>
- <div className="text-[9px] text-zinc-600 font-black">Gross: {skinsSplitGross}% | Net: {skinsSplitNet}%</div>
- </div>
- )}
- </div>
- )}
- </div>
- )}
 
  {/* ── NAVIGATION ── */}
  <div className="flex gap-3 pt-4">

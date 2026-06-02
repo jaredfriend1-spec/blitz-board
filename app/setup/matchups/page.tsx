@@ -17,6 +17,8 @@ const DEFAULT_MATCH = {
  netSkinsEnabled: false,
  skinsSplitGross: 100,
  skinsSplitNet: 0,
+ doSkins: false,
+ skinsAmount: 5,
  // Wheel specific
  wheelPlayers: ["","","",""],
  wheelFormat: 'straight' as 'straight'|'nassau',
@@ -45,17 +47,17 @@ export default function MatchupCenter() {
  if (filled.length !== 4) return alert("SELECT ALL 4 PLAYERS FOR THE WHEEL")
  if (new Set(filled).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: 'Wheel', wheelPlayers: newMatch.wheelPlayers, wheelAmount: newMatch.wheelAmount, scoringType: newMatch.scoringType, wheelFormat: newMatch.wheelFormat, wheelNassau: newMatch.wheelNassau, wheelPress: newMatch.wheelPress, wheelAutoPress: newMatch.wheelAutoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet })
+ set(mRef, { id: mRef.key, type: 'Wheel', wheelPlayers: newMatch.wheelPlayers, wheelAmount: newMatch.wheelAmount, scoringType: newMatch.scoringType, wheelFormat: newMatch.wheelFormat, wheelNassau: newMatch.wheelNassau, wheelPress: newMatch.wheelPress, wheelAutoPress: newMatch.wheelAutoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  } else if (isBuilding === '2v2') {
  const picks = [newMatch.sideA, newMatch.sideA2, newMatch.sideB, newMatch.sideB2]
  if (picks.some(p => !p)) return alert("SELECT ALL 4 PLAYERS")
  if (new Set(picks).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet })
+ set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  } else {
  if (!newMatch.sideA || !newMatch.sideB || newMatch.sideA === newMatch.sideB) return alert("SELECT TWO DISTINCT SIDES")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet })
+ set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  }
  setIsBuilding(null)
  setNewMatch({...DEFAULT_MATCH})
@@ -423,6 +425,54 @@ export default function MatchupCenter() {
  </div>
  </div>
  )}
+
+ {/* ── SKINS (per match) ── */}
+ <div className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-4 space-y-3">
+ <div className="flex items-center justify-between">
+ <div>
+ <p className="font-black text-sm text-zinc-300">Skins</p>
+ <p className="text-zinc-600 text-[10px] font-black normal-case mt-0.5">Best score per hole in this match</p>
+ </div>
+ <div className="flex gap-2">
+ <button onClick={() => setNewMatch({...newMatch, doSkins: false})}
+ className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${!newMatch.doSkins?'bg-zinc-600 border-zinc-500 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>No</button>
+ <button onClick={() => setNewMatch({...newMatch, doSkins: true})}
+ className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${newMatch.doSkins?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>Yes</button>
+ </div>
+ </div>
+ {newMatch.doSkins && (
+ <div className="space-y-3">
+ <div className="flex gap-2 flex-wrap">
+ {[2,5,10,20].map(amt => (
+ <button key={amt} onClick={() => setNewMatch({...newMatch, skinsAmount: amt})}
+ className={`px-4 py-2 rounded-xl font-black text-sm border-2 transition-all ${newMatch.skinsAmount===amt?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-400'}`}>
+ ${amt}
+ </button>
+ ))}
+ <input type="number" value={newMatch.skinsAmount}
+ onChange={e => setNewMatch({...newMatch, skinsAmount: Number(e.target.value)})}
+ className="w-16 bg-black border border-zinc-700 p-2 rounded-xl font-black text-emerald-400 outline-none text-center text-sm"/>
+ </div>
+ <div className="flex items-center justify-between bg-zinc-800 px-3 py-2.5 rounded-xl">
+ <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
+ <button onClick={() => setNewMatch({...newMatch, netSkinsEnabled: !newMatch.netSkinsEnabled})}
+ className={`w-11 h-6 rounded-full flex items-center px-1 transition-all ${newMatch.netSkinsEnabled?'bg-emerald-500':'bg-zinc-600'}`}>
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatch.netSkinsEnabled?'translate-x-5':''}`}/>
+ </button>
+ </div>
+ {newMatch.netSkinsEnabled && (
+ <div className="grid grid-cols-2 gap-2">
+ {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(p => (
+ <button key={p.label} onClick={() => setNewMatch({...newMatch, skinsSplitGross: p.g, skinsSplitNet: p.n})}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${newMatch.skinsSplitGross===p.g&&newMatch.skinsSplitNet===p.n?'bg-amber-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ <div>{p.label}</div><div className="text-[9px] opacity-75">{p.g}%/{p.n}%</div>
+ </button>
+ ))}
+ </div>
+ )}
+ </div>
+ )}
+ </div>
 
  <button onClick={saveMatch}
  className={`w-full py-5 rounded-2xl font-black text-xl flex justify-center items-center gap-2 shadow-xl transition-all ${
