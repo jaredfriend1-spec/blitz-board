@@ -224,7 +224,7 @@ export default function LandingPage() {
       await set(m3, {id:m3.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:false, birdie:0, eagle:0, scoringType:'NET'})
       const m4 = push(ref(db,'tournament/matchups'))
       await set(m4, {id:m4.key, type:'Wheel', wheelPlayers:['TIGER WOODS','JON RAHM','PHIL MICKELSON','BROOKS KOEPKA'], wheelAmount:10, wheelFormat:'nassau', wheelNassau:10, wheelPress:5, wheelAutoPress:true, scoringType:'NET'})
-      await set(ref(db,'tournament/money'), {entryFee:50, skinsAllocation:20})
+      await set(ref(db,'tournament/money'), {entryFee:50, skinsAllocation:20, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
       setDemoLoading(false)
       showToast('🎮 Demo loaded! Tiger, Rory, Rahm & friends at Augusta.')
     } catch(e) {
@@ -267,7 +267,7 @@ export default function LandingPage() {
         const tRef = push(ref(db,'tournament/teams'))
         await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map((n:string)=>pidMap[n])})
       }
-      await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25})
+      await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
       const m1 = push(ref(db,'tournament/matchups'))
       await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
       const m2 = push(ref(db,'tournament/matchups'))

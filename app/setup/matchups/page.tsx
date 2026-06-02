@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase'
 import { ref, set, onValue, push } from 'firebase/database'
 import { ArrowLeft, User, Users, Sword, Trash2, Save, Target, Zap, ZapOff, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
+import { HcpPercentSelector, NetSkinsToggle, SkinsSplitSelector } from '@/components/HcpPercentSelector'
 
 type MatchType = 'PvP' | '2v2' | 'TvT' | 'Wheel'
 
@@ -12,13 +13,17 @@ const DEFAULT_MATCH = {
  nassau: 5, press: 5, birdie: 2, eagle: 5,
  scoringType: 'NET' as 'NET'|'GROSS',
  autoPress: true,
+ handicapPercent: 100,
+ netSkinsEnabled: false,
+ skinsSplitGross: 100,
+ skinsSplitNet: 0,
  // Wheel specific
  wheelPlayers: ["","","",""],
- wheelAmount: 10,
  wheelFormat: 'straight' as 'straight'|'nassau',
  wheelNassau: 5,
  wheelPress: 5,
  wheelAutoPress: true,
+ wheelAmount: 10,
 }
 
 export default function MatchupCenter() {
@@ -40,17 +45,17 @@ export default function MatchupCenter() {
  if (filled.length !== 4) return alert("SELECT ALL 4 PLAYERS FOR THE WHEEL")
  if (new Set(filled).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: 'Wheel', wheelPlayers: newMatch.wheelPlayers, wheelAmount: newMatch.wheelAmount, scoringType: newMatch.scoringType, wheelFormat: newMatch.wheelFormat, wheelNassau: newMatch.wheelNassau, wheelPress: newMatch.wheelPress, wheelAutoPress: newMatch.wheelAutoPress })
+ set(mRef, { id: mRef.key, type: 'Wheel', wheelPlayers: newMatch.wheelPlayers, wheelAmount: newMatch.wheelAmount, scoringType: newMatch.scoringType, wheelFormat: newMatch.wheelFormat, wheelNassau: newMatch.wheelNassau, wheelPress: newMatch.wheelPress, wheelAutoPress: newMatch.wheelAutoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet })
  } else if (isBuilding === '2v2') {
  const picks = [newMatch.sideA, newMatch.sideA2, newMatch.sideB, newMatch.sideB2]
  if (picks.some(p => !p)) return alert("SELECT ALL 4 PLAYERS")
  if (new Set(picks).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress })
+ set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet })
  } else {
  if (!newMatch.sideA || !newMatch.sideB || newMatch.sideA === newMatch.sideB) return alert("SELECT TWO DISTINCT SIDES")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress })
+ set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet })
  }
  setIsBuilding(null)
  setNewMatch({...DEFAULT_MATCH})
@@ -105,6 +110,58 @@ export default function MatchupCenter() {
  </h2>
  <button onClick={() => setIsBuilding(null)} className="text-zinc-500 hover:text-rose-500 font-black">CANCEL</button>
  </div>
+
+ {/* ── HANDICAP % SELECTOR ── */}
+ <div className="bg-zinc-800/50 p-4 rounded-2xl border border-zinc-700 space-y-3">
+ <div className="flex items-center justify-between">
+ <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
+ <span className="text-sm font-black text-emerald-400">{newMatch.handicapPercent}% Reduced</span>
+ </div>
+ <div className="grid grid-cols-5 gap-2">
+ {[100, 90, 80, 75, 50].map(pct => (
+ <button key={pct} onClick={() => setNewMatch({...newMatch, handicapPercent: pct})}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${newMatch.handicapPercent === pct ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ {pct}%
+ </button>
+ ))}
+ </div>
+ <input type="range" min="0" max="100" step="5" value={newMatch.handicapPercent}
+ onChange={e => setNewMatch({...newMatch, handicapPercent: Number(e.target.value)})}
+ className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"/>
+ <div className="flex justify-between text-[9px] text-zinc-600 font-black">
+ <span>0%</span><span>50%</span><span>100%</span>
+ </div>
+ </div>
+
+ {/* ── NET SKINS TOGGLE ── */}
+ <div className="flex items-center justify-between bg-zinc-800/50 px-4 py-3 rounded-2xl border border-zinc-700">
+ <div>
+ <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
+ <p className="text-[9px] text-zinc-600 font-black normal-case mt-0.5">Handicap strokes applied to skins</p>
+ </div>
+ <button onClick={() => setNewMatch({...newMatch, netSkinsEnabled: !newMatch.netSkinsEnabled})}
+ className={`w-12 h-6 rounded-full flex items-center px-1 transition-all ${newMatch.netSkinsEnabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatch.netSkinsEnabled ? 'translate-x-6' : ''}`}/>
+ </button>
+ </div>
+
+ {/* ── SKINS SPLIT ── */}
+ {newMatch.netSkinsEnabled && (
+ <div className="bg-zinc-800/50 p-4 rounded-2xl border border-zinc-700 space-y-2">
+ <label className="text-xs font-black text-zinc-400 tracking-widest block">SKINS SPLIT (Gross / Net)</label>
+ <div className="grid grid-cols-2 gap-2">
+ {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(preset => (
+ <button key={preset.label}
+ onClick={() => setNewMatch({...newMatch, skinsSplitGross: preset.g, skinsSplitNet: preset.n})}
+ className={`py-2.5 rounded-xl font-black text-xs transition-all ${newMatch.skinsSplitGross === preset.g && newMatch.skinsSplitNet === preset.n ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ <div>{preset.label}</div>
+ <div className="text-[9px] opacity-75 mt-0.5">{preset.g}% / {preset.n}%</div>
+ </button>
+ ))}
+ </div>
+ <div className="text-[9px] text-zinc-600 font-black">Gross: {newMatch.skinsSplitGross}% | Net: {newMatch.skinsSplitNet}%</div>
+ </div>
+ )}
 
  {/* ── WHEEL SETUP ── */}
  {isBuilding === 'Wheel' && (

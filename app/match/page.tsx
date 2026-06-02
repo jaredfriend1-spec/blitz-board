@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { HcpPercentSelector, NetSkinsToggle, SkinsSplitSelector } from '@/components/HcpPercentSelector'
 
 // ── CONSTANTS ─────────────────────────────────────────────────────
 const JEFFS_BLITZ = {
@@ -41,6 +42,11 @@ export default function QuickMatch() {
  const [isScanning, setIsScanning] = useState(false)
  const [scanPreview, setScanPreview] = useState<any[]|null>(null)
  const [scanError, setScanError] = useState('')
+ // Handicap & Skins Settings
+ const [handicapPercent, setHandicapPercent] = useState(100)
+ const [netSkinsEnabled, setNetSkinsEnabled] = useState(false)
+ const [skinsSplitGross, setSkinsSplitGross] = useState(100)
+ const [skinsSplitNet, setSkinsSplitNet] = useState(0)
  const fileInputRef = typeof window !== 'undefined' ? { current: null as HTMLInputElement|null } : { current: null as HTMLInputElement|null }
 
  // Players
@@ -77,6 +83,10 @@ export default function QuickMatch() {
  nassau:5, overall:10, press:5, birdie:2, eagle:5,
  scoringType:'NET' as 'NET'|'GROSS',
  autoPress:true,
+ handicapPercent: 100,
+ netSkinsEnabled: false,
+ skinsSplitGross: 100,
+ skinsSplitNet: 0,
  wheelPlayers:['','',''] as string[],
  wheelAmount:10,
  wheelFormat:'straight' as 'straight'|'nassau',
@@ -369,21 +379,21 @@ export default function QuickMatch() {
  const filled = m.wheelPlayers.filter(Boolean)
  if (filled.length < 3) return showToast('Select at least 3 players for the wheel')
  if (new Set(filled).size !== filled.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  } else if (buildingType === '2v2') {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
  if (new Set(picks).size !== picks.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  } else if (buildingType === 'TvT') {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different teams')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  } else {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different players')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -451,8 +461,8 @@ export default function QuickMatch() {
  await set(mRef, { id:mRef.key, ...m })
  }
 
- // Skins
- await set(ref(db,'tournament/money'), { entryFee: 0, skinsAllocation: doSkins ? skinsAmount : 0 })
+ // Skins and handicap settings
+ await set(ref(db,'tournament/money'), { entryFee: 0, skinsAllocation: doSkins ? skinsAmount : 0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
 
  setLoading(false)
  router.push('/scorer')
@@ -1229,6 +1239,25 @@ export default function QuickMatch() {
  <button onClick={() => setBuildingType(null)} className="text-zinc-500 hover:text-rose-500 font-black">CANCEL</button>
  </div>
 
+ {/* ── HCP % SELECTOR (Match Level) ── */}
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-3">
+ <div className="flex items-center justify-between">
+ <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
+ <span className="text-sm font-black text-emerald-400">{matchDraft.handicapPercent}% Reduced</span>
+ </div>
+ <div className="grid grid-cols-5 gap-1.5">
+ {[100, 90, 80, 75, 50].map(pct => (
+ <button key={pct} onClick={() => setMatchDraft(d=>({...d, handicapPercent: pct}))}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${matchDraft.handicapPercent === pct ? 'bg-emerald-500 text-black' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}>
+ {pct}%
+ </button>
+ ))}
+ </div>
+ <input type="range" min="0" max="100" step="5" value={matchDraft.handicapPercent}
+ onChange={e => setMatchDraft(d=>({...d, handicapPercent: Number(e.target.value)}))}
+ className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"/>
+ </div>
+
  {/* PvP selects */}
  {buildingType === 'PvP' && (
  <div className="grid grid-cols-2 gap-3">
@@ -1503,6 +1532,7 @@ export default function QuickMatch() {
  </div>
  </div>
  {doSkins && (
+ <div className="space-y-4">
  <div>
  <p className="text-[10px] font-semibold text-zinc-500 tracking-widest mb-2">$ PER PLAYER</p>
  <div className="flex gap-2">
@@ -1520,6 +1550,59 @@ export default function QuickMatch() {
  <p className="text-zinc-500 text-xs font-medium normal-case mt-2">
  Total pot: <span className="text-emerald-400 font-bold">${skinsAmount * players.length}</span> ({players.length} players × ${skinsAmount})
  </p>
+ </div>
+
+ {/* ── HANDICAP % ── */}
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-3">
+ <div className="flex items-center justify-between">
+ <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
+ <span className="text-sm font-black text-emerald-400">{handicapPercent}% Reduced</span>
+ </div>
+ <div className="grid grid-cols-5 gap-1.5">
+ {[100, 90, 80, 75, 50].map(pct => (
+ <button key={pct} onClick={() => setHandicapPercent(pct)}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${handicapPercent === pct ? 'bg-emerald-500 text-black' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}>
+ {pct}%
+ </button>
+ ))}
+ </div>
+ <input type="range" min="0" max="100" step="5" value={handicapPercent}
+ onChange={e => setHandicapPercent(Number(e.target.value))}
+ className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"/>
+ <div className="flex justify-between text-[9px] text-zinc-600 font-black">
+ <span>0%</span><span>50%</span><span>100%</span>
+ </div>
+ </div>
+
+ {/* ── NET SKINS TOGGLE ── */}
+ <div className="flex items-center justify-between bg-zinc-800/50 px-4 py-3 rounded-xl border border-zinc-700">
+ <div>
+ <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
+ <p className="text-[9px] text-zinc-600 font-black normal-case mt-0.5">Handicap strokes applied to skins</p>
+ </div>
+ <button onClick={() => setNetSkinsEnabled(!netSkinsEnabled)}
+ className={`w-12 h-6 rounded-full flex items-center px-1 transition-all ${netSkinsEnabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${netSkinsEnabled ? 'translate-x-6' : ''}`}/>
+ </button>
+ </div>
+
+ {/* ── SKINS SPLIT ── */}
+ {netSkinsEnabled && (
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-2">
+ <label className="text-xs font-black text-zinc-400 tracking-widest block">SKINS SPLIT (Gross / Net)</label>
+ <div className="grid grid-cols-2 gap-2">
+ {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(preset => (
+ <button key={preset.label}
+ onClick={() => { setSkinsSplitGross(preset.g); setSkinsSplitNet(preset.n) }}
+ className={`py-2.5 rounded-xl font-black text-xs transition-all ${skinsSplitGross === preset.g && skinsSplitNet === preset.n ? 'bg-amber-500 text-black' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}>
+ <div>{preset.label}</div>
+ <div className="text-[9px] opacity-75 mt-0.5">{preset.g}% / {preset.n}%</div>
+ </button>
+ ))}
+ </div>
+ <div className="text-[9px] text-zinc-600 font-black">Gross: {skinsSplitGross}% | Net: {skinsSplitNet}%</div>
+ </div>
+ )}
  </div>
  )}
  </div>

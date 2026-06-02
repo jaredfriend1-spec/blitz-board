@@ -19,6 +19,12 @@ function buildRecap(arch: any) {
  const money = arch.money || { entryFee: 0, skinsAllocation: 0 }
  const matchups: any[] = arch.matchups ? Object.values(arch.matchups) : []
 
+ // ── HCP % AND NET SKINS SETTINGS ──────────────────────────────────
+ const handicapPercent: number = money.handicapPercent ?? arch.handicapPercent ?? 100
+ const netSkinsEnabled: boolean = money.netSkinsEnabled ?? arch.netSkinsEnabled ?? false
+ const skinsSplitGross: number = money.skinsSplitGross ?? arch.skinsSplitGross ?? 100
+ const skinsSplitNet: number = money.skinsSplitNet ?? arch.skinsSplitNet ?? 0
+
  // 9-hole support
  const nineHole: boolean = !!course.nineHole
  const nineHoleStart: string = course.nineHoleStart || 'front'
@@ -62,13 +68,13 @@ function buildRecap(arch: any) {
  const f9Winners = leaderboard.filter(p => p.f9 > 0).sort((a, b) => a.f9 - b.f9).slice(0, 3)
  const b9Winners = leaderboard.filter(p => p.b9 > 0).sort((a, b) => a.b9 - b.b9).slice(0, 3)
 
- // ── SKINS ─────────────────────────────────────────────────────────
+ // ── GROSS SKINS ───────────────────────────────────────────────────
  const numHoles = nineHole ? 9 : 18
  const skinsMap: (any | null)[] = Array(numHoles).fill(null)
  const skinsCount: Record<string, number> = {}
 
  for (let h = 0; h < numHoles; h++) {
- const hIdx = holeOffset + h // actual index in scores array
+ const hIdx = holeOffset + h
  const holeScores = activePlayers
  .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[hIdx] || 0 }))
  .filter(x => x.s > 0)
@@ -82,14 +88,59 @@ function buildRecap(arch: any) {
  }
  }
 
- const totalSkinsWon = Object.values(skinsCount).reduce((a, b) => a + b, 0)
+ // ── NET SKINS (GHIN METHOD) ────────────────────────────────────────
+ const netSkinsMap: (any | null)[] = Array(numHoles).fill(null)
+ const netSkinsCount: Record<string, number> = {}
+
+ if (netSkinsEnabled) {
+ // Calculate adjusted handicaps for all players using HCP%
+ const allAdjHcps = activePlayers.map(p => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
+ const baseAdjHcp = Math.min(...allAdjHcps)
+
+ for (let h = 0; h < numHoles; h++) {
+ const hIdx = holeOffset + h
+ const hcpRating = Number(course.holes?.[hIdx]?.hcp) || (hIdx + 1)
+
+ const holeNetScores = activePlayers.map(p => {
+ const grossScore = (scores[p.id] || [])[hIdx] || 0
+ if (!grossScore) return null
+ const adjHcp = Math.round((Number(p.handicap) || 0) * (handicapPercent / 100))
+ const diff = Math.max(0, adjHcp - baseAdjHcp)
+ let strokes = Math.floor(diff / 18)
+ if (hcpRating <= (diff % 18)) strokes++
+ return { id: p.id, name: p.name, net: grossScore - strokes, gross: grossScore }
+ }).filter(Boolean) as any[]
+
+ if (holeNetScores.length > 0) {
+ const min = Math.min(...holeNetScores.map(x => x.net))
+ const winners = holeNetScores.filter(x => x.net === min)
+ if (winners.length === 1) {
+ netSkinsMap[h] = { ...winners[0], par: pars[h] }
+ netSkinsCount[winners[0].id] = (netSkinsCount[winners[0].id] || 0) + 1
+ }
+ }
+ }
+ }
+
+ // ── SKINS POT SPLIT ───────────────────────────────────────────────
  const skinsPot = fieldSize * (money.skinsAllocation || 0)
- const perSkinRaw = totalSkinsWon > 0 ? skinsPot / totalSkinsWon : 0
- const perSkin = Math.round(perSkinRaw * 100) / 100
+ const grossSkinsPot = netSkinsEnabled ? Math.round(skinsPot * (skinsSplitGross / 100) * 100) / 100 : skinsPot
+ const netSkinsPot = netSkinsEnabled ? Math.round(skinsPot * (skinsSplitNet / 100) * 100) / 100 : 0
+
+ const totalSkinsWon = Object.values(skinsCount).reduce((a, b) => a + b, 0)
+ const totalNetSkinsWon = Object.values(netSkinsCount).reduce((a, b) => a + b, 0)
+
+ const perSkin = totalSkinsWon > 0 ? Math.round((grossSkinsPot / totalSkinsWon) * 100) / 100 : 0
+ const perNetSkin = totalNetSkinsWon > 0 ? Math.round((netSkinsPot / totalNetSkinsWon) * 100) / 100 : 0
 
  const skinsLeaders = activePlayers
  .filter(p => skinsCount[p.id] > 0)
  .map(p => ({ name: p.name, count: skinsCount[p.id], winnings: Math.round(skinsCount[p.id] * perSkin * 100) / 100 }))
+ .sort((a, b) => b.count - a.count)
+
+ const netSkinsLeaders = activePlayers
+ .filter(p => netSkinsCount[p.id] > 0)
+ .map(p => ({ name: p.name, count: netSkinsCount[p.id], winnings: Math.round(netSkinsCount[p.id] * perNetSkin * 100) / 100 }))
  .sort((a, b) => b.count - a.count)
 
  // ── TEAM BEST BALL SCORES ──────────────────────────────────────────
@@ -115,10 +166,13 @@ function buildRecap(arch: any) {
  })
 
  // ── MATCH RESULTS (full payout engine) ──────────────────────────
+ // GHIN METHOD: Apply HCP% BEFORE stroke calculation
  const getStrokes = (playerHcp: number, holeIdx: number, baseHcp: number, isGross: boolean) => {
  if (isGross) return 0
+ const adjustedHcp = Math.round(playerHcp * (handicapPercent / 100))
+ const adjustedBase = Math.round(baseHcp * (handicapPercent / 100))
  const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx + 1)
- const diff = Math.max(0, playerHcp - baseHcp)
+ const diff = Math.max(0, adjustedHcp - adjustedBase)
  let s = Math.floor(diff / 18)
  if (hcpRating <= (diff % 18)) s++
  return s
@@ -242,7 +296,9 @@ function buildRecap(arch: any) {
 
  return {
  fieldSize, leaderboard, f9Winners, b9Winners,
- skinsMap, skinsLeaders, totalSkinsWon, skinsPot, perSkin,
+ skinsMap, skinsLeaders, totalSkinsWon, skinsPot: grossSkinsPot, perSkin,
+ netSkinsEnabled, netSkinsMap, netSkinsLeaders, totalNetSkinsWon, netSkinsPot, perNetSkin,
+ skinsSplitGross, skinsSplitNet, handicapPercent,
  teamResults, matchResults, money, nineHole
  }
 }
@@ -286,6 +342,10 @@ export default function HistoryPage() {
  scoringType: 'NET',
  wheelPlayers: [],
  wheelAmount: 10,
+ handicapPercent: 100,
+ netSkinsEnabled: false,
+ skinsSplitGross: 100,
+ skinsSplitNet: 0,
  })
 
  useEffect(() => {
@@ -337,6 +397,10 @@ export default function HistoryPage() {
  const matchupToSave: any = {
  type: newMatchType,
  scoringType: newMatchData.scoringType || 'NET',
+ handicapPercent: newMatchData.handicapPercent || 100,
+ netSkinsEnabled: newMatchData.netSkinsEnabled || false,
+ skinsSplitGross: newMatchData.skinsSplitGross || 100,
+ skinsSplitNet: newMatchData.skinsSplitNet || 0,
  }
 
  if (newMatchType === 'Wheel') {
@@ -390,6 +454,10 @@ export default function HistoryPage() {
  scoringType: 'NET',
  wheelPlayers: [],
  wheelAmount: 10,
+ handicapPercent: 100,
+ netSkinsEnabled: false,
+ skinsSplitGross: 100,
+ skinsSplitNet: 0,
  })
  alert('Matchup saved!')
  } catch (err) {
@@ -783,9 +851,20 @@ return (
  </div>
  </Section>
 
- {/* ── SECTION: SKINS ── */}
+ {/* ── SECTION: HCP % BADGE ── */}
+ {recap.handicapPercent !== undefined && recap.handicapPercent !== 100 && (
+ <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-xl">
+ <Target size={13} className="text-emerald-400"/>
+ <span className="text-emerald-400 font-black text-xs">{recap.handicapPercent}% HANDICAP REDUCED</span>
+ {recap.netSkinsEnabled && (
+ <span className="text-zinc-500 font-black text-xs ml-2">· NET SKINS ON · {recap.skinsSplitGross}% GROSS / {recap.skinsSplitNet}% NET</span>
+ )}
+ </div>
+ )}
+
+ {/* ── SECTION: GROSS SKINS ── */}
  {recap.totalSkinsWon > 0 && (
- <Section title={`Skins · ${recap.totalSkinsWon} Won · $${recap.perSkin}/Skin`} icon={<Zap size={14}/>} color="text-emerald-400">
+ <Section title={`${recap.netSkinsEnabled ? 'Gross ' : ''}Skins · ${recap.totalSkinsWon} Won · $${recap.perSkin}/Skin`} icon={<Zap size={14}/>} color="text-emerald-400">
  {/* Hole grid */}
  <div className="grid grid-cols-9 gap-1.5 mb-4">
  {recap.skinsMap.slice(0, Math.min(9, recap.skinsMap.length)).map((winner, i) => (
@@ -823,8 +902,54 @@ return (
  ))}
  </div>
  <div className="mt-3 flex justify-between items-center text-[10px] font-black text-zinc-600 px-1">
- <span>TOTAL SKINS POT</span>
+ <span>GROSS SKINS POT</span>
  <span className="text-zinc-400">${recap.skinsPot}</span>
+ </div>
+ </Section>
+ )}
+
+ {/* ── SECTION: NET SKINS ── */}
+ {recap.netSkinsEnabled && recap.totalNetSkinsWon > 0 && (
+ <Section title={`Net Skins · ${recap.totalNetSkinsWon} Won · $${recap.perNetSkin}/Skin`} icon={<Target size={14}/>} color="text-blue-400">
+ {/* Hole grid */}
+ <div className="grid grid-cols-9 gap-1.5 mb-4">
+ {recap.netSkinsMap.slice(0, Math.min(9, recap.netSkinsMap.length)).map((winner, i) => (
+ <div key={i} className={`rounded-xl p-2 text-center border ${winner ? 'border-blue-500/50 bg-blue-500/10' : 'border-zinc-800 bg-black/40'}`}>
+ <div className="text-[9px] text-zinc-600 font-black">{i + 1}</div>
+ <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-blue-400' : 'text-zinc-800'}`}>
+ {winner ? winner.name.split(' ')[0] : '—'}
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="grid grid-cols-9 gap-1.5 mb-5">
+ {!recap.nineHole && recap.netSkinsMap.slice(9, 18).map((winner, i) => (
+ <div key={i + 9} className={`rounded-xl p-2 text-center border ${winner ? 'border-blue-500/50 bg-blue-500/10' : 'border-zinc-800 bg-black/40'}`}>
+ <div className="text-[9px] text-zinc-600 font-black">{i + 10}</div>
+ <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-blue-400' : 'text-zinc-800'}`}>
+ {winner ? winner.name.split(' ')[0] : '—'}
+ </div>
+ </div>
+ ))}
+ </div>
+ {/* Net skins payout table */}
+ <div className="space-y-2">
+ {recap.netSkinsLeaders.map(p => (
+ <div key={p.name} className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
+ <div className="flex items-center gap-3">
+ <Target size={14} className="text-blue-500"/>
+ <span className="font-black text-sm text-white">{p.name}</span>
+ </div>
+ <div className="flex items-center gap-4 text-xs font-black">
+ <span className="text-zinc-500">{p.count} skin{p.count > 1 ? 's' : ''}</span>
+ <span className="text-blue-400 text-base">${Number.isInteger(p.winnings) ? p.winnings : p.winnings.toFixed(2)}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="mt-3 flex justify-between items-center text-[10px] font-black text-zinc-600 px-1">
+ <span>NET SKINS POT</span>
+ <span className="text-zinc-400">${recap.netSkinsPot}</span>
  </div>
  </Section>
  )}
@@ -1258,6 +1383,86 @@ return (
  ))}
  </div>
  </div>
+
+ {/* Handicap % Selector */}
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-3">
+ <div className="flex items-center justify-between">
+ <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
+ <span className="text-sm font-black text-emerald-400">{newMatchData.handicapPercent || 100}% Reduced</span>
+ </div>
+ 
+ {/* Quick buttons */}
+ <div className="grid grid-cols-5 gap-1">
+ {[100, 90, 80, 75, 50].map(pct => (
+ <button
+ key={pct}
+ onClick={() => setNewMatchData({...newMatchData, handicapPercent: pct})}
+ className={`py-1.5 rounded-lg font-black text-[10px] transition-all ${
+ (newMatchData.handicapPercent || 100) === pct
+ ? 'bg-emerald-500 text-black'
+ : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+ }`}
+ >
+ {pct}%
+ </button>
+ ))}
+ </div>
+
+ {/* Slider */}
+ <input
+ type="range"
+ min="0"
+ max="100"
+ step="5"
+ value={newMatchData.handicapPercent || 100}
+ onChange={(e) => setNewMatchData({...newMatchData, handicapPercent: Number(e.target.value)})}
+ className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+ />
+ </div>
+
+ {/* Net Skins Toggle */}
+ <div className="flex items-center justify-between bg-zinc-800/50 px-4 py-3 rounded-xl border border-zinc-700">
+ <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
+ <button
+ onClick={() => setNewMatchData({...newMatchData, netSkinsEnabled: !newMatchData.netSkinsEnabled})}
+ className={`w-12 h-6 rounded-full flex items-center px-1 transition-all ${
+ newMatchData.netSkinsEnabled ? 'bg-emerald-500' : 'bg-zinc-700'
+ }`}
+ >
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatchData.netSkinsEnabled ? 'translate-x-6' : ''}`} />
+ </button>
+ </div>
+
+ {/* Skins Split Selector */}
+ {newMatchData.netSkinsEnabled && (
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-2">
+ <label className="text-xs font-black text-zinc-400 tracking-widest block">SKINS SPLIT</label>
+ <div className="grid grid-cols-2 gap-2">
+ {[
+ { g: 100, n: 0, label: 'Gross Only' },
+ { g: 70, n: 30, label: '70/30' },
+ { g: 60, n: 40, label: '60/40' },
+ { g: 50, n: 50, label: '50/50' },
+ ].map(preset => (
+ <button
+ key={preset.label}
+ onClick={() => setNewMatchData({...newMatchData, skinsSplitGross: preset.g, skinsSplitNet: preset.n})}
+ className={`py-2 rounded-lg font-black text-[10px] transition-all ${
+ (newMatchData.skinsSplitGross || 100) === preset.g && (newMatchData.skinsSplitNet || 0) === preset.n
+ ? 'bg-amber-500 text-black'
+ : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+ }`}
+ >
+ <div>{preset.label}</div>
+ <div className="text-[8px] opacity-75">{preset.g}% / {preset.n}%</div>
+ </button>
+ ))}
+ </div>
+ <div className="text-[9px] text-zinc-600 font-black">
+ Gross: {newMatchData.skinsSplitGross || 100}% | Net: {newMatchData.skinsSplitNet || 0}%
+ </div>
+ </div>
+ )}
 
  {/* Player selectors */}
  <div className="space-y-3">
