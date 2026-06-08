@@ -907,6 +907,21 @@ export default function PayoutsPage() {
  </tr>
  </tbody>
  </table>
+ {/* 1 UP / 2 DOWN for this nine */}
+ {isNassau && (() => {
+ const nineKey = start === 0 ? 'f9' : 'b9'
+ const hw: string[] = (pair as any)[nineKey]?.holeWinners || []
+ const aW = hw.filter((h:string) => h === 'A').length
+ const bW = hw.filter((h:string) => h === 'B').length
+ const diff = aW - bW
+ return (
+ <div className={`px-4 py-1.5 text-[10px] font-black border-t border-zinc-800/60 ${
+ diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-blue-400' : 'text-zinc-600'
+ }`}>
+ {diff === 0 ? 'HALVED' : `${diff > 0 ? pair.playerA : pair.playerB} ${Math.abs(diff)} UP`}
+ </div>
+ )
+ })()}
  </div>
  ))}
  </div>
