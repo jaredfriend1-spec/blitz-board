@@ -93,7 +93,8 @@ export default function QuickMatch() {
  wheelPlayers:['','',''] as string[],
  wheelAmount:10,
  wheelFormat:'straight' as 'straight'|'nassau',
- wheelNassau:5, wheelPress:5, wheelAutoPress:true,
+ wheelNassau:5, wheelNassauF9:5, wheelNassauB9:5, wheelNassauOverall:10,
+ wheelPress:5, wheelAutoPress:true,
  })
 
  // Toast
@@ -380,7 +381,7 @@ export default function QuickMatch() {
  const filled = m.wheelPlayers.filter(Boolean)
  if (filled.length < 3) return showToast('Select at least 3 players for the wheel')
  if (new Set(filled).size !== filled.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassau, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassauF9, wheelNassauF9:m.wheelNassauF9, wheelNassauB9:m.wheelNassauB9, wheelNassauOverall:m.wheelNassauOverall, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  } else if (buildingType === '2v2') {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
@@ -394,7 +395,7 @@ export default function QuickMatch() {
  setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,doSkins:false,skinsAmount:5,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,doSkins:false,skinsAmount:5,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelNassauF9:5,wheelNassauB9:5,wheelNassauOverall:10,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -1447,20 +1448,32 @@ export default function QuickMatch() {
  {/* Nassau options */}
  {matchDraft.wheelFormat === 'nassau' && (
  <div className="space-y-3">
- <div className="grid grid-cols-2 gap-3">
+ <div className="grid grid-cols-3 gap-2">
  <div>
- <label className="text-[10px] font-black text-zinc-600 block mb-1.5">NASSAU ($)</label>
- <input type="number"value={matchDraft.wheelNassau}
- onChange={e => setMatchDraft(d=>({...d,wheelNassau:Number(e.target.value)}))}
+ <label className="text-[10px] font-black text-zinc-600 block mb-1.5">FRONT 9 ($)</label>
+ <input type="number" value={matchDraft.wheelNassauF9}
+ onChange={e => setMatchDraft(d=>({...d,wheelNassauF9:Number(e.target.value)}))}
  className="w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black text-purple-400 outline-none text-center"/>
  </div>
  <div>
+ <label className="text-[10px] font-black text-zinc-600 block mb-1.5">BACK 9 ($)</label>
+ <input type="number" value={matchDraft.wheelNassauB9}
+ onChange={e => setMatchDraft(d=>({...d,wheelNassauB9:Number(e.target.value)}))}
+ className="w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black text-purple-400 outline-none text-center"/>
+ </div>
+ <div>
+ <label className="text-[10px] font-black text-zinc-600 block mb-1.5">OVERALL ($)</label>
+ <input type="number" value={matchDraft.wheelNassauOverall}
+ onChange={e => setMatchDraft(d=>({...d,wheelNassauOverall:Number(e.target.value)}))}
+ className="w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black text-purple-400 outline-none text-center"/>
+ </div>
+ </div>
+ <div>
  <label className={`text-[10px] font-black block mb-1.5 ${matchDraft.wheelAutoPress?'text-yellow-500':'text-zinc-600'}`}>PRESS ($)</label>
- <input type="number"value={matchDraft.wheelPress}
+ <input type="number" value={matchDraft.wheelPress}
  onChange={e => setMatchDraft(d=>({...d,wheelPress:Number(e.target.value)}))}
  disabled={!matchDraft.wheelAutoPress}
  className={`w-full bg-black border border-zinc-700 p-2.5 rounded-xl font-black outline-none text-center ${matchDraft.wheelAutoPress?'text-yellow-400':'text-zinc-700'}`}/>
- </div>
  </div>
  <div className="flex gap-2">
  <button onClick={() => setMatchDraft(d=>({...d,wheelAutoPress:true}))}
@@ -1521,19 +1534,37 @@ export default function QuickMatch() {
  className="w-14 bg-black border border-zinc-700 p-2 rounded-xl font-black text-emerald-400 outline-none text-center text-sm"/>
  </div>
  </div>
- <div className="flex items-center justify-between bg-zinc-800 px-3 py-2.5 rounded-xl">
- <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
- <button onClick={() => setMatchDraft(d=>({...d,netSkinsEnabled:!d.netSkinsEnabled}))}
- className={`w-11 h-6 rounded-full flex items-center px-1 transition-all ${matchDraft.netSkinsEnabled?'bg-emerald-500':'bg-zinc-600'}`}>
- <div className={`w-4 h-4 rounded-full bg-white transition-transform ${matchDraft.netSkinsEnabled?'translate-x-5':''}`}/>
+ {/* Skins type: GROSS / NET / BOTH */}
+ <div>
+ <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-2">SKINS TYPE</p>
+ <div className="grid grid-cols-3 gap-2">
+ {[
+ {label:'GROSS', g:100, n:0, net:false},
+ {label:'NET', g:0, n:100, net:true},
+ {label:'BOTH', g:50, n:50, net:true},
+ ].map(opt => {
+ const isActive = opt.label==='GROSS'
+ ? (!matchDraft.netSkinsEnabled || matchDraft.skinsSplitNet===0)
+ : opt.label==='NET'
+ ? (matchDraft.netSkinsEnabled && matchDraft.skinsSplitGross===0)
+ : (matchDraft.netSkinsEnabled && matchDraft.skinsSplitGross>0 && matchDraft.skinsSplitNet>0)
+ return (
+ <button key={opt.label}
+ onClick={() => setMatchDraft(d=>({...d, netSkinsEnabled:opt.net, skinsSplitGross:opt.g, skinsSplitNet:opt.n}))}
+ className={`py-2.5 rounded-xl font-black text-xs transition-all ${isActive?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ {opt.label}
  </button>
+ )
+ })}
  </div>
- {matchDraft.netSkinsEnabled && (
+ </div>
+ {/* Split selector — only when BOTH */}
+ {matchDraft.netSkinsEnabled && matchDraft.skinsSplitGross > 0 && matchDraft.skinsSplitNet > 0 && (
  <div className="grid grid-cols-2 gap-2">
- {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(p => (
+ {[{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'},{g:40,n:60,label:'40/60'}].map(p => (
  <button key={p.label} onClick={() => setMatchDraft(d=>({...d,skinsSplitGross:p.g,skinsSplitNet:p.n}))}
  className={`py-2 rounded-xl font-black text-xs transition-all ${matchDraft.skinsSplitGross===p.g&&matchDraft.skinsSplitNet===p.n?'bg-amber-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
- <div>{p.label}</div><div className="text-[9px] opacity-75">{p.g}%/{p.n}%</div>
+ <div>{p.label}</div><div className="text-[9px] opacity-75">Gross/Net</div>
  </button>
  ))}
  </div>

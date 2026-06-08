@@ -455,19 +455,36 @@ export default function MatchupCenter() {
  onChange={e => setNewMatch({...newMatch, skinsAmount: Number(e.target.value)})}
  className="w-16 bg-black border border-zinc-700 p-2 rounded-xl font-black text-emerald-400 outline-none text-center text-sm"/>
  </div>
- <div className="flex items-center justify-between bg-zinc-800 px-3 py-2.5 rounded-xl">
- <span className="text-xs font-black text-zinc-400 tracking-widest">NET SKINS</span>
- <button onClick={() => setNewMatch({...newMatch, netSkinsEnabled: !newMatch.netSkinsEnabled})}
- className={`w-11 h-6 rounded-full flex items-center px-1 transition-all ${newMatch.netSkinsEnabled?'bg-emerald-500':'bg-zinc-600'}`}>
- <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatch.netSkinsEnabled?'translate-x-5':''}`}/>
+ {/* Skins type: GROSS / NET / BOTH */}
+ <div>
+ <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-2">SKINS TYPE</p>
+ <div className="grid grid-cols-3 gap-2">
+ {[
+ {label:'GROSS', g:100, n:0, net:false},
+ {label:'NET', g:0, n:100, net:true},
+ {label:'BOTH', g:50, n:50, net:true},
+ ].map(opt => {
+ const isActive = opt.label==='GROSS'
+ ? (!newMatch.netSkinsEnabled || newMatch.skinsSplitNet===0)
+ : opt.label==='NET'
+ ? (newMatch.netSkinsEnabled && newMatch.skinsSplitGross===0)
+ : (newMatch.netSkinsEnabled && newMatch.skinsSplitGross>0 && newMatch.skinsSplitNet>0)
+ return (
+ <button key={opt.label}
+ onClick={() => setNewMatch({...newMatch, netSkinsEnabled:opt.net, skinsSplitGross:opt.g, skinsSplitNet:opt.n})}
+ className={`py-2.5 rounded-xl font-black text-xs transition-all ${isActive?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ {opt.label}
  </button>
+ )
+ })}
  </div>
- {newMatch.netSkinsEnabled && (
+ </div>
+ {newMatch.netSkinsEnabled && newMatch.skinsSplitGross > 0 && newMatch.skinsSplitNet > 0 && (
  <div className="grid grid-cols-2 gap-2">
- {[{g:100,n:0,label:'Gross Only'},{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'}].map(p => (
+ {[{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'},{g:40,n:60,label:'40/60'}].map(p => (
  <button key={p.label} onClick={() => setNewMatch({...newMatch, skinsSplitGross: p.g, skinsSplitNet: p.n})}
  className={`py-2 rounded-xl font-black text-xs transition-all ${newMatch.skinsSplitGross===p.g&&newMatch.skinsSplitNet===p.n?'bg-amber-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
- <div>{p.label}</div><div className="text-[9px] opacity-75">{p.g}%/{p.n}%</div>
+ <div>{p.label}</div><div className="text-[9px] opacity-75">Gross/Net</div>
  </button>
  ))}
  </div>

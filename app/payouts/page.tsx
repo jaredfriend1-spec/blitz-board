@@ -58,6 +58,9 @@ function calculateWheel(
  wheelAmount: number,
  wheelFormat: string = 'straight',
  wheelNassau: number = 5,
+ wheelNassauF9: number = 5,
+ wheelNassauB9: number = 5,
+ wheelNassauOverall: number = 10,
  wheelPress: number = 5,
  wheelAutoPress: boolean = true,
  handicapPercent: number = 100,
@@ -136,10 +139,8 @@ function calculateWheel(
  const scB = playerNetScores[b]
 
  if (wheelFormat === 'nassau') {
- // Run F9, B9, Total as separate bets
- const f9 = runNine(scA, scB, 0, 8, wheelNassau, wheelPress, wheelAutoPress)
- const b9 = runNine(scA, scB, 9, 17, wheelNassau, wheelPress, wheelAutoPress)
- // Total 18
+ const f9 = runNine(scA, scB, 0, 8, wheelNassauF9, wheelPress, wheelAutoPress)
+ const b9 = runNine(scA, scB, 9, 17, wheelNassauB9, wheelPress, wheelAutoPress)
  let aTotal = 0, bTotal = 0
  for (let i = 0; i < 18; i++) {
  const sa = scA[i], sb = scB[i]
@@ -148,7 +149,7 @@ function calculateWheel(
  else if (sb < sa) bTotal++
  }
  const totalWinner = aTotal > bTotal ? 'A' : bTotal > aTotal ? 'B' : 'T'
- const totalPay = totalWinner === 'A' ? wheelNassau : totalWinner === 'B' ? -wheelNassau : 0
+ const totalPay = totalWinner === 'A' ? wheelNassauOverall : totalWinner === 'B' ? -wheelNassauOverall : 0
  const pairNetA = (f9.payA - f9.payB) + (b9.payA - b9.payB) + totalPay
  netWinnings[a] += pairNetA
  netWinnings[b] -= pairNetA
@@ -159,7 +160,10 @@ function calculateWheel(
  f9: {payA: f9.payA, payB: f9.payB, holeWinners: f9.holeWinners, totalPresses: f9.totalPresses, pressHoles: f9.pressHoles},
  b9: {payA: b9.payA, payB: b9.payB, holeWinners: b9.holeWinners, totalPresses: b9.totalPresses, pressHoles: b9.pressHoles},
  totalWinner,
- nassau: wheelNassau,
+ nassauF9: wheelNassauF9,
+ nassauB9: wheelNassauB9,
+ nassauOverall: wheelNassauOverall,
+ nassau: wheelNassauF9,
  pairNetA,
  }
  } else {
@@ -706,6 +710,9 @@ export default function PayoutsPage() {
  m.wheelAmount || 10,
  m.wheelFormat || 'straight',
  m.wheelNassau || 5,
+ m.wheelNassauF9 || m.wheelNassau || 5,
+ m.wheelNassauB9 || m.wheelNassau || 5,
+ m.wheelNassauOverall || m.wheelNassau || 10,
  m.wheelPress || 5,
  m.wheelAutoPress !== false,
  m.handicapPercent ?? 100,
@@ -1030,6 +1037,14 @@ export default function PayoutsPage() {
  <span className="text-zinc-700 mx-2 text-sm">to</span>
  <span className="text-blue-400">${res.f9.payoutB}</span>
  </div>
+ {(() => {
+ const hw = (res.f9.holeResults || []) as any[]
+ const aW = hw.filter(h=>h.winner==='A').length
+ const bW = hw.filter(h=>h.winner==='B').length
+ const diff = aW - bW
+ if (diff === 0) return <div className="text-zinc-600 text-[10px] font-black mt-1">HALVED</div>
+ return <div className={`text-[10px] font-black mt-1 ${diff>0?'text-emerald-400':'text-blue-400'}`}>{diff>0?sideALabel:sideBLabel} {Math.abs(diff)} UP</div>
+ })()}
  </div>
  <div className="bg-black border border-zinc-800 p-5 rounded-2xl">
  <div className="text-zinc-500 text-xs font-black tracking-widest mb-2">BACK 9 {res.b9.totalPresses>0?`· ${res.b9.totalPresses}× PRESS`:''}</div>
@@ -1038,6 +1053,14 @@ export default function PayoutsPage() {
  <span className="text-zinc-700 mx-2 text-sm">to</span>
  <span className="text-blue-400">${res.b9.payoutB}</span>
  </div>
+ {(() => {
+ const hw = (res.b9.holeResults || []) as any[]
+ const aW = hw.filter(h=>h.winner==='A').length
+ const bW = hw.filter(h=>h.winner==='B').length
+ const diff = aW - bW
+ if (diff === 0) return <div className="text-zinc-600 text-[10px] font-black mt-1">HALVED</div>
+ return <div className={`text-[10px] font-black mt-1 ${diff>0?'text-emerald-400':'text-blue-400'}`}>{diff>0?sideALabel:sideBLabel} {Math.abs(diff)} UP</div>
+ })()}
  </div>
  {res.overallAmt > 0 ? (
  <div className={`bg-black border p-5 rounded-2xl ${res.overallPayA>0?'border-emerald-500/40':res.overallPayB>0?'border-blue-500/40':'border-zinc-800'}`}>
@@ -1049,6 +1072,16 @@ export default function PayoutsPage() {
  ? <span className="text-blue-400">{sideBLabel} +${res.overallPayB}</span>
  : <span className="text-zinc-500">EVEN</span>}
  </div>
+ {(() => {
+ const f9hw = (res.f9.holeResults || []) as any[]
+ const b9hw = (res.b9.holeResults || []) as any[]
+ const allHw = [...f9hw, ...b9hw]
+ const aW = allHw.filter(h=>h.winner==='A').length
+ const bW = allHw.filter(h=>h.winner==='B').length
+ const diff = aW - bW
+ if (diff === 0) return <div className="text-zinc-600 text-[10px] font-black mt-1">HALVED</div>
+ return <div className={`text-[10px] font-black mt-1 ${diff>0?'text-emerald-400':'text-blue-400'}`}>{diff>0?sideALabel:sideBLabel} {Math.abs(diff)} UP OVERALL</div>
+ })()}
  </div>
  ) : (
  <div className="bg-black border border-zinc-800 p-5 rounded-2xl">
