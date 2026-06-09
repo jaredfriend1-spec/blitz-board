@@ -3,13 +3,13 @@ import { getDatabase } from "firebase/database";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyB2JIhNld6NCGXVHKSI65Lsjf9FxY3GW2Q",
-  authDomain: "mcc-blitz-live.firebaseapp.com",
-  projectId: "mcc-blitz-live",
-  storageBucket: "mcc-blitz-live.firebasestorage.app",
-  messagingSenderId: "526005051898",
-  appId: "1:526005051898:web:d1c09f12a49d49d7f10443",
-  databaseURL: "https://mcc-blitz-live-default-rtdb.firebaseio.com/"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
