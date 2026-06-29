@@ -124,21 +124,24 @@ export default function CourseSetup() {
  return
  }
  const hcpSet = new Set(scanPreview.map(h => h.hcp))
- if (hcpSet.size !== 18) {
- setHoles(scanPreview)
- setScanPreview(null)
- setError("HCP VALUES NOT UNIQUE — PLEASE REVIEW AND SAVE MANUALLY")
- return
- }
+ const hcpWarning = hcpSet.size !== 18 ? "⚠️ HCP RATINGS NOT ALL UNIQUE — SAVED. REVIEW WHEN POSSIBLE." : ""
  const courseData = { name: courseName.trim(), holes: scanPreview, pars: scanPreview.map(h => h.par) }
  await set(ref(db, 'tournament/course'), courseData)
  const alreadySaved = savedCourses.find((c:any) => c.name.toLowerCase() === courseName.trim().toLowerCase())
  if (!alreadySaved) {
  const hRef = push(ref(db, 'courseHistory'))
  await set(hRef, { id: hRef.key, savedAt: Date.now(), ...courseData })
+ } else {
+ await set(ref(db, `courseHistory/${alreadySaved.id}`), {
+ ...alreadySaved,
+ holes: scanPreview,
+ pars: scanPreview.map(h => h.par),
+ savedAt: Date.now()
+ })
  }
  setHoles(scanPreview)
  setScanPreview(null)
+ setError(hcpWarning)
  setSaveSuccess(true)
  setTimeout(() => setSaveSuccess(false), 3000)
  }
@@ -150,9 +153,10 @@ export default function CourseSetup() {
 
  const saveCourse = async () => {
  if (!courseName.trim()) return setError("PLEASE ENTER A COURSE NAME")
+ // Warn about non-unique HCP but don't block saving
  const hcpSet = new Set(holes.map(h => h.hcp))
- if (hcpSet.size !== 18) return setError("ALL 18 HOLE HANDICAP RATINGS MUST BE UNIQUE (1-18)")
- setError("")
+ const hcpWarning = hcpSet.size !== 18 ? "⚠️ HCP RATINGS NOT ALL UNIQUE — SAVED. REVIEW WHEN POSSIBLE." : ""
+ setError(hcpWarning)
 
  const courseData = {
  name: courseName.trim(),
