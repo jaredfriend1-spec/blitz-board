@@ -11,6 +11,117 @@ interface Course { id: string; name: string; holes: Hole[]; pars: number[] }
 
 const DEFAULT_HOLES: Hole[] = Array.from({ length: 18 }, (_, i) => ({ par: 4, hcp: i + 1 }))
 
+// ── STABLE TOP-LEVEL COMPONENTS ────────────────────────────────
+// These must NOT be defined inside CoursesPage or React remounts them on every render,
+// which breaks mobile dropdown state.
+
+function HoleGrid({
+  holes, onUpdate, label
+}: { holes: Hole[]; onUpdate: (i: number, f: 'par' | 'hcp', v: number) => void; label?: string }) {
+  const hcpValues = holes.map(h => h.hcp)
+  const hasDuplicates = new Set(hcpValues).size !== hcpValues.length
+
+  return (
+    <div className="space-y-3">
+      {label && <p className="text-[10px] font-black text-zinc-500 tracking-widest">{label}</p>}
+      {/* Front 9 */}
+      <div>
+        <div className="grid grid-cols-10 gap-1 text-center mb-1">
+          <div className="text-zinc-600 text-[9px] font-black py-1">HOLE</div>
+          {holes.slice(0, 9).map((_, i) => (
+            <div key={i} className="text-zinc-500 text-[9px] font-black py-1">{i + 1}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-10 gap-1 mb-1">
+          <div className="text-emerald-400 text-[9px] font-black flex items-center justify-center">PAR</div>
+          {holes.slice(0, 9).map((h, i) => (
+            <select key={`par-${i}`} value={h.par}
+              onChange={e => onUpdate(i, 'par', Number(e.target.value))}
+              className="bg-zinc-800 border border-zinc-700 text-white text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-emerald-500 w-full">
+              <option value={3}>3</option>
+              <option value={4}>4</option>
+              <option value={5}>5</option>
+            </select>
+          ))}
+        </div>
+        <div className="grid grid-cols-10 gap-1">
+          <div className="text-blue-400 text-[9px] font-black flex items-center justify-center">HCP</div>
+          {holes.slice(0, 9).map((h, i) => (
+            <select key={`hcp-${i}`} value={h.hcp}
+              onChange={e => onUpdate(i, 'hcp', Number(e.target.value))}
+              className="bg-zinc-800 border border-zinc-700 text-blue-300 text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-blue-500 w-full">
+              {Array.from({ length: 18 }, (_, n) => n + 1).map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          ))}
+        </div>
+      </div>
+      {/* Back 9 */}
+      {holes.length > 9 && (
+        <div>
+          <div className="grid grid-cols-10 gap-1 text-center mb-1">
+            <div className="text-zinc-600 text-[9px] font-black py-1">HOLE</div>
+            {holes.slice(9, 18).map((_, i) => (
+              <div key={i} className="text-zinc-500 text-[9px] font-black py-1">{i + 10}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-10 gap-1 mb-1">
+            <div className="text-emerald-400 text-[9px] font-black flex items-center justify-center">PAR</div>
+            {holes.slice(9, 18).map((h, i) => (
+              <select key={`par-b-${i}`} value={h.par}
+                onChange={e => onUpdate(9 + i, 'par', Number(e.target.value))}
+                className="bg-zinc-800 border border-zinc-700 text-white text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-emerald-500 w-full">
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+                <option value={5}>5</option>
+              </select>
+            ))}
+          </div>
+          <div className="grid grid-cols-10 gap-1">
+            <div className="text-blue-400 text-[9px] font-black flex items-center justify-center">HCP</div>
+            {holes.slice(9, 18).map((h, i) => (
+              <select key={`hcp-b-${i}`} value={h.hcp}
+                onChange={e => onUpdate(9 + i, 'hcp', Number(e.target.value))}
+                className="bg-zinc-800 border border-zinc-700 text-blue-300 text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-blue-500 w-full">
+                {Array.from({ length: 18 }, (_, n) => n + 1).map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasDuplicates && (
+        <p className="text-amber-400 text-[10px] font-black tracking-widest">⚠️ DUPLICATE HCP VALUES — EACH HOLE MUST BE UNIQUE (1-18)</p>
+      )}
+    </div>
+  )
+}
+
+function HoleDisplay({ holes }: { holes: Hole[] }) {
+  return (
+    <div className="space-y-3">
+      {[holes.slice(0, 9), holes.slice(9, 18)].map((nine, nineIdx) => nine.length > 0 && (
+        <div key={nineIdx}>
+          <div className="grid grid-cols-10 gap-1 text-center mb-1">
+            <div className="text-zinc-700 text-[9px]">H</div>
+            {nine.map((_, i) => <div key={i} className="text-zinc-600 text-[9px]">{nineIdx * 9 + i + 1}</div>)}
+          </div>
+          <div className="grid grid-cols-10 gap-1 mb-1">
+            <div className="text-zinc-600 text-[9px] flex items-center justify-center">P</div>
+            {nine.map((h, i) => <div key={i} className="bg-zinc-950 rounded text-[10px] font-black text-white py-1 text-center">{h.par}</div>)}
+          </div>
+          <div className="grid grid-cols-10 gap-1">
+            <div className="text-zinc-600 text-[9px] flex items-center justify-center">H</div>
+            {nine.map((h, i) => <div key={i} className="bg-zinc-950 rounded text-[10px] text-zinc-500 py-1 text-center">{h.hcp}</div>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function CoursesPage() {
   const { role } = useAuth()
   const canEdit = role === 'scorer' || role === 'master'
@@ -115,127 +226,6 @@ export default function CoursesPage() {
     await set(ref(db, `courseHistory/${id}`), null)
     showToast('Deleted')
   }
-
-  // Reusable hole grid editor
-  const HoleGrid = ({
-    holes, onUpdate, label
-  }: { holes: Hole[]; onUpdate: (i: number, f: 'par' | 'hcp', v: number) => void; label?: string }) => {
-    // Track which HCP values are already used (excluding the current hole being rendered)
-    const usedHcps = (excludeIdx: number) => {
-      const used = new Set<number>()
-      holes.forEach((h, i) => { if (i !== excludeIdx) used.add(h.hcp) })
-      return used
-    }
-    // Check for duplicates for warning
-    const hcpValues = holes.map(h => h.hcp)
-    const hasDuplicates = new Set(hcpValues).size !== hcpValues.length
-
-    return (
-    <div className="space-y-3">
-      {label && <p className="text-[10px] font-black text-zinc-500 tracking-widest">{label}</p>}
-      {/* Front 9 */}
-      <div>
-        <div className="grid grid-cols-10 gap-1 text-center mb-1">
-          <div className="text-zinc-600 text-[9px] font-black py-1">HOLE</div>
-          {holes.slice(0, 9).map((_, i) => (
-            <div key={i} className="text-zinc-500 text-[9px] font-black py-1">{i + 1}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-10 gap-1 mb-1">
-          <div className="text-emerald-400 text-[9px] font-black flex items-center justify-center">PAR</div>
-          {holes.slice(0, 9).map((h, i) => (
-            <select key={i} value={h.par}
-              onChange={e => onUpdate(i, 'par', Number(e.target.value))}
-              className="bg-zinc-800 border border-zinc-700 text-white text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-emerald-500 w-full">
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-              <option value={5}>5</option>
-            </select>
-          ))}
-        </div>
-        <div className="grid grid-cols-10 gap-1">
-          <div className="text-blue-400 text-[9px] font-black flex items-center justify-center">HCP</div>
-          {holes.slice(0, 9).map((h, i) => {
-            const used = usedHcps(i)
-            return (
-              <select key={i} value={h.hcp}
-                onChange={e => onUpdate(i, 'hcp', Number(e.target.value))}
-                className="bg-zinc-800 border border-zinc-700 text-blue-300 text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-blue-500 w-full">
-                {Array.from({ length: 18 }, (_, n) => n + 1).map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            )
-          })}
-        </div>
-      </div>
-      {/* Back 9 */}
-      {holes.length > 9 && (
-        <div>
-          <div className="grid grid-cols-10 gap-1 text-center mb-1">
-            <div className="text-zinc-600 text-[9px] font-black py-1">HOLE</div>
-            {holes.slice(9, 18).map((_, i) => (
-              <div key={i} className="text-zinc-500 text-[9px] font-black py-1">{i + 10}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-10 gap-1 mb-1">
-            <div className="text-emerald-400 text-[9px] font-black flex items-center justify-center">PAR</div>
-            {holes.slice(9, 18).map((h, i) => (
-              <select key={i} value={h.par}
-                onChange={e => onUpdate(9 + i, 'par', Number(e.target.value))}
-                className="bg-zinc-800 border border-zinc-700 text-white text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-emerald-500 w-full">
-                <option value={3}>3</option>
-                <option value={4}>4</option>
-                <option value={5}>5</option>
-              </select>
-            ))}
-          </div>
-          <div className="grid grid-cols-10 gap-1">
-            <div className="text-blue-400 text-[9px] font-black flex items-center justify-center">HCP</div>
-            {holes.slice(9, 18).map((h, i) => {
-              const idx = 9 + i
-              const used = usedHcps(idx)
-              return (
-                <select key={i} value={h.hcp}
-                  onChange={e => onUpdate(idx, 'hcp', Number(e.target.value))}
-                  className="bg-zinc-800 border border-zinc-700 text-blue-300 text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-blue-500 w-full">
-                  {Array.from({ length: 18 }, (_, n) => n + 1).map(n => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      {hasDuplicates && (
-        <p className="text-amber-400 text-[10px] font-black tracking-widest">⚠️ DUPLICATE HCP VALUES — EACH HOLE MUST BE UNIQUE (1-18)</p>
-      )}
-    </div>
-    )
-  }
-
-  // Read-only hole display
-  const HoleDisplay = ({ holes }: { holes: Hole[] }) => (
-    <div className="space-y-3">
-      {[holes.slice(0, 9), holes.slice(9, 18)].map((nine, nineIdx) => nine.length > 0 && (
-        <div key={nineIdx}>
-          <div className="grid grid-cols-10 gap-1 text-center mb-1">
-            <div className="text-zinc-700 text-[9px]">H</div>
-            {nine.map((_, i) => <div key={i} className="text-zinc-600 text-[9px]">{nineIdx * 9 + i + 1}</div>)}
-          </div>
-          <div className="grid grid-cols-10 gap-1 mb-1">
-            <div className="text-zinc-600 text-[9px] flex items-center justify-center">P</div>
-            {nine.map((h, i) => <div key={i} className="bg-zinc-950 rounded text-[10px] font-black text-white py-1 text-center">{h.par}</div>)}
-          </div>
-          <div className="grid grid-cols-10 gap-1">
-            <div className="text-zinc-600 text-[9px] flex items-center justify-center">H</div>
-            {nine.map((h, i) => <div key={i} className="bg-zinc-950 rounded text-[10px] text-zinc-500 py-1 text-center">{h.hcp}</div>)}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
