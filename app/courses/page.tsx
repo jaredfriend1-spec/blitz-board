@@ -57,11 +57,26 @@ export default function CoursesPage() {
   }
 
   const updateNewHole = (i: number, field: 'par' | 'hcp', val: number) => {
-    const h = [...newHoles]; h[i] = { ...h[i], [field]: val }; setNewHoles(h)
+    const h = [...newHoles]
+    if (field === 'hcp') {
+      // AUTO-SWAP: if another hole already has this HCP, give it the value we're leaving
+      const oldVal = h[i].hcp
+      const conflictIdx = h.findIndex((hole, idx) => idx !== i && hole.hcp === val)
+      if (conflictIdx !== -1) h[conflictIdx] = { ...h[conflictIdx], hcp: oldVal }
+    }
+    h[i] = { ...h[i], [field]: val }
+    setNewHoles(h)
   }
 
   const updateEditHole = (i: number, field: 'par' | 'hcp', val: number) => {
-    const h = [...editHoles]; h[i] = { ...h[i], [field]: val }; setEditHoles(h)
+    const h = [...editHoles]
+    if (field === 'hcp') {
+      const oldVal = h[i].hcp
+      const conflictIdx = h.findIndex((hole, idx) => idx !== i && hole.hcp === val)
+      if (conflictIdx !== -1) h[conflictIdx] = { ...h[conflictIdx], hcp: oldVal }
+    }
+    h[i] = { ...h[i], [field]: val }
+    setEditHoles(h)
   }
 
   const saveCourse = async (name: string, holes: Hole[]) => {
@@ -147,7 +162,7 @@ export default function CoursesPage() {
                 onChange={e => onUpdate(i, 'hcp', Number(e.target.value))}
                 className="bg-zinc-800 border border-zinc-700 text-blue-300 text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-blue-500 w-full">
                 {Array.from({ length: 18 }, (_, n) => n + 1).map(n => (
-                  <option key={n} value={n} disabled={used.has(n) && n !== h.hcp}>{n}</option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             )
@@ -185,7 +200,7 @@ export default function CoursesPage() {
                   onChange={e => onUpdate(idx, 'hcp', Number(e.target.value))}
                   className="bg-zinc-800 border border-zinc-700 text-blue-300 text-[10px] font-black text-center rounded-lg py-1.5 outline-none focus:border-blue-500 w-full">
                   {Array.from({ length: 18 }, (_, n) => n + 1).map(n => (
-                    <option key={n} value={n} disabled={used.has(n) && n !== h.hcp}>{n}</option>
+                    <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
               )
