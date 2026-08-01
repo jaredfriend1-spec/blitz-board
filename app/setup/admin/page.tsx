@@ -70,6 +70,7 @@ export default function AdminWizard() {
  const saveTripMeta = async () => {
  await set(ref(db,'tournament/meta'), {
  ...meta,
+  mode: 'tournament',
  tripName: tripNameInput.trim(),
  totalDays: totalDaysInput,
  currentDay: meta.currentDay || 'Day 1',
@@ -105,7 +106,7 @@ export default function AdminWizard() {
  }
  await set(ref(db,'tournament/scores'), null)
  await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/meta'), { ...meta, currentDay: nextDay, isMock: false })
+ await set(ref(db,'tournament/meta'), { ...meta, mode: 'tournament', currentDay: nextDay, isMock: false })
  flash(`✓ ${meta.currentDay} archived. Set up matchups for ${nextDay} then go live.`)
  setTransitioningDay(false)
  }

@@ -10,7 +10,7 @@ export default function ResultsPage() {
   const [scores, setScores] = useState<Record<string, number[]>>({})
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
-  const [money, setMoney] = useState({ entryFee: 25, skinsAllocation: 10 })
+  const [money, setMoney] = useState<any>({ entryFee: 25, skinsAllocation: 10, handicapPercent: 100, netSkinsEnabled: false, skinsSplitGross: 100, skinsSplitNet: 0 })
   const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
   const [mode, setMode] = useState('')
 
@@ -20,7 +20,7 @@ export default function ResultsPage() {
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
     onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
-    onValue(ref(db, 'tournament/money'), snap => snap.val() && setMoney(snap.val()))
+    onValue(ref(db, 'tournament/money'), snap => snap.val() && setMoney((prev:any) => ({ ...prev, ...snap.val() })))
     onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
   }, [])
 
@@ -71,13 +71,59 @@ export default function ResultsPage() {
       }
     }
 
-    const totalSkinsPot = activeFieldSize * (money.skinsAllocation || 0)
-    const perSkin = totalSkinsWon > 0 ? totalSkinsPot / totalSkinsWon : 0
+    // ── NET SKINS (GHIN allocation, mirrors history/buildRecap) ──
+    const handicapPercent: number = money.handicapPercent ?? 100
+    const netSkinsEnabled: boolean = !!money.netSkinsEnabled
+    const skinsSplitGross: number = money.skinsSplitGross ?? 100
+    const skinsSplitNet: number = money.skinsSplitNet ?? 0
+
+    const netSkinsMap: any[] = Array(numHoles).fill(null)
+    const netSkinsCount: Record<string, number> = {}
+
+    if (netSkinsEnabled) {
+      const allAdjHcps = activePlayers.map(p => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
+      const baseAdjHcp = allAdjHcps.length > 0 ? Math.min(...allAdjHcps) : 0
+
+      for (let h = 0; h < numHoles; h++) {
+        const hIdx = holeOffset + h
+        const hcpRating = Number(course.holes?.[hIdx]?.hcp) || (hIdx + 1)
+
+        const holeNetScores = activePlayers.map(p => {
+          const grossScore = (scores[p.id] || [])[hIdx] || 0
+          if (!grossScore) return null
+          const adjHcp = Math.round((Number(p.handicap) || 0) * (handicapPercent / 100))
+          const diff = Math.max(0, adjHcp - baseAdjHcp)
+          let strokes = Math.floor(diff / 18)
+          if (hcpRating <= (diff % 18)) strokes++
+          return { id: p.id, name: p.name, net: grossScore - strokes }
+        }).filter(Boolean) as any[]
+
+        if (holeNetScores.length > 0) {
+          const min = Math.min(...holeNetScores.map(x => x.net))
+          const winners = holeNetScores.filter(x => x.net === min)
+          if (winners.length === 1) {
+            netSkinsMap[h] = winners[0]
+            netSkinsCount[winners[0].id] = (netSkinsCount[winners[0].id] || 0) + 1
+          }
+        }
+      }
+    }
+
+    // ── POT SPLIT ──
+    const skinsPot = activeFieldSize * (money.skinsAllocation || 0)
+    const totalSkinsPot = netSkinsEnabled ? Math.round(skinsPot * (skinsSplitGross / 100) * 100) / 100 : skinsPot
+    const netSkinsPot = netSkinsEnabled ? Math.round(skinsPot * (skinsSplitNet / 100) * 100) / 100 : 0
+
+    const totalNetSkinsWon = Object.values(netSkinsCount).reduce((a, b) => a + b, 0)
+    const perSkin = totalSkinsWon > 0 ? Math.round((totalSkinsPot / totalSkinsWon) * 100) / 100 : 0
+    const perNetSkin = totalNetSkinsWon > 0 ? Math.round((netSkinsPot / totalNetSkinsWon) * 100) / 100 : 0
+
     const sortedSkins = Object.entries(skinsCount).sort((a, b) => b[1] - a[1])
     const mostSkinsPlayerId = sortedSkins.length > 0 ? sortedSkins[0][0] : null
     const adjustment = 0
 
-    return { f9Winners, b9Winners, skinsMap, skinsCount, mostSkinsPlayerId, totalSkinsPot, totalSkinsWon, perSkin, adjustment }
+    return { f9Winners, b9Winners, skinsMap, skinsCount, mostSkinsPlayerId, totalSkinsPot, totalSkinsWon, perSkin, adjustment,
+             netSkinsEnabled, netSkinsMap, netSkinsCount, netSkinsPot, totalNetSkinsWon, perNetSkin, skinsPot }
   }
 
   const getTeamResults = () => {
@@ -216,15 +262,15 @@ export default function ResultsPage() {
             </div>
 
             {/* Skins map — tournament only */}
-            {mode === 'tournament' && money.skinsAllocation > 0 && (
+            {mode !== 'match' && money.skinsAllocation > 0 && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
               <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <LayoutGrid size={16} className="text-emerald-400"/>
-                  <span className="font-semibold text-sm">Skins</span>
+                  <span className="font-semibold text-sm">{ind.netSkinsEnabled ? 'Gross Skins' : 'Skins'}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${Number.isInteger(ind.perSkin) ? ind.perSkin : (Math.round(ind.perSkin * 100) / 100).toFixed(2)}/skin · Pot ${ind.totalSkinsPot}</span>
+                  <span className="text-zinc-500 text-xs">{ind.totalSkinsWon} won · ${Number.isInteger(ind.perSkin) ? ind.perSkin : ind.perSkin.toFixed(2)}/skin · Pot ${ind.totalSkinsPot}{ind.netSkinsEnabled ? ` of $${ind.skinsPot}` : ''}</span>
                 </div>
               </div>
               <div className="p-4 grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -242,8 +288,54 @@ export default function ResultsPage() {
             </div>
             )}
 
+            {/* Net skins map */}
+            {mode !== 'match' && ind.netSkinsEnabled && money.skinsAllocation > 0 && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LayoutGrid size={16} className="text-blue-400"/>
+                  <span className="font-semibold text-sm">Net Skins</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-zinc-500 text-xs">{ind.totalNetSkinsWon} won · ${Number.isInteger(ind.perNetSkin) ? ind.perNetSkin : ind.perNetSkin.toFixed(2)}/skin · Pot ${ind.netSkinsPot}</span>
+                </div>
+              </div>
+              <div className="p-4 grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {ind.netSkinsMap.map((winner: any, i: number) => (
+                  <div key={i} className={`p-3 rounded-xl border flex flex-col items-center justify-center min-h-[72px] ${
+                    winner ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-800 bg-black/30'
+                  }`}>
+                    <span className="text-[10px] text-zinc-600 font-medium mb-1">Hole {holeOffset + i + 1}</span>
+                    <span className={`text-[10px] font-semibold text-center leading-tight ${winner ? 'text-blue-400' : 'text-zinc-700'}`}>
+                      {winner ? winner.name : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {ind.totalNetSkinsWon > 0 && (
+                <div className="divide-y divide-zinc-800 border-t border-zinc-800">
+                  {players.filter(p => ind.netSkinsCount[p.id] > 0).map(p => {
+                    const nf = Math.round(ind.netSkinsCount[p.id] * ind.perNetSkin * 100) / 100
+                    return (
+                      <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <Trophy size={14} className="text-blue-400"/>
+                          <span className="font-semibold text-sm">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-zinc-500 text-xs">{ind.netSkinsCount[p.id]} skin{ind.netSkinsCount[p.id] > 1 ? 's' : ''}</span>
+                          <span className="text-blue-400 font-bold">${Number.isInteger(nf) ? nf : nf.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            )}
+
             {/* Payout table — tournament only */}
-            {mode === 'tournament' && money.skinsAllocation > 0 && Object.keys(ind.skinsCount).length > 0 && (
+            {mode !== 'match' && money.skinsAllocation > 0 && Object.keys(ind.skinsCount).length > 0 && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-2">
                   <Trophy size={16} className="text-amber-400"/>
