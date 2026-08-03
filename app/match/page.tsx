@@ -288,10 +288,26 @@ export default function QuickMatch() {
  const archiveAndStart = async () => {
  setLoading(true)
  const snap = await get(ref(db,'tournament'))
- if (snap.exists()) {
- await set(ref(db,`history/${Date.now()}`), {
- ...snap.val(),
- _meta: { tripName: existingTripName, dayLabel: 'Archived', archivedAt: Date.now() }
+ const data = snap.exists() ? snap.val() : null
+ const cards = data?.scores ? Object.keys(data.scores).length : 0
+
+ // Only archive something that actually has scores. After a tournament is
+ // closed out the node still holds roster/course/teams/money — archiving
+ // that shell created phantom rounds inside the trip and broke trip stats.
+ if (cards > 0) {
+ const id = Date.now()
+ await set(ref(db,`history/${id}`), {
+ ...data,
+ _meta: {
+ tripName: data?.meta?.tripName || existingTripName || null,
+ dayLabel: data?.meta?.currentDay || 'Archived',
+ dayNumber: null,
+ archivedAt: id,
+ playedAt: id,
+ isFinal: false,
+ courseName: data?.course?.name || null,
+ formatName: data?.format?.name || null,
+ },
  })
  }
  await set(ref(db,'tournament'), null)

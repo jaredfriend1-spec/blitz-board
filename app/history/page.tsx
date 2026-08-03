@@ -312,6 +312,9 @@ function buildTripRollups(archives: any[]) {
   archives.forEach(a => {
     const t = a._meta?.tripName
     if (!t || a._meta?.mode === 'match') return
+    // A round with no scorecards is not a round. Empty shells archived by
+    // other code paths must never count toward a trip or its rankings.
+    if (!a.scores || Object.keys(a.scores).length === 0) return
     if (!trips[t]) trips[t] = []
     trips[t].push(a)
   })
