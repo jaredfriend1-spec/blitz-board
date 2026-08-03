@@ -390,7 +390,7 @@ export default function AdminWizard() {
  {canAddAnotherDay && (
  <button onClick={()=>closeDay('next')} disabled={closing}
  className="w-full bg-transparent hover:bg-zinc-900 border border-blue-500/40 text-blue-400 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2">
- <Calendar size={14}/> ADD {DAY_LABELS[currentDayIdx+1]?.toUpperCase()} &amp; CONTINUE
+ <Calendar size={14}/> ADD {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}{' '}&amp; CONTINUE
  </button>
  )}
  </>
