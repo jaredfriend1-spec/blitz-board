@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5']
+const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7','Day 8']
+const MAX_DAYS = DAY_LABELS.length
 
 export default function AdminWizard() {
  const [meta, setMeta] = useState<any>({})
@@ -31,6 +32,14 @@ export default function AdminWizard() {
  const [actionMsg, setActionMsg] = useState<string|null>(null)
  const [showDestructive, setShowDestructive] = useState(false)
  const [transitioningDay, setTransitioningDay] = useState(false)
+
+ // ── CLOSE DAY FLOW ──
+ const [showClose, setShowClose] = useState(false)
+ const [closing, setClosing] = useState(false)
+ const [closeStep, setCloseStep] = useState<string|null>(null)
+ const [closeError, setCloseError] = useState<string|null>(null)
+ const [closeDone, setCloseDone] = useState<any>(null)
+ const [audit, setAudit] = useState<any>(null)
 
  useEffect(() => {
  onValue(ref(db,'tournament/meta'), snap => {
@@ -80,35 +89,121 @@ export default function AdminWizard() {
  flash('✓ Trip setup saved.')
  }
 
- const clearData = async () => {
- const pw = prompt("ADMIN PASSWORD:")
- if (pw !== "jeff") return alert("ACCESS DENIED")
- if (!confirm("ARCHIVE current tournament to History, then wipe everything?")) return
- setLoading(true)
- const snap = await get(ref(db,'tournament'))
- if (snap.exists()) await set(ref(db,`history/${Date.now()}`), snap.val())
- await set(ref(db,'tournament'), null)
- flash("✓ Archived to History. Ready for fresh setup.")
- setLoading(false)
+ // Count how many holes each player actually has entered, so we never
+ // archive a half-scored day without the operator knowing.
+ const runAudit = async () => {
+ const [rSnap, sSnap, cSnap] = await Promise.all([
+ get(ref(db,'tournament/roster')),
+ get(ref(db,'tournament/scores')),
+ get(ref(db,'tournament/course')),
+ ])
+ const roster = rSnap.val() || {}
+ const scores = sSnap.val() || {}
+ const holes = (cSnap.val()?.pars || []).length || 18
+ const partial: string[] = []
+ let complete = 0
+ Object.entries(roster).forEach(([pid, p]: any) => {
+ const arr = scores[pid] || []
+ const filled = arr.filter((v: any) => v != null && v > 0).length
+ if (filled >= holes) complete++
+ else partial.push(`${p.name} (${filled}/${holes})`)
+ })
+ return { complete, partial, total: Object.keys(roster).length, holes }
  }
 
- const startNextDay = async () => {
- const currentIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
- const nextDay = DAY_LABELS[Math.min(currentIdx + 1, DAY_LABELS.length - 1)]
- if (!confirm(`CLOSE ${(meta.currentDay||'Day 1').toUpperCase()} AND START ${nextDay.toUpperCase()}?\n\nArchives today and wipes scores + matchups. Teams and course stay.`)) return
- setTransitioningDay(true)
- const snap = await get(ref(db,'tournament'))
- if (snap.exists()) {
- await set(ref(db,`history/${Date.now()}`), {
- ...snap.val(),
- _meta: { tripName: meta.tripName, dayLabel: meta.currentDay, archivedAt: Date.now(), isFinal: false }
- })
+ const openClose = async () => {
+ setCloseError(null); setCloseDone(null); setCloseStep(null)
+ setShowClose(true)
+ setAudit(null)
+ setAudit(await runAudit())
  }
+
+ // mode 'next' = close this day and open the following one (adding it if needed)
+ // mode 'end' = close this day and finish the tournament
+ const closeDay = async (mode: 'next' | 'end') => {
+ setClosing(true); setCloseError(null)
+ try {
+ const currentDay = meta.currentDay || 'Day 1'
+ const idx = DAY_LABELS.indexOf(currentDay)
+ const isFinal = mode === 'end'
+
+ setCloseStep('Reading live tournament…')
+ const snap = await get(ref(db,'tournament'))
+ if (!snap.exists()) throw new Error('No live tournament found. Nothing to archive.')
+ const payload = snap.val()
+ const liveCards = Object.keys(payload.scores || {}).length
+ if (liveCards === 0) throw new Error('No scorecards found. Refusing to archive an empty day.')
+
+ const archiveId = Date.now()
+ const record = {
+ ...payload,
+ _meta: {
+ tripName: meta.tripName || 'Unnamed Trip',
+ dayLabel: currentDay,
+ dayNumber: idx + 1,
+ totalDays: meta.totalDays || 1,
+ archivedAt: archiveId,
+ isFinal,
+ formatName: payload.format?.name || null,
+ courseName: payload.course?.name || null,
+ },
+ }
+
+ setCloseStep('Writing archive to History…')
+ await set(ref(db, `history/${archiveId}`), record)
+
+ // Read the archive back and prove it landed BEFORE deleting anything live.
+ setCloseStep('Verifying archive…')
+ const verify = (await get(ref(db, `history/${archiveId}`))).val()
+ const savedCards = Object.keys(verify?.scores || {}).length
+ if (!verify || savedCards !== liveCards || verify._meta?.dayLabel !== currentDay) {
+ throw new Error(
+ `ARCHIVE VERIFICATION FAILED — saved ${savedCards} of ${liveCards} scorecards. ` +
+ `Nothing has been deleted. Your live scores are untouched. Try again.`
+ )
+ }
+
+ setCloseStep('Verified. Clearing the day…')
  await set(ref(db,'tournament/scores'), null)
  await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/meta'), { ...meta, mode: 'tournament', currentDay: nextDay, isMock: false })
- flash(`✓ ${meta.currentDay} archived. Set up matchups for ${nextDay} then go live.`)
- setTransitioningDay(false)
+
+ if (isFinal) {
+ await set(ref(db,'tournament/meta'), {
+ ...meta, mode:'tournament', isMock:false,
+ status:'complete', completedAt: archiveId, currentDay: null,
+ })
+ setCloseDone({ mode:'end', day: currentDay, cards: savedCards })
+ } else {
+ const nextDay = DAY_LABELS[idx + 1]
+ if (!nextDay) throw new Error(`No day slot beyond ${currentDay}.`)
+ await set(ref(db,'tournament/meta'), {
+ ...meta, mode:'tournament', isMock:false, status:'active',
+ totalDays: Math.max(meta.totalDays || 1, idx + 2),
+ currentDay: nextDay,
+ })
+ setCloseDone({ mode:'next', day: currentDay, next: nextDay, cards: savedCards })
+ }
+ setCloseStep(null)
+ } catch (e:any) {
+ setCloseError(e?.message || String(e))
+ setCloseStep(null)
+ } finally {
+ setClosing(false)
+ }
+ }
+
+ // Only reachable once a trip is marked complete.
+ const startNewTournament = async () => {
+ const pw = prompt("ADMIN PASSWORD:")
+ if (pw !== "jeff") return alert("ACCESS DENIED")
+ if (!confirm("Start a brand new tournament?\n\nKeeps roster and course. Clears trip, teams, matchups and scores.")) return
+ setLoading(true)
+ await set(ref(db,'tournament/scores'), null)
+ await set(ref(db,'tournament/matchups'), null)
+ await set(ref(db,'tournament/teams'), null)
+ await set(ref(db,'tournament/meta'), null)
+ flash("✓ Ready for a fresh tournament.")
+ setLoading(false)
  }
 
  const tripReady = !!(meta.tripName && meta.totalDays > 0)
@@ -119,7 +214,10 @@ export default function AdminWizard() {
  const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length
  const allComplete = tripReady && courseReady && rosterReady && moneyReady && matchupsReady
  const currentDayIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
- const canGoNextDay = tripReady && (currentDayIdx + 1) < (meta.totalDays || 1)
+ const tripComplete = meta.status === 'complete'
+ const hasMoreDaysConfigured = (currentDayIdx + 1) < (meta.totalDays || 1)
+ const canAddAnotherDay = (currentDayIdx + 1) < MAX_DAYS
+ const canGoNextDay = tripReady && hasMoreDaysConfigured && !tripComplete
 
  return (
  <div className="min-h-screen bg-black text-white font-sans">
@@ -147,25 +245,167 @@ export default function AdminWizard() {
  </div>
  )}
 
- {/* ── ARCHIVE + RESET — TOP ── */}
- {hasAnyData && (
+ {/* ── TRIP COMPLETE ── */}
+ {tripComplete && (
+ <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 p-5">
+ <div className="flex items-center gap-2 mb-1">
+ <CheckCircle2 size={18} className="text-emerald-400"/>
+ <p className="text-sm font-black text-emerald-400">TRIP COMPLETE</p>
+ </div>
+ <p className="text-[11px] font-black text-zinc-500 mb-4">
+ {(meta.tripName||'Tournament').toUpperCase()} · ALL {meta.totalDays} DAY{meta.totalDays>1?'S':''} ARCHIVED
+ </p>
+ <div className="flex gap-2">
+ <Link href="/history" className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors">
+ <Archive size={14}/> VIEW RESULTS
+ </Link>
+ <button onClick={startNewTournament} disabled={loading}
+ className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors">
+ {loading ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14}/>} NEW TOURNAMENT
+ </button>
+ </div>
+ </div>
+ )}
+
+ {/* ── CLOSE DAY — TOP ── */}
+ {hasAnyData && !tripComplete && (
  <div className="rounded-2xl border-2 border-blue-500/30 bg-blue-500/5 p-5">
  <div className="flex items-center justify-between mb-3">
  <p className="text-[10px] font-black tracking-widest text-zinc-500">
  {meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS
  </p>
  {meta.currentDay && (
- <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">{meta.currentDay}</span>
+ <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">
+ {meta.currentDay}{meta.totalDays>1 && <span className="text-blue-600"> OF {meta.totalDays}</span>}
+ </span>
  )}
  </div>
  <button
- onClick={clearData}
+ onClick={openClose}
  disabled={loading}
- className="w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
+ className="w-full py-3.5 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
  >
- {loading ? <Loader2 size={12} className="animate-spin"/> : <Archive size={12}/>}
- ARCHIVE + FULL RESET
+ <Archive size={13}/> CLOSE {(meta.currentDay||'DAY').toUpperCase()}
  </button>
+ <p className="text-[9px] font-black text-zinc-600 text-center mt-2 tracking-wider">
+ {hasMoreDaysConfigured
+ ? `${DAY_LABELS[currentDayIdx+1]?.toUpperCase()} IS CONFIGURED AND READY`
+ : 'LAST CONFIGURED DAY · YOU CAN END OR ADD A DAY'}
+ </p>
+ </div>
+ )}
+
+ {/* ── CLOSE DAY MODAL ── */}
+ {showClose && (
+ <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+ onClick={()=>{ if(!closing) { setShowClose(false); setCloseDone(null) } }}>
+ <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+ onClick={e=>e.stopPropagation()}>
+
+ {closeDone ? (
+ <div className="space-y-4 text-center">
+ <CheckCircle2 size={44} className="text-emerald-400 mx-auto"/>
+ <div>
+ <p className="font-black text-lg text-white">{closeDone.day} ARCHIVED</p>
+ <p className="text-xs font-black text-zinc-500 mt-1">
+ {closeDone.cards} scorecards saved to {(meta.tripName||'trip').toUpperCase()}
+ </p>
+ </div>
+ {closeDone.mode === 'next' ? (
+ <p className="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+ {closeDone.next?.toUpperCase()} IS NOW ACTIVE.<br/>
+ <span className="text-zinc-500">Set up matchups, then go live.</span>
+ </p>
+ ) : (
+ <p className="text-xs font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+ TOURNAMENT COMPLETE — all days are in History.
+ </p>
+ )}
+ <button onClick={()=>{setShowClose(false); setCloseDone(null)}}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-black text-sm">DONE</button>
+ </div>
+ ) : (
+ <>
+ <div>
+ <p className="font-black text-lg text-white">Close {meta.currentDay}</p>
+ <p className="text-[11px] font-black text-zinc-500 mt-0.5">
+ {(meta.tripName||'').toUpperCase()} · DAY {currentDayIdx+1} OF {meta.totalDays}
+ </p>
+ </div>
+
+ {/* Score audit */}
+ {audit === null ? (
+ <div className="flex items-center gap-2 text-zinc-500 text-xs font-black">
+ <Loader2 size={14} className="animate-spin"/> CHECKING SCORECARDS…
+ </div>
+ ) : audit.partial.length === 0 ? (
+ <div className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 rounded-xl p-3 text-xs font-black flex items-center gap-2">
+ <CheckCircle2 size={14}/> ALL {audit.total} SCORECARDS COMPLETE ({audit.holes} HOLES)
+ </div>
+ ) : (
+ <div className="border border-amber-500/40 bg-amber-500/10 text-amber-400 rounded-xl p-3 text-xs font-black space-y-1">
+ <div className="flex items-center gap-2"><ShieldAlert size={14}/> {audit.partial.length} INCOMPLETE CARD{audit.partial.length>1?'S':''}</div>
+ <ul className="text-[10px] text-amber-300/80 font-bold pl-5 list-disc">
+ {audit.partial.slice(0,6).map((n:string)=><li key={n}>{n}</li>)}
+ {audit.partial.length>6 && <li>+{audit.partial.length-6} more</li>}
+ </ul>
+ <p className="text-[10px] text-zinc-500 pt-1">You can still archive — payouts will use what is entered.</p>
+ </div>
+ )}
+
+ {closeError && (
+ <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-xs font-black">
+ {closeError}
+ </div>
+ )}
+
+ {closeStep && (
+ <div className="flex items-center gap-2 text-blue-400 text-xs font-black">
+ <Loader2 size={14} className="animate-spin"/> {closeStep.toUpperCase()}
+ </div>
+ )}
+
+ {/* Choices */}
+ <div className="space-y-2">
+ {hasMoreDaysConfigured ? (
+ <>
+ <button onClick={()=>closeDay('next')} disabled={closing}
+ className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
+ <RotateCcw size={16}/> CLOSE &amp; START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
+ </button>
+ <button onClick={()=>closeDay('end')} disabled={closing}
+ className="w-full bg-transparent hover:bg-zinc-900 border border-zinc-700 text-zinc-400 py-3 rounded-2xl font-black text-xs">
+ END TOURNAMENT HERE INSTEAD
+ </button>
+ </>
+ ) : (
+ <>
+ <p className="text-[10px] font-black text-zinc-500 tracking-wider">
+ THIS IS THE LAST CONFIGURED DAY. WHAT NEXT?
+ </p>
+ <button onClick={()=>closeDay('end')} disabled={closing}
+ className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 text-black py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
+ <CheckCircle2 size={16}/> END TOURNAMENT
+ </button>
+ {canAddAnotherDay && (
+ <button onClick={()=>closeDay('next')} disabled={closing}
+ className="w-full bg-transparent hover:bg-zinc-900 border border-blue-500/40 text-blue-400 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2">
+ <Calendar size={14}/> ADD {DAY_LABELS[currentDayIdx+1]?.toUpperCase()} &amp; CONTINUE
+ </button>
+ )}
+ </>
+ )}
+ <button onClick={()=>setShowClose(false)} disabled={closing}
+ className="w-full text-zinc-600 hover:text-zinc-400 py-2 font-black text-xs">CANCEL</button>
+ </div>
+
+ <p className="text-[9px] font-black text-zinc-700 text-center leading-relaxed">
+ THE ARCHIVE IS WRITTEN AND READ BACK BEFORE ANY LIVE DATA IS CLEARED.<br/>
+ IF VERIFICATION FAILS, NOTHING IS DELETED.
+ </p>
+ </>
+ )}
+ </div>
  </div>
  )}
 
@@ -240,7 +480,7 @@ export default function AdminWizard() {
  </div>
  )}
  {canGoNextDay && (
- <button onClick={startNextDay} disabled={transitioningDay}
+ <button onClick={openClose} disabled={transitioningDay}
  className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
  <span className="flex items-center gap-2">
  {transitioningDay?<Loader2 size={14} className="animate-spin"/>:<RotateCcw size={14}/>}
