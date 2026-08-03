@@ -1990,21 +1990,19 @@ return (
  </div>
  )}
 
- <div className="space-y-4 mb-6">
- {buildTripRollups(archives).map((t: any) => <TripRollup key={t.tripName} trip={t} onDeleteTrip={deleteTrip} renderRound={renderRoundCard} canDelete={canDelete}/>)}
-</div>
-
+        {/* One chronological timeline: trips and standalone rounds interleaved,
+            newest first. A trip is dated by its most recent round. */}
         <div className="space-y-4 pb-12">
- {/* Standalone rounds — quick matches and anything not part of a trip */}
- {standaloneArchives.length > 0 && (
- <div className="space-y-4 pb-12">
- <p className="text-[10px] font-black text-zinc-600 tracking-widest px-1">
- STANDALONE ROUNDS · {standaloneArchives.length}
- </p>
- {standaloneArchives.map(renderRoundCard)}
- </div>
- )}
- </div>
+          {[
+            ...buildTripRollups(archives).map((t: any) => ({ kind: 'trip', when: t.latest, key: 'trip:' + t.tripName, data: t })),
+            ...standaloneArchives.map((a: any) => ({ kind: 'round', when: Number(a._meta?.playedAt || a.id), key: 'round:' + a.id, data: a })),
+          ]
+            .sort((a, b) => b.when - a.when)
+            .map(item => item.kind === 'trip'
+              ? <TripRollup key={item.key} trip={item.data} onDeleteTrip={deleteTrip} renderRound={renderRoundCard} canDelete={canDelete}/>
+              : <div key={item.key}>{renderRoundCard(item.data)}</div>
+            )}
+        </div>
  </div>
  </div>
  )

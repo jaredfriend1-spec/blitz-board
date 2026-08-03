@@ -13,6 +13,10 @@ import {
 // ════════════════════════════════════════════════════════════════════
 // Winnings = match money + skins. Net also backs out the skins buy-in.
 // Module scope so both the engine and the dashboard can use them.
+// Tournament money = the field-wide skins pot. Side bets = head-to-head
+// and team matchups. They are funded differently and settle differently.
+const tourneyWin = (p: any) => p.skinsMoney
+const sideBetWin = (p: any) => p.moneyWon - p.moneyLost
 const totalWin = (p: any) => (p.moneyWon - p.moneyLost) + p.skinsMoney
 const netWin = (p: any) => totalWin(p) - p.skinsBuyIn
 
@@ -34,6 +38,8 @@ function computeAnalytics(history: any[]) {
     moneyWon: number; moneyLost: number
     skinsWon: number; skinsMoney: number
     skinsBuyIn: number; entryFees: number; pressUnsupported: boolean
+    skinsGrossMoney: number; skinsNetMoney: number
+    betPvP: number; bet2v2: number; betTeam: number
     birdies: number; eagles: number; pars: number; bogeys: number; doubles: number
     handicaps: number[]
     nassauWins: number; nassauLosses: number
@@ -59,6 +65,8 @@ function computeAnalytics(history: any[]) {
       matchWins: 0, matchLosses: 0, matchTies: 0,
       moneyWon: 0, moneyLost: 0, skinsWon: 0, skinsMoney: 0,
       skinsBuyIn: 0, entryFees: 0, pressUnsupported: false,
+      skinsGrossMoney: 0, skinsNetMoney: 0,
+      betPvP: 0, bet2v2: 0, betTeam: 0,
       birdies: 0, eagles: 0, pars: 0, bogeys: 0, doubles: 0,
       handicaps: [], nassauWins: 0, nassauLosses: 0,
       wheelWins: 0, wheelLosses: 0, pvpWins: 0, pvpLosses: 0,
@@ -186,10 +194,15 @@ function computeAnalytics(history: any[]) {
         p.skinsPerRound.push(grossCounts[rp.name] || 0)
       })
       Object.entries(grossCounts).forEach(([name, c]) => {
-        const p = getP(name); p.skinsWon += c; p.skinsMoney += c * perG
+        const p = getP(name)
+        p.skinsWon += c
+        p.skinsMoney += c * perG
+        p.skinsGrossMoney += c * perG
       })
       Object.entries(netCounts).forEach(([name, c]) => {
-        const p = getP(name); p.skinsMoney += c * perN
+        const p = getP(name)
+        p.skinsMoney += c * perN
+        p.skinsNetMoney += c * perN
       })
     } else {
       roster.forEach(rp => { getP(rp.name).entryFees += entryFee })
@@ -308,9 +321,16 @@ function computeAnalytics(history: any[]) {
       }
 
       const aWon = overallUp > 0, bWon = overallUp < 0
+      const bucket = (p: any, amt: number) => {
+        if (type === 'PvP') p.betPvP += amt
+        else if (type === '2v2') p.bet2v2 += amt
+        else p.betTeam += amt
+      }
+
       A.forEach(n => {
         const p = getP(n)
         if (netA > 0) p.moneyWon += netA; else if (netA < 0) p.moneyLost += -netA
+        bucket(p, netA)
         if (aWon) p.matchWins++; else if (bWon) p.matchLosses++; else p.matchTies++
         if (nassau > 0) { if (aWon) p.nassauWins++; else if (bWon) p.nassauLosses++ }
         if (type === 'PvP') { if (aWon) p.pvpWins++; else if (bWon) p.pvpLosses++ }
@@ -328,6 +348,7 @@ function computeAnalytics(history: any[]) {
       B.forEach(n => {
         const p = getP(n)
         if (netA < 0) p.moneyWon += -netA; else if (netA > 0) p.moneyLost += netA
+        bucket(p, -netA)
         if (bWon) p.matchWins++; else if (aWon) p.matchLosses++; else p.matchTies++
         if (nassau > 0) { if (bWon) p.nassauWins++; else if (aWon) p.nassauLosses++ }
         if (type === 'PvP') { if (bWon) p.pvpWins++; else if (aWon) p.pvpLosses++ }
@@ -681,12 +702,31 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
             const maxAbs = Math.max(1, ...moneyLeaderboard.map((x: any) => Math.abs(netWin(x))))
             return (
               <>
+                {/* category totals */}
+                <div className="grid grid-cols-2 gap-2 pb-2">
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-2">
+                    <p className="text-[9px] font-black text-yellow-500/80 tracking-widest">TOURNAMENT (SKINS)</p>
+                    <p className="text-lg font-black text-yellow-400">
+                      ${Math.round(moneyLeaderboard.reduce((s: number, p: any) => s + tourneyWin(p), 0))}
+                    </p>
+                    <p className="text-[9px] font-black text-zinc-600">POT DISTRIBUTED</p>
+                  </div>
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2">
+                    <p className="text-[9px] font-black text-blue-400/80 tracking-widest">SIDE BETS (MATCHES)</p>
+                    <p className="text-lg font-black text-blue-400">
+                      ${Math.round(moneyLeaderboard.reduce((s: number, p: any) => s + Math.max(0, sideBetWin(p)), 0))}
+                    </p>
+                    <p className="text-[9px] font-black text-zinc-600">CHANGED HANDS</p>
+                  </div>
+                </div>
+
                 {/* column headers */}
                 <div className="flex items-center gap-3 pb-1 border-b border-zinc-800">
                   <span className="w-5"/>
                   <span className="flex-1 text-[9px] font-black text-zinc-600 tracking-widest">PLAYER</span>
-                  <span className="w-20 text-right text-[9px] font-black text-zinc-600 tracking-widest">WINNINGS</span>
-                  <span className="w-20 text-right text-[9px] font-black text-zinc-600 tracking-widest">NET</span>
+                  <span className="w-16 text-right text-[9px] font-black text-yellow-600 tracking-widest">TOURN</span>
+                  <span className="w-16 text-right text-[9px] font-black text-blue-500 tracking-widest">SIDE</span>
+                  <span className="w-16 text-right text-[9px] font-black text-zinc-600 tracking-widest">NET</span>
                 </div>
 
                 {moneyLeaderboard.map((p: any, i: number) => {
@@ -698,21 +738,31 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
                       <div className="flex items-center gap-3">
                         <span className={`text-[10px] font-black w-5 ${i===0?'text-yellow-400':i===1?'text-zinc-400':i===2?'text-amber-600':'text-zinc-700'}`}>#{i+1}</span>
                         <span className="flex-1 font-bold text-sm text-white truncate">{p.name}</span>
-                        <span className={`w-20 text-right font-black text-sm tabular-nums ${win >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {win >= 0 ? '$' : '-$'}{Math.abs(Math.round(win))}
+                        <span className="w-16 text-right font-black text-sm tabular-nums text-yellow-400">
+                          {tourneyWin(p) > 0 ? '$' + Math.round(tourneyWin(p)) : <span className="text-zinc-700">—</span>}
                         </span>
-                        <span className={`w-20 text-right font-black text-sm tabular-nums ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <span className={`w-16 text-right font-black text-sm tabular-nums ${match > 0 ? 'text-blue-400' : match < 0 ? 'text-rose-400' : 'text-zinc-700'}`}>
+                          {match === 0 ? '—' : (match > 0 ? '$' : '-$') + Math.abs(Math.round(match))}
+                        </span>
+                        <span className={`w-16 text-right font-black text-sm tabular-nums ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {net >= 0 ? '$' : '-$'}{Math.abs(Math.round(net))}
                         </span>
                       </div>
                       <div className="pl-8">
                         <MiniBar value={Math.abs(net)} max={maxAbs} color={net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}/>
-                        <div className="flex gap-3 mt-1 flex-wrap">
-                          <span className="text-zinc-600 text-[10px]">
-                            Matches {match >= 0 ? '+' : '-'}${Math.abs(Math.round(match))}
-                          </span>
-                          <span className="text-zinc-600 text-[10px]">Skins +${Math.round(p.skinsMoney)}</span>
-                          <span className="text-zinc-700 text-[10px]">Buy-in -${Math.round(p.skinsBuyIn)}</span>
+                        <div className="flex gap-2 mt-1 flex-wrap">
+                          {[
+                            ['Gross skins', p.skinsGrossMoney, 'text-yellow-500/80'],
+                            ['Net skins', p.skinsNetMoney, 'text-yellow-500/80'],
+                            ['1v1', p.betPvP, 'text-blue-400/80'],
+                            ['2v2', p.bet2v2, 'text-blue-400/80'],
+                            ['Team', p.betTeam, 'text-blue-400/80'],
+                          ].filter(([, v]) => Math.round(Number(v)) !== 0).map(([lbl, v, cls]: any) => (
+                            <span key={lbl} className={`text-[10px] font-semibold ${cls}`}>
+                              {lbl} {Number(v) >= 0 ? '+' : '-'}${Math.abs(Math.round(Number(v)))}
+                            </span>
+                          ))}
+                          <span className="text-zinc-700 text-[10px] font-semibold">Buy-in -${Math.round(p.skinsBuyIn)}</span>
                         </div>
                       </div>
                     </div>
@@ -721,7 +771,8 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
 
                 <div className="pt-2 mt-1 border-t border-zinc-800 space-y-1">
                   <p className="text-[9px] font-black text-zinc-600 leading-relaxed">
-                    WINNINGS = MATCH MONEY + SKINS. NET ALSO BACKS OUT THE SKINS BUY-IN, SO NET SUMS TO ZERO ACROSS THE FIELD.
+                    TOURN = SKINS POT (EVERYONE BUYS IN, WINNERS SPLIT IT). SIDE = HEAD-TO-HEAD AND TEAM MATCHES, ZERO-SUM BETWEEN PLAYERS.
+                    NET = TOURN + SIDE - BUY-IN, SO NET SUMS TO ZERO ACROSS THE FIELD.
                     ENTRY FEES BEYOND THE SKINS ALLOCATION FUND OVERALL PRIZES AND ARE NOT TRACKED HERE.
                   </p>
                   {anyPress && (
