@@ -330,6 +330,7 @@ function buildTripRollups(archives: any[]) {
       dayMeta.push({
         id: arch.id,
         label: arch._meta?.dayLabel || ('Day ' + (di + 1)),
+        arch,
         course: arch.course?.name || '—',
         par: parTot,
         when: Number(arch._meta?.playedAt || arch.id),
@@ -373,7 +374,7 @@ function buildTripRollups(archives: any[]) {
   }).sort((a, b) => b.latest - a.latest)
 }
 
-function TripRollup({ trip, onDeleteTrip }: { trip: any, onDeleteTrip: (t: any) => void }) {
+function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any, onDeleteTrip: (t: any) => void, renderRound: (a: any) => any, canDelete: boolean }) {
   const [open, setOpen] = useState(false)
   const [basis, setBasis] = useState<'net' | 'gross' | 'topar'>('net')
   const [confirming, setConfirming] = useState(false)
@@ -499,14 +500,9 @@ function TripRollup({ trip, onDeleteTrip }: { trip: any, onDeleteTrip: (t: any) 
             <p className="text-[10px] font-black text-blue-400 tracking-widest mb-2 flex items-center gap-1.5">
               <Flag size={12}/> ROUNDS
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-4">
               {trip.days.map((d: any) => (
-                <div key={d.id} className="flex items-center gap-3 bg-zinc-900 rounded-xl px-4 py-2.5">
-                  <span className="text-[10px] font-black text-blue-400 bg-blue-500/15 px-2 py-1 rounded-lg flex-shrink-0">{d.label}</span>
-                  <span className="font-black text-white text-xs truncate">{d.course}</span>
-                  <span className="text-[10px] font-black text-zinc-600 flex-shrink-0">PAR {d.par}</span>
-                  <span className="ml-auto text-[10px] font-black text-zinc-500 flex-shrink-0">{fmt(d.when)}</span>
-                </div>
+                <div key={d.id}>{renderRound(d.arch)}</div>
               ))}
             </div>
           </div>
@@ -518,7 +514,7 @@ function TripRollup({ trip, onDeleteTrip }: { trip: any, onDeleteTrip: (t: any) 
 
           {/* ── DELETE WHOLE TRIP ── */}
           <div className="pt-2 border-t border-zinc-900">
-            {!confirming ? (
+            {!canDelete ? null : !confirming ? (
               <button
                 onClick={() => setConfirming(true)}
                 className="w-full flex items-center justify-center gap-2 text-rose-500/70 hover:text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 py-2.5 rounded-xl font-black text-[11px] tracking-wider transition-all">
@@ -587,6 +583,11 @@ function RankBadge({ rank }: { rank: number }) {
 
 export default function HistoryPage() {
  const [archives, setArchives] = useState<any[]>([])
+ const { role } = useAuth()
+ const sessionRole = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null
+ // Players never get delete controls — master and scorer only.
+ const canDelete = (role === 'master' || role === 'scorer') && sessionRole !== 'player'
+ const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
  const [expandedId, setExpandedId] = useState<string | null>(null)
  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
  const [exportingId, setExportingId] = useState<string | null>(null)
@@ -628,14 +629,15 @@ export default function HistoryPage() {
  }, [])
 
  const deleteHistory = (id: string) => {
- if (window.confirm('Permanently delete this record? Cannot be undone.')) {
+ if (!canDelete) return
  set(ref(db, 'history/' + id), null)
- }
+ setConfirmDeleteId(null)
  }
 
  // Deletes every archived round belonging to a trip. The roll-up card is
  // derived, so removing a trip means removing its underlying day records.
  const deleteTrip = (trip: any) => {
+ if (!canDelete) return
  trip.days.forEach((d: any) => set(ref(db, 'history/' + d.id), null))
  }
 
@@ -977,37 +979,10 @@ ${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div
  }
 
 
-return (
- <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans">
- <Link href="/"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
- <ArrowLeft size={18}/> HUB
- </Link>
+ // Rounds that do not belong to a trip render on their own below.
+ const standaloneArchives = archives.filter((a: any) => !a._meta?.tripName || a._meta?.mode === 'match')
 
- <div className="max-w-5xl mx-auto">
- <div className="flex items-center gap-4 mb-10">
- <Archive size={36} className="text-blue-400"/>
- <div>
- <h1 className="text-4xl font-black tracking-tight">History</h1>
- <p className="text-zinc-600 text-[10px] font-black tracking-widest mt-0.5">{archives.length} ARCHIVED RECORD{archives.length !== 1 ? 'S' : ''}</p>
- </div>
- </div>
-
- {archives.length === 0 && (
- <div className="text-center py-24 border-2 border-dashed border-zinc-800 rounded-[2.5rem]">
- <Archive size={48} className="mx-auto mb-4 text-zinc-800"/>
- <p className="text-zinc-600 font-black text-lg">NO HISTORY YET</p>
- <p className="text-zinc-700 text-xs font-black mt-2 tracking-widest normal-case">
- Use Admin → Archive to History after each round
- </p>
- </div>
- )}
-
- <div className="space-y-4 mb-6">
- {buildTripRollups(archives).map((t: any) => <TripRollup key={t.tripName} trip={t} onDeleteTrip={deleteTrip}/>)}
-</div>
-
-        <div className="space-y-4 pb-12">
- {archives.map(arch => {
+ const renderRoundCard = (arch: any) => {
  const recap = buildRecap(arch)
  const isExpanded = expandedId === arch.id
  const date = new Date(Number(arch._meta?.playedAt || arch.id)).toLocaleDateString('en-US', {
@@ -1619,12 +1594,22 @@ return (
  : <><FileDown size={13}/> Export PDF</>
  }
  </button>
+ {canDelete && (confirmDeleteId === arch.id ? (
+ <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/40 rounded-xl px-3 py-1.5">
+ <span className="text-[10px] font-black text-rose-400">DELETE THIS ROUND?</span>
+ <button onClick={() => deleteHistory(arch.id)}
+ className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg text-[10px] font-black">YES, DELETE</button>
+ <button onClick={() => setConfirmDeleteId(null)}
+ className="text-zinc-500 hover:text-zinc-300 px-2 py-1 text-[10px] font-black">CANCEL</button>
+ </div>
+ ) : (
  <button
- onClick={() => deleteHistory(arch.id)}
+ onClick={() => setConfirmDeleteId(arch.id)}
  className="text-zinc-700 hover:text-rose-500 transition-colors flex items-center gap-1.5 text-xs font-semibold px-2 py-2"
  >
  <Trash2 size={13}/> Delete
  </button>
+ ))}
  </div>
  </div>
 
@@ -1978,7 +1963,47 @@ return (
  )}
  </div>
  )
- })}
+ }
+
+return (
+ <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans">
+ <Link href="/"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
+ <ArrowLeft size={18}/> HUB
+ </Link>
+
+ <div className="max-w-5xl mx-auto">
+ <div className="flex items-center gap-4 mb-10">
+ <Archive size={36} className="text-blue-400"/>
+ <div>
+ <h1 className="text-4xl font-black tracking-tight">History</h1>
+ <p className="text-zinc-600 text-[10px] font-black tracking-widest mt-0.5">{archives.length} ARCHIVED RECORD{archives.length !== 1 ? 'S' : ''}</p>
+ </div>
+ </div>
+
+ {archives.length === 0 && (
+ <div className="text-center py-24 border-2 border-dashed border-zinc-800 rounded-[2.5rem]">
+ <Archive size={48} className="mx-auto mb-4 text-zinc-800"/>
+ <p className="text-zinc-600 font-black text-lg">NO HISTORY YET</p>
+ <p className="text-zinc-700 text-xs font-black mt-2 tracking-widest normal-case">
+ Use Admin → Archive to History after each round
+ </p>
+ </div>
+ )}
+
+ <div className="space-y-4 mb-6">
+ {buildTripRollups(archives).map((t: any) => <TripRollup key={t.tripName} trip={t} onDeleteTrip={deleteTrip} renderRound={renderRoundCard} canDelete={canDelete}/>)}
+</div>
+
+        <div className="space-y-4 pb-12">
+ {/* Standalone rounds — quick matches and anything not part of a trip */}
+ {standaloneArchives.length > 0 && (
+ <div className="space-y-4 pb-12">
+ <p className="text-[10px] font-black text-zinc-600 tracking-widest px-1">
+ STANDALONE ROUNDS · {standaloneArchives.length}
+ </p>
+ {standaloneArchives.map(renderRoundCard)}
+ </div>
+ )}
  </div>
  </div>
  </div>
