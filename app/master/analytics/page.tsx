@@ -1115,6 +1115,7 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
 export default function AnalyticsPage() {
   const [history, setHistory] = useState<any[]>([])
   const [filterType, setFilterType] = useState<'all'|'match'|'tournament'|'nine'>('all')
+  const [selectedTrip, setSelectedTrip] = useState<string>('all')
   const { role, loading } = useAuth()
   const defaultSections = {money_board:true,match_records:true,scoring_avgs:true,skins:true,h2h:true,partnerships:true,handicap:true,integrity:true,consistency:true,trends:true,records:true,betting:true}
   const [scorerAccess, setScorerAccess] = useState(true)
@@ -1184,13 +1185,53 @@ export default function AnalyticsPage() {
   }
 
 
+  // Every distinct trip found in history, newest first
+  const tripOptions = (() => {
+    const m: Record<string, any> = {}
+    history.forEach((a: any) => {
+      const t = a._meta?.tripName
+      if (!t || a._meta?.mode === 'match') return
+      const when = Number(a._meta?.playedAt || a.id)
+      if (!m[t]) m[t] = { name: t, count: 0, min: when, max: when, complete: false }
+      m[t].count++
+      m[t].min = Math.min(m[t].min, when)
+      m[t].max = Math.max(m[t].max, when)
+      if (a._meta?.isFinal) m[t].complete = true
+    })
+    return Object.values(m).sort((a: any, b: any) => b.max - a.max)
+  })()
+
   const filteredHistory = history.filter(arch => {
+    // Trip scope first — 'all' keeps everything, otherwise match the trip name exactly
+    if (selectedTrip !== 'all' && (arch._meta?.tripName || '') !== selectedTrip) return false
     if (filterType === 'all') return true
     if (filterType === 'match') return arch._meta?.mode === 'match'
     if (filterType === 'tournament') return arch._meta?.mode !== 'match' && !!arch._meta?.tripName
     if (filterType === 'nine') return !!arch.course?.nineHole
     return true
   })
+
+  // Human-readable description of exactly what is being analyzed
+  const scope = (() => {
+    const n = filteredHistory.length
+    if (!n) return { rounds: 0, label: 'NO ROUNDS MATCH THIS FILTER', detail: '' }
+    const times = filteredHistory.map((a: any) => Number(a._meta?.playedAt || a.id))
+    const fmt = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const trips = Array.from(new Set(filteredHistory.map((a: any) => a._meta?.tripName).filter(Boolean)))
+    const matches = filteredHistory.filter((a: any) => a._meta?.mode === 'match').length
+    const untagged = filteredHistory.filter((a: any) => !a._meta?.tripName && a._meta?.mode !== 'match').length
+    const bits: string[] = []
+    if (trips.length === 1) bits.push(String(trips[0]))
+    else if (trips.length > 1) bits.push(`${trips.length} tournaments`)
+    if (matches) bits.push(`${matches} quick match${matches > 1 ? 'es' : ''}`)
+    if (untagged) bits.push(`${untagged} untagged round${untagged > 1 ? 's' : ''}`)
+    return {
+      rounds: n,
+      label: bits.join(' · ').toUpperCase() || 'ALL ARCHIVED ROUNDS',
+      detail: `${fmt(Math.min(...times))} – ${fmt(Math.max(...times))}`,
+      untagged,
+    }
+  })()
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
@@ -1226,6 +1267,43 @@ export default function AnalyticsPage() {
             {f.label}
           </button>
         ))}
+      </div>
+
+      {/* Tournament picker */}
+      {tripOptions.length > 0 && (
+        <div className="px-4 pt-3">
+          <label className="text-[9px] font-black text-zinc-600 tracking-widest block mb-1.5">TOURNAMENT</label>
+          <select
+            value={selectedTrip}
+            onChange={e => setSelectedTrip(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 text-white font-black text-sm rounded-xl px-3 py-2.5 outline-none transition-colors"
+          >
+            <option value="all">All tournaments &amp; matches ({history.length} rounds)</option>
+            {tripOptions.map((t: any) => (
+              <option key={t.name} value={t.name}>
+                {t.name} — {t.count} day{t.count > 1 ? 's' : ''}{t.complete ? ' ✓' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Scope banner — always says exactly what is being analyzed */}
+      <div className="px-4 pt-3">
+        <div className={`rounded-xl border px-4 py-3 ${scope.rounds ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/40 bg-amber-500/10'}`}>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <p className={`text-[11px] font-black tracking-wider ${scope.rounds ? 'text-emerald-400' : 'text-amber-400'}`}>
+              ANALYZING {scope.rounds} ROUND{scope.rounds === 1 ? '' : 'S'}
+            </p>
+            {scope.detail && <p className="text-[10px] font-black text-zinc-500">{scope.detail}</p>}
+          </div>
+          <p className="text-[10px] font-black text-zinc-400 mt-0.5 leading-snug">{scope.label}</p>
+          {selectedTrip === 'all' && (scope as any).untagged > 0 && (
+            <p className="text-[9px] font-black text-amber-500/80 mt-1.5">
+              INCLUDES {(scope as any).untagged} UNTAGGED ROUND{(scope as any).untagged > 1 ? 'S' : ''} NOT LINKED TO ANY TOURNAMENT
+            </p>
+          )}
+        </div>
       </div>
 
       <AnalyticsDashboard history={filteredHistory} activeSections={activeSections}/>
