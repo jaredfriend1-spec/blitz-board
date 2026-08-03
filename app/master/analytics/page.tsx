@@ -13,11 +13,34 @@ import {
 // ════════════════════════════════════════════════════════════════════
 // Winnings = match money + skins. Net also backs out the skins buy-in.
 // Module scope so both the engine and the dashboard can use them.
+// Every distinct kind of wager the app can settle. `pot` categories are
+// funded by a buy-in and paid out one-way; `h2h` categories are zero-sum.
+const BET_CATEGORIES: { key: string; label: string; kind: 'pot' | 'h2h'; color: string }[] = [
+  { key: 'skinsGross', label: 'Gross Skins', kind: 'pot', color: 'text-yellow-400' },
+  { key: 'skinsNet',   label: 'Net Skins',   kind: 'pot', color: 'text-amber-400' },
+  { key: 'pvp',        label: '1v1 Matches', kind: 'h2h', color: 'text-blue-400' },
+  { key: 'twoV2',      label: '2v2 Matches', kind: 'h2h', color: 'text-sky-400' },
+  { key: 'team',       label: 'Team Matches',kind: 'h2h', color: 'text-indigo-400' },
+  { key: 'press',      label: 'Presses',     kind: 'h2h', color: 'text-purple-400' },
+  { key: 'bonus',      label: 'Birdies/Eagles', kind: 'h2h', color: 'text-pink-400' },
+  { key: 'wheel',      label: 'Wheel',       kind: 'h2h', color: 'text-orange-400' },
+]
+
+const addBet = (p: any, cat: string, amt: number) => {
+  if (!amt) return
+  if (!p.bets[cat]) p.bets[cat] = { won: 0, lost: 0 }
+  if (amt > 0) p.bets[cat].won += amt
+  else p.bets[cat].lost += -amt
+}
+const betNet = (p: any, cat: string) => (p.bets[cat]?.won || 0) - (p.bets[cat]?.lost || 0)
+const betBuyIn = (p: any, cat: string) =>
+  cat === 'skinsGross' ? (p.skinsBuyInGross || 0) : cat === 'skinsNet' ? (p.skinsBuyInNet || 0) : 0
+
 // Tournament money = the field-wide skins pot. Side bets = head-to-head
 // and team matchups. They are funded differently and settle differently.
-const tourneyWin = (p: any) => p.skinsMoney
-const sideBetWin = (p: any) => p.moneyWon - p.moneyLost
-const totalWin = (p: any) => (p.moneyWon - p.moneyLost) + p.skinsMoney
+const tourneyWin = (p: any) => betNet(p, 'skinsGross') + betNet(p, 'skinsNet')
+const sideBetWin = (p: any) => BET_CATEGORIES.filter(c => c.kind === 'h2h').reduce((t, c) => t + betNet(p, c.key), 0)
+const totalWin = (p: any) => tourneyWin(p) + sideBetWin(p)
 const netWin = (p: any) => totalWin(p) - p.skinsBuyIn
 
 // ⚡ ANALYTICS ENGINE — computes everything from history archive
@@ -38,8 +61,8 @@ function computeAnalytics(history: any[]) {
     moneyWon: number; moneyLost: number
     skinsWon: number; skinsMoney: number
     skinsBuyIn: number; entryFees: number; pressUnsupported: boolean
-    skinsGrossMoney: number; skinsNetMoney: number
-    betPvP: number; bet2v2: number; betTeam: number
+    bets: Record<string, { won: number; lost: number }>
+    skinsBuyInGross: number; skinsBuyInNet: number
     birdies: number; eagles: number; pars: number; bogeys: number; doubles: number
     handicaps: number[]
     nassauWins: number; nassauLosses: number
@@ -65,8 +88,7 @@ function computeAnalytics(history: any[]) {
       matchWins: 0, matchLosses: 0, matchTies: 0,
       moneyWon: 0, moneyLost: 0, skinsWon: 0, skinsMoney: 0,
       skinsBuyIn: 0, entryFees: 0, pressUnsupported: false,
-      skinsGrossMoney: 0, skinsNetMoney: 0,
-      betPvP: 0, bet2v2: 0, betTeam: 0,
+      bets: {}, skinsBuyInGross: 0, skinsBuyInNet: 0,
       birdies: 0, eagles: 0, pars: 0, bogeys: 0, doubles: 0,
       handicaps: [], nassauWins: 0, nassauLosses: 0,
       wheelWins: 0, wheelLosses: 0, pvpWins: 0, pvpLosses: 0,
@@ -133,30 +155,27 @@ function computeAnalytics(history: any[]) {
     })
 
     // ── Skins ────────────────────────────────────────────────────────
-    // Mirrors the History page exactly: the pot splits into a gross pool
-    // and a net pool, and net skins use the round's own handicap %.
+    // Gross and net pools are funded and settled separately, exactly as
+    // the History/Payouts engine does it.
     if (skinsAlloc > 0) {
       const fieldSize = roster.length
-      const netSkinsEnabled = !!money.netSkinsEnabled
+      const netOn = !!money.netSkinsEnabled
       const splitG = Number(money.skinsSplitGross ?? 100)
       const splitN = Number(money.skinsSplitNet ?? 0)
       const hcpPct = Number(money.handicapPercent ?? 100)
-
-      const grossCounts: Record<string, number> = {}
-      const netCounts: Record<string, number> = {}
+      const gC: Record<string, number> = {}
+      const nC: Record<string, number> = {}
 
       for (let h = 0; h < numHoles; h++) {
         const hIdx = holeOffset + h
-        const hScores = roster
-          .map(rp => ({ name: rp.name, s: Number(scores[rp.id]?.[hIdx]) || 0 }))
-          .filter(x => x.s > 0)
-        if (!hScores.length) continue
-        const min = Math.min(...hScores.map(x => x.s))
-        const w = hScores.filter(x => x.s === min)
-        if (w.length === 1) grossCounts[w[0].name] = (grossCounts[w[0].name] || 0) + 1
+        const hs = roster.map(rp => ({ name: rp.name, s: Number(scores[rp.id]?.[hIdx]) || 0 })).filter(x => x.s > 0)
+        if (!hs.length) continue
+        const mn = Math.min(...hs.map(x => x.s))
+        const w = hs.filter(x => x.s === mn)
+        if (w.length === 1) gC[w[0].name] = (gC[w[0].name] || 0) + 1
       }
 
-      if (netSkinsEnabled) {
+      if (netOn) {
         const adj: Record<string, number> = {}
         roster.forEach(rp => { adj[rp.name] = Math.round((Number(rp.handicap) || 0) * (hcpPct / 100)) })
         const baseAdj = Math.min(...Object.values(adj))
@@ -172,195 +191,193 @@ function computeAnalytics(history: any[]) {
             return { name: rp.name, net: g - st }
           }).filter(Boolean) as any[]
           if (!nets.length) continue
-          const min = Math.min(...nets.map(x => x.net))
-          const w = nets.filter(x => x.net === min)
-          if (w.length === 1) netCounts[w[0].name] = (netCounts[w[0].name] || 0) + 1
+          const mn = Math.min(...nets.map(x => x.net))
+          const w = nets.filter(x => x.net === mn)
+          if (w.length === 1) nC[w[0].name] = (nC[w[0].name] || 0) + 1
         }
       }
 
       const pot = skinsAlloc * fieldSize
-      const grossPot = netSkinsEnabled ? pot * (splitG / 100) : pot
-      const netPot = netSkinsEnabled ? pot * (splitN / 100) : 0
-      const totG = Object.values(grossCounts).reduce((a, b) => a + b, 0)
-      const totN = Object.values(netCounts).reduce((a, b) => a + b, 0)
-      const perG = totG > 0 ? grossPot / totG : 0
-      const perN = totN > 0 ? netPot / totN : 0
+      const gPot = netOn ? pot * (splitG / 100) : pot
+      const nPot = netOn ? pot * (splitN / 100) : 0
+      const tg = Object.values(gC).reduce((x, y) => x + y, 0)
+      const tn = Object.values(nC).reduce((x, y) => x + y, 0)
+      const perG = tg > 0 ? gPot / tg : 0
+      const perN = tn > 0 ? nPot / tn : 0
 
-      // Everyone in the field buys into the skins pot
       roster.forEach(rp => {
         const p = getP(rp.name)
         p.skinsBuyIn += skinsAlloc
+        p.skinsBuyInGross += skinsAlloc * (netOn ? splitG / 100 : 1)
+        p.skinsBuyInNet += skinsAlloc * (netOn ? splitN / 100 : 0)
         p.entryFees += entryFee
-        p.skinsPerRound.push(grossCounts[rp.name] || 0)
+        p.skinsPerRound.push(gC[rp.name] || 0)
       })
-      Object.entries(grossCounts).forEach(([name, c]) => {
-        const p = getP(name)
-        p.skinsWon += c
-        p.skinsMoney += c * perG
-        p.skinsGrossMoney += c * perG
+      Object.entries(gC).forEach(([n, c]) => {
+        const p = getP(n); p.skinsWon += c; p.skinsMoney += c * perG; addBet(p, 'skinsGross', c * perG)
       })
-      Object.entries(netCounts).forEach(([name, c]) => {
-        const p = getP(name)
-        p.skinsMoney += c * perN
-        p.skinsNetMoney += c * perN
+      Object.entries(nC).forEach(([n, c]) => {
+        const p = getP(n); p.skinsMoney += c * perN; addBet(p, 'skinsNet', c * perN)
       })
     } else {
       roster.forEach(rp => { getP(rp.name).entryFees += entryFee })
     }
 
-    // ── Match results ────────────────────────────────────────────────
-    // Nassau is THREE separate bets — front nine, back nine, overall —
-    // each settled by match play, not one lump sum on the 18-hole total.
-    // Uses each matchup's own handicapPercent and scoringType.
+    // ── Matches ──────────────────────────────────────────────────────
+    // Mirrors buildRecap in app/history: match-play nines with auto-press
+    // bets spawning at 2-up, an overall bet on holes won across the round,
+    // plus birdie/eagle bonuses. Wheel settles as round-robin pairs.
+    const holeCount = numHoles
+    const runNine = (sA: number[], sB: number[], from: number, to: number, nassau: number, press: number, autoPress: boolean) => {
+      const legs = [{ score: 0, pressed: false, isBase: true }]
+      for (let i = from; i <= to; i++) {
+        const sa = sA[i], sb = sB[i]
+        let delta = 0
+        if (sa > 0 && sb > 0) delta = sa < sb ? 1 : sb < sa ? -1 : 0
+        if (delta !== 0) {
+          let np = 0
+          legs.forEach(l => {
+            l.score += delta
+            if (autoPress && Math.abs(l.score) >= 2 && !l.pressed) { l.pressed = true; np++ }
+          })
+          for (let k = 0; k < np; k++) legs.push({ score: 0, pressed: false, isBase: false })
+        }
+      }
+      let base = 0, pressNet = 0
+      legs.forEach(l => {
+        const amt = l.isBase ? nassau : press
+        if (l.score > 0) { if (l.isBase) base += amt; else pressNet += amt }
+        else if (l.score < 0) { if (l.isBase) base -= amt; else pressNet -= amt }
+      })
+      return { base, press: pressNet }
+    }
+
+    const strokesFor = (h: number, hcpVal: number, base: number, isGross: boolean) => {
+      if (isGross) return 0
+      const rating = Number(arch.course?.holes?.[h]?.hcp) || (h + 1)
+      const diff = Math.max(0, hcpVal - base)
+      let st = Math.floor(diff / 18)
+      if (rating <= (diff % 18)) st++
+      return st
+    }
+
     matchups.forEach((m: any) => {
       const type = m.type || 'PvP'
-      const nassau = Number(m.nassau) || 0
-      const birdieVal = Number(m.birdie) || 0
-      const eagleVal = Number(m.eagle) || 0
+      const isGross = m.scoringType === 'GROSS'
 
-      let A: string[] = []
-      let B: string[] = []
-      if (type === 'PvP') { A = [m.sideA].filter(Boolean); B = [m.sideB].filter(Boolean) }
-      else if (type === '2v2') { A = [m.sideA, m.sideA2].filter(Boolean); B = [m.sideB, m.sideB2].filter(Boolean) }
-      else if (type === 'TvT' || type === 'Team') {
-        const tA = arch.teams ? Object.values(arch.teams).find((t: any) => t.name === m.sideA) as any : null
-        const tB = arch.teams ? Object.values(arch.teams).find((t: any) => t.name === m.sideB) as any : null
-        if (tA?.playerIds) A = roster.filter(rp => tA.playerIds.includes(rp.id)).map((rp: any) => rp.name)
-        if (tB?.playerIds) B = roster.filter(rp => tB.playerIds.includes(rp.id)).map((rp: any) => rp.name)
-      } else if (type === 'Wheel') {
-        (m.wheelPlayers || []).forEach((n: string) => { getP(n).pressUnsupported = true })
+      if (type === 'Wheel') {
+        const wp: string[] = m.wheelPlayers || []
+        const amt = Number(m.wheelAmount) || 10
+        const hcps = wp.map(n => Number(roster.find((r: any) => r.name === n)?.handicap) || 0)
+        const base = isGross ? 0 : Math.min(...(hcps.length ? hcps : [0]))
+        const net: Record<string, number[]> = {}
+        wp.forEach(n => {
+          const rp = roster.find((r: any) => r.name === n)
+          if (!rp) return
+          net[n] = Array.from({ length: holeCount }, (_, i) => {
+            const g = Number(scores[rp.id]?.[holeOffset + i]) || 0
+            return g ? g - strokesFor(holeOffset + i, Number(rp.handicap) || 0, base, isGross) : 0
+          })
+        })
+        for (let x = 0; x < wp.length; x++) {
+          for (let y = x + 1; y < wp.length; y++) {
+            const na = wp[x], nb = wp[y]
+            let aW = 0, bW = 0
+            for (let i = 0; i < holeCount; i++) {
+              const sa = net[na]?.[i] || 0, sb = net[nb]?.[i] || 0
+              if (sa > 0 && sb > 0) { if (sa < sb) aW++; else if (sb < sa) bW++ }
+            }
+            if (aW > bW) { addBet(getP(na), 'wheel', amt); addBet(getP(nb), 'wheel', -amt) }
+            else if (bW > aW) { addBet(getP(nb), 'wheel', amt); addBet(getP(na), 'wheel', -amt) }
+          }
+        }
         return
       }
-      if (!A.length || !B.length) return
 
-      // Presses are not modelled here — flag so the UI can say so
-      if ((Number(m.press) || 0) > 0 || m.autoPress) {
-        [...A, ...B].forEach(n => { getP(n).pressUnsupported = true })
+      let pA: any[] = [], pB: any[] = []
+      if (type === 'PvP') {
+        pA = roster.filter((p: any) => p.name === m.sideA)
+        pB = roster.filter((p: any) => p.name === m.sideB)
+      } else if (type === '2v2') {
+        pA = roster.filter((p: any) => p.name === m.sideA || p.name === m.sideA2)
+        pB = roster.filter((p: any) => p.name === m.sideB || p.name === m.sideB2)
+      } else {
+        const teams: any[] = arch.teams ? Object.values(arch.teams) : []
+        pA = roster.filter((p: any) => (teams.find((t: any) => t.name === m.sideA)?.playerIds || []).includes(p.id))
+        pB = roster.filter((p: any) => (teams.find((t: any) => t.name === m.sideB)?.playerIds || []).includes(p.id))
       }
+      if (!pA.length || !pB.length) return
 
-      const isGross = m.scoringType === 'GROSS'
-      const pct = Number(m.handicapPercent ?? 100) / 100
-      const adj: Record<string, number> = {}
-      ;[...A, ...B].forEach(n => {
-        const rp = roster.find((r: any) => r.name === n)
-        adj[n] = isGross ? 0 : Math.round((Number(rp?.handicap) || 0) * pct)
+      const allH = isGross ? [0] : [...pA, ...pB].map((p: any) => Number(p.handicap) || 0)
+      const baseH = Math.min(...allH)
+      const bestBall = (list: any[]) => Array.from({ length: holeCount }, (_, i) => {
+        const vals = list.map((p: any) => {
+          const g = Number(scores[p.id]?.[holeOffset + i]) || 0
+          return g ? g - strokesFor(holeOffset + i, Number(p.handicap) || 0, baseH, isGross) : 0
+        }).filter(Boolean)
+        return vals.length ? Math.min(...vals) : 0
       })
-      const base = Math.min(...Object.values(adj))
+      const sA = bestBall(pA), sB = bestBall(pB)
 
-      const strokes = (n: string, hIdx: number) => {
-        const diff = Math.max(0, adj[n] - base)
-        const rating = Number(arch.course?.holes?.[hIdx]?.hcp) || (hIdx + 1)
-        let s = Math.floor(diff / 18)
-        if (rating <= (diff % 18)) s++
-        return s
-      }
-      const bestNet = (names: string[], hIdx: number) => {
-        const vals = names.map(n => {
-          const rp = roster.find((r: any) => r.name === n)
-          const g = Number(scores[rp?.id]?.[hIdx]) || 0
-          return g ? g - strokes(n, hIdx) : null
-        }).filter(v => v !== null) as number[]
-        return vals.length ? Math.min(...vals) : null
-      }
+      const nassau = Number(m.nassau) || 5
+      const pressAmt = Number(m.press) || 5
+      const autoPress = m.autoPress !== false && (type === 'PvP' || type === '2v2')
 
-      const holeCount = nineHole ? 9 : 18
-      const segments: [string, number, number][] = nineHole
-        ? [['F9', 0, holeCount]]
-        : [['F9', 0, 9], ['B9', 9, 18]]
-
-      let overallUp = 0
-      const segUps: Record<string, number> = {}
-      segments.forEach(([lbl, s, e]) => {
-        let up = 0
-        for (let h = s; h < e; h++) {
-          const hIdx = holeOffset + h
-          const a = bestNet(A, hIdx), b = bestNet(B, hIdx)
-          if (a === null || b === null) continue
-          up += a < b ? 1 : b < a ? -1 : 0
-        }
-        segUps[lbl] = up
-        overallUp += up
+      const nines: [number, number][] = holeCount > 9 ? [[0, 8], [9, 17]] : [[0, holeCount - 1]]
+      let baseNet = 0, pressNet = 0
+      nines.forEach(([f, t]) => {
+        const r = runNine(sA, sB, f, t, nassau, pressAmt, autoPress)
+        baseNet += r.base; pressNet += r.press
       })
-
-      // Settle each leg
-      let netA = 0
-      const legs = [...Object.entries(segUps), ['OVERALL', overallUp] as [string, number]]
-      legs.forEach(([lbl, up]) => {
-        if (up > 0) netA += nassau
-        else if (up < 0) netA -= nassau
-        A.forEach(n => {
-          const p = getP(n)
-          if (lbl === 'F9') { if (up > 0) p.f9Wins++; else if (up < 0) p.f9Losses++ }
-          if (lbl === 'B9') { if (up > 0) p.b9Wins++; else if (up < 0) p.b9Losses++ }
-          if (lbl === 'OVERALL') { if (up > 0) p.overallWins++; else if (up < 0) p.overallLosses++ }
-        })
-        B.forEach(n => {
-          const p = getP(n)
-          if (lbl === 'F9') { if (up < 0) p.f9Wins++; else if (up > 0) p.f9Losses++ }
-          if (lbl === 'B9') { if (up < 0) p.b9Wins++; else if (up > 0) p.b9Losses++ }
-          if (lbl === 'OVERALL') { if (up < 0) p.overallWins++; else if (up > 0) p.overallLosses++ }
-        })
-      })
-
-      // Birdie / eagle bonuses
-      if (birdieVal > 0 || eagleVal > 0) {
-        const bonus = (names: string[]) => {
-          let t = 0
-          for (let h = 0; h < holeCount; h++) {
-            const hIdx = holeOffset + h
-            const par = pars[hIdx] || 4
-            const g = Math.min(...names.map(n => {
-              const rp = roster.find((r: any) => r.name === n)
-              return Number(scores[rp?.id]?.[hIdx]) || 99
-            }))
-            if (g < 99 && g < par) t += (g <= par - 2 ? eagleVal : birdieVal)
-          }
-          return t
-        }
-        netA += bonus(A) - bonus(B)
+      let aW = 0, bW = 0
+      for (let i = 0; i < holeCount; i++) {
+        if (sA[i] > 0 && sB[i] > 0) { if (sA[i] < sB[i]) aW++; else if (sB[i] < sA[i]) bW++ }
       }
+      baseNet += aW > bW ? nassau : bW > aW ? -nassau : 0
 
-      const aWon = overallUp > 0, bWon = overallUp < 0
-      const bucket = (p: any, amt: number) => {
-        if (type === 'PvP') p.betPvP += amt
-        else if (type === '2v2') p.bet2v2 += amt
-        else p.betTeam += amt
-      }
+      const bonusFor = (list: any[]) => Array.from({ length: holeCount }, (_, i) => {
+        const par = pars[holeOffset + i] || 4
+        const g = Math.min(...list.map((p: any) => Number(scores[p.id]?.[holeOffset + i]) || 99).filter((x: number) => x < 99))
+        return (isFinite(g) && g < par) ? (g <= par - 2 ? Number(m.eagle || 0) : Number(m.birdie || 0)) : 0
+      }).reduce((x, y) => x + y, 0)
+      const bonusNet = bonusFor(pA) - bonusFor(pB)
 
-      A.forEach(n => {
-        const p = getP(n)
-        if (netA > 0) p.moneyWon += netA; else if (netA < 0) p.moneyLost += -netA
-        bucket(p, netA)
-        if (aWon) p.matchWins++; else if (bWon) p.matchLosses++; else p.matchTies++
-        if (nassau > 0) { if (aWon) p.nassauWins++; else if (bWon) p.nassauLosses++ }
-        if (type === 'PvP') { if (aWon) p.pvpWins++; else if (bWon) p.pvpLosses++ }
-        if (type === '2v2' || type === 'TvT' || type === 'Team') { if (aWon) p.tvtWins++; else if (bWon) p.tvtLosses++ }
-        A.filter(x => x !== n).forEach(partner => {
-          if (!p.partnerships[partner]) p.partnerships[partner] = { wins: 0, losses: 0 }
-          if (aWon) p.partnerships[partner].wins++; else if (bWon) p.partnerships[partner].losses++
+      const cat = type === 'PvP' ? 'pvp' : type === '2v2' ? 'twoV2' : 'team'
+      const total = baseNet + pressNet + bonusNet
+      const aWon = total > 0, bWon = total < 0
+
+      pA.forEach((p: any) => {
+        const pl = getP(p.name)
+        addBet(pl, cat, baseNet); addBet(pl, 'press', pressNet); addBet(pl, 'bonus', bonusNet)
+        if (total > 0) pl.moneyWon += total; else if (total < 0) pl.moneyLost += -total
+        if (aWon) pl.matchWins++; else if (bWon) pl.matchLosses++; else pl.matchTies++
+        if (type === 'PvP') { if (aWon) pl.pvpWins++; else if (bWon) pl.pvpLosses++ }
+        else { if (aWon) pl.tvtWins++; else if (bWon) pl.tvtLosses++ }
+        pA.filter((q: any) => q.name !== p.name).forEach((partner: any) => {
+          if (!pl.partnerships[partner.name]) pl.partnerships[partner.name] = { wins: 0, losses: 0 }
+          if (aWon) pl.partnerships[partner.name].wins++; else if (bWon) pl.partnerships[partner.name].losses++
         })
-        B.forEach(opp => {
-          if (!p.opponents[opp]) p.opponents[opp] = { wins: 0, losses: 0, moneyWon: 0 }
-          if (aWon) p.opponents[opp].wins++; else if (bWon) p.opponents[opp].losses++
-          p.opponents[opp].moneyWon += netA / A.length
+        pB.forEach((o: any) => {
+          if (!pl.opponents[o.name]) pl.opponents[o.name] = { wins: 0, losses: 0, moneyWon: 0 }
+          if (aWon) pl.opponents[o.name].wins++; else if (bWon) pl.opponents[o.name].losses++
+          pl.opponents[o.name].moneyWon += total / pA.length
         })
       })
-      B.forEach(n => {
-        const p = getP(n)
-        if (netA < 0) p.moneyWon += -netA; else if (netA > 0) p.moneyLost += netA
-        bucket(p, -netA)
-        if (bWon) p.matchWins++; else if (aWon) p.matchLosses++; else p.matchTies++
-        if (nassau > 0) { if (bWon) p.nassauWins++; else if (aWon) p.nassauLosses++ }
-        if (type === 'PvP') { if (bWon) p.pvpWins++; else if (aWon) p.pvpLosses++ }
-        if (type === '2v2' || type === 'TvT' || type === 'Team') { if (bWon) p.tvtWins++; else if (aWon) p.tvtLosses++ }
-        B.filter(x => x !== n).forEach(partner => {
-          if (!p.partnerships[partner]) p.partnerships[partner] = { wins: 0, losses: 0 }
-          if (bWon) p.partnerships[partner].wins++; else if (aWon) p.partnerships[partner].losses++
+      pB.forEach((p: any) => {
+        const pl = getP(p.name)
+        addBet(pl, cat, -baseNet); addBet(pl, 'press', -pressNet); addBet(pl, 'bonus', -bonusNet)
+        if (total < 0) pl.moneyWon += -total; else if (total > 0) pl.moneyLost += total
+        if (bWon) pl.matchWins++; else if (aWon) pl.matchLosses++; else pl.matchTies++
+        if (type === 'PvP') { if (bWon) pl.pvpWins++; else if (aWon) pl.pvpLosses++ }
+        else { if (bWon) pl.tvtWins++; else if (aWon) pl.tvtLosses++ }
+        pB.filter((q: any) => q.name !== p.name).forEach((partner: any) => {
+          if (!pl.partnerships[partner.name]) pl.partnerships[partner.name] = { wins: 0, losses: 0 }
+          if (bWon) pl.partnerships[partner.name].wins++; else if (aWon) pl.partnerships[partner.name].losses++
         })
-        A.forEach(opp => {
-          if (!p.opponents[opp]) p.opponents[opp] = { wins: 0, losses: 0, moneyWon: 0 }
-          if (bWon) p.opponents[opp].wins++; else if (aWon) p.opponents[opp].losses++
-          p.opponents[opp].moneyWon += -netA / B.length
+        pA.forEach((o: any) => {
+          if (!pl.opponents[o.name]) pl.opponents[o.name] = { wins: 0, losses: 0, moneyWon: 0 }
+          if (bWon) pl.opponents[o.name].wins++; else if (aWon) pl.opponents[o.name].losses++
+          pl.opponents[o.name].moneyWon += -total / pB.length
         })
       })
     })
@@ -661,6 +678,7 @@ function AnalyticsSection({ title, icon, children, accent = 'emerald', defaultOp
 }
 
 function AnalyticsDashboard({ history, activeSections }: { history: any[], activeSections: Record<string,boolean> }) {
+  const [betCat, setBetCat] = useState<string>('all')
   const data = useMemo(() => computeAnalytics(history), [history])
   if (!data || !data.playerList.length) {
     return (
@@ -751,13 +769,8 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
                       <div className="pl-8">
                         <MiniBar value={Math.abs(net)} max={maxAbs} color={net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}/>
                         <div className="flex gap-2 mt-1 flex-wrap">
-                          {[
-                            ['Gross skins', p.skinsGrossMoney, 'text-yellow-500/80'],
-                            ['Net skins', p.skinsNetMoney, 'text-yellow-500/80'],
-                            ['1v1', p.betPvP, 'text-blue-400/80'],
-                            ['2v2', p.bet2v2, 'text-blue-400/80'],
-                            ['Team', p.betTeam, 'text-blue-400/80'],
-                          ].filter(([, v]) => Math.round(Number(v)) !== 0).map(([lbl, v, cls]: any) => (
+                          {BET_CATEGORIES.map(c => [c.label, betNet(p, c.key), c.color + '/80'])
+                            .filter(([, v]) => Math.round(Number(v)) !== 0).map(([lbl, v, cls]: any) => (
                             <span key={lbl} className={`text-[10px] font-semibold ${cls}`}>
                               {lbl} {Number(v) >= 0 ? '+' : '-'}${Math.abs(Math.round(Number(v)))}
                             </span>
@@ -785,6 +798,110 @@ function AnalyticsDashboard({ history, activeSections }: { history: any[], activ
             )
           })()}
         </div>
+      </AnalyticsSection>}
+
+      {/* ── BETTING MONEY ── */}
+      {activeSections.betting!==false && <AnalyticsSection title="🎲 Betting Money" icon={<DollarSign size={15}/>} accent="purple" defaultOpen={false}>
+        {(() => {
+          // Only surface categories that actually saw action
+          const active = BET_CATEGORIES.filter(c =>
+            playerList.some((p: any) => (p.bets[c.key]?.won || 0) + (p.bets[c.key]?.lost || 0) > 0))
+          const handsFor = (key: string) =>
+            playerList.reduce((t: number, p: any) => t + (p.bets[key]?.won || 0), 0)
+          const totalHands = active.reduce((t, c) => t + handsFor(c.key), 0)
+          const shown = betCat === 'all' ? active : active.filter(c => c.key === betCat)
+
+          const rows = playerList.map((p: any) => {
+            const won = shown.reduce((t, c) => t + (p.bets[c.key]?.won || 0), 0)
+            const lost = shown.reduce((t, c) => t + (p.bets[c.key]?.lost || 0), 0)
+            const buyIn = shown.reduce((t, c) => t + betBuyIn(p, c.key), 0)
+            return { name: p.name, won, lost, buyIn, net: won - lost - buyIn }
+          }).filter((r: any) => r.won || r.lost || r.buyIn)
+            .sort((a: any, b: any) => b.net - a.net)
+
+          const $ = (n: number) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n))
+
+          return (
+            <div className="p-4 space-y-4">
+              {/* headline stat */}
+              <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl px-4 py-3">
+                <p className="text-[9px] font-black text-purple-400/80 tracking-widest">TOTAL MONEY CHANGED HANDS</p>
+                <p className="text-3xl font-black text-purple-300">${Math.round(totalHands)}</p>
+                <p className="text-[9px] font-black text-zinc-600">
+                  ACROSS {active.length} BET TYPE{active.length === 1 ? '' : 'S'} · {totalRounds} ROUND{totalRounds === 1 ? '' : 'S'}
+                </p>
+              </div>
+
+              {/* per-category summary */}
+              <div className="space-y-1.5">
+                {active.map(c => {
+                  const hands = handsFor(c.key)
+                  const top = playerList
+                    .filter((p: any) => betNet(p, c.key) > 0)
+                    .sort((x: any, y: any) => betNet(y, c.key) - betNet(x, c.key))[0]
+                  return (
+                    <button key={c.key} onClick={() => setBetCat(betCat === c.key ? 'all' : c.key)}
+                      className={`w-full flex items-center gap-3 rounded-xl px-3 py-2 border transition-all text-left ${
+                        betCat === c.key ? 'bg-zinc-800 border-zinc-600' : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700'}`}>
+                      <span className={`text-[11px] font-black w-28 flex-shrink-0 ${c.color}`}>{c.label}</span>
+                      <span className="text-[10px] font-black text-zinc-500 flex-shrink-0">${Math.round(hands)}</span>
+                      <span className="text-[10px] font-semibold text-zinc-600 truncate ml-auto">
+                        {top ? `top: ${top.name} ${$(betNet(top, c.key))}` : 'no net winner'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* toggle back to combined */}
+              <div className="flex gap-2">
+                <button onClick={() => setBetCat('all')}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black transition-all ${
+                    betCat === 'all' ? 'bg-purple-500 text-black' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
+                  ALL BETS
+                </button>
+                {betCat !== 'all' && (
+                  <span className="text-[10px] font-black text-zinc-500 self-center">
+                    SHOWING {active.find(c => c.key === betCat)?.label.toUpperCase()} ONLY
+                  </span>
+                )}
+              </div>
+
+              {/* leaderboard */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-[9px] font-black text-zinc-600 tracking-widest border-b border-zinc-800">
+                      <th className="text-left py-2 w-6">#</th>
+                      <th className="text-left py-2">PLAYER</th>
+                      <th className="text-right py-2 px-1">WON</th>
+                      <th className="text-right py-2 px-1">LOST</th>
+                      <th className="text-right py-2 px-1">BUY-IN</th>
+                      <th className="text-right py-2 pl-2">NET</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r: any, i: number) => (
+                      <tr key={r.name} className={`border-b border-zinc-900 ${i === 0 ? 'bg-emerald-500/5' : ''}`}>
+                        <td className="py-2 text-[10px] font-black text-zinc-700">{i + 1}</td>
+                        <td className="py-2 font-bold text-white whitespace-nowrap">{r.name}</td>
+                        <td className="py-2 px-1 text-right text-emerald-400 font-bold tabular-nums">{r.won ? '$' + Math.round(r.won) : '—'}</td>
+                        <td className="py-2 px-1 text-right text-rose-400/80 font-bold tabular-nums">{r.lost ? '-$' + Math.round(r.lost) : '—'}</td>
+                        <td className="py-2 px-1 text-right text-zinc-600 font-bold tabular-nums">{r.buyIn ? '-$' + Math.round(r.buyIn) : '—'}</td>
+                        <td className={`py-2 pl-2 text-right font-black tabular-nums ${r.net > 0 ? 'text-emerald-400' : r.net < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>{$(r.net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-[9px] font-black text-zinc-700 leading-relaxed">
+                MONEY CHANGED HANDS COUNTS EVERY DOLLAR WON. HEAD-TO-HEAD BETS ARE ZERO-SUM SO WON EQUALS LOST.
+                SKINS ARE A POT — EVERYONE BUYS IN, WINNERS SPLIT IT — SO BUY-IN ONLY APPLIES THERE.
+              </p>
+            </div>
+          )
+        })()}
       </AnalyticsSection>}
 
       {/* ── MATCH WIN/LOSS ── */}

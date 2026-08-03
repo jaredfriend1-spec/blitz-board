@@ -460,7 +460,6 @@ function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any,
                     {trip.days.map((d: any) => (
                       <th key={d.id} className="text-right py-2 px-1 whitespace-nowrap">{d.label.replace('Day ', 'D')}</th>
                     ))}
-                    <th className="text-right py-2 px-1">SKINS</th>
                     <th className="text-right py-2 pl-2">TOTAL</th>
                   </tr>
                 </thead>
@@ -477,9 +476,6 @@ function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any,
                           {r.byDay[d.id] ? (basis === 'net' ? r.byDay[d.id].net : r.byDay[d.id].gross) : '—'}
                         </td>
                       ))}
-                      <td className="text-right py-2.5 px-1 text-emerald-400 font-bold tabular-nums">
-                        {r.skinsWon > 0 ? '$' + Math.round(r.skinsWon) : '—'}
-                      </td>
                       <td className={`text-right py-2.5 pl-2 font-black tabular-nums ${i === 0 ? 'text-emerald-400' : 'text-white'}`}>
                         {val(r)}
                       </td>
@@ -509,7 +505,7 @@ function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any,
 
           <p className="text-[9px] font-black text-zinc-700 leading-relaxed">
             NET USES EACH ROUND&apos;S OWN HANDICAP %. TO PAR USES EACH ROUND&apos;S OWN COURSE PAR,
-            SO ROUNDS ON DIFFERENT COURSES COMPARE FAIRLY. SKINS $ IS THE TRIP TOTAL.
+            SO ROUNDS ON DIFFERENT COURSES COMPARE FAIRLY. MONEY IS ON THE ANALYTICS PAGE.
           </p>
 
           {/* ── DELETE WHOLE TRIP ── */}
