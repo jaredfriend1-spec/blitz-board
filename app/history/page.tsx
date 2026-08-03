@@ -303,6 +303,222 @@ function buildRecap(arch: any) {
  }
 }
 
+// ── TRIP ROLL-UP ENGINE ────────────────────────────────────────────
+// Aggregates every archived day that shares a tripName into one
+// cumulative view. Net uses each day's own handicap %, and to-par uses
+// each day's own course par, so mixed-course trips compare fairly.
+function buildTripRollups(archives: any[]) {
+  const trips: Record<string, any[]> = {}
+  archives.forEach(a => {
+    const t = a._meta?.tripName
+    if (!t || a._meta?.mode === 'match') return
+    if (!trips[t]) trips[t] = []
+    trips[t].push(a)
+  })
+
+  return Object.entries(trips).map(([tripName, days]) => {
+    const ordered = [...days].sort((x: any, y: any) =>
+      ((x._meta?.dayNumber || 0) - (y._meta?.dayNumber || 0)) || (Number(x.id) - Number(y.id))
+    )
+    const players: Record<string, any> = {}
+    const dayMeta: any[] = []
+
+    ordered.forEach((arch: any, di: number) => {
+      const recap = buildRecap(arch)
+      const hcpPct = arch.money?.handicapPercent ?? 100
+      const parTot = (arch.course?.pars || []).reduce((a: number, b: number) => a + b, 0)
+      dayMeta.push({
+        id: arch.id,
+        label: arch._meta?.dayLabel || ('Day ' + (di + 1)),
+        course: arch.course?.name || '—',
+        par: parTot,
+        when: Number(arch._meta?.playedAt || arch.id),
+        isFinal: !!arch._meta?.isFinal,
+      })
+
+      recap.leaderboard.forEach((p: any) => {
+        if (!p.tot) return
+        const k = p.name
+        if (!players[k]) players[k] = {
+          name: p.name, handicap: p.handicap, gross: 0, net: 0,
+          toPar: 0, played: 0, skins: 0, skinsWon: 0, byDay: {} as any,
+        }
+        const adj = Math.round((Number(p.handicap) || 0) * (hcpPct / 100))
+        const net = p.tot - adj
+        players[k].gross += p.tot
+        players[k].net += net
+        players[k].toPar += (p.tot - parTot)
+        players[k].played += 1
+        players[k].handicap = p.handicap
+        players[k].byDay[arch.id] = { gross: p.tot, net }
+      })
+
+      const addSkins = (list: any[]) => (list || []).forEach((s: any) => {
+        if (!players[s.name]) return
+        players[s.name].skins += (s.count || 0)
+        players[s.name].skinsWon += (s.winnings || 0)
+      })
+      addSkins(recap.skinsLeaders)
+      if (recap.netSkinsEnabled) addSkins(recap.netSkinsLeaders)
+    })
+
+    const rows = Object.values(players)
+    return {
+      tripName,
+      days: dayMeta,
+      rows,
+      complete: ordered.some((a: any) => a._meta?.isFinal),
+      latest: Math.max(...ordered.map((a: any) => Number(a._meta?.playedAt || a.id))),
+    }
+  }).sort((a, b) => b.latest - a.latest)
+}
+
+function TripRollup({ trip }: { trip: any }) {
+  const [open, setOpen] = useState(false)
+  const [basis, setBasis] = useState<'net' | 'gross' | 'topar'>('net')
+
+  const full = trip.rows.filter((r: any) => r.played === trip.days.length)
+  const partial = trip.rows.filter((r: any) => r.played !== trip.days.length)
+  const key = basis === 'gross' ? 'gross' : basis === 'topar' ? 'toPar' : 'net'
+  const ranked = [...full].sort((a: any, b: any) => a[key] - b[key])
+  const champ = ranked[0]
+  const range = trip.days.length
+    ? [Math.min(...trip.days.map((d: any) => d.when)), Math.max(...trip.days.map((d: any) => d.when))]
+    : [0, 0]
+  const fmt = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const val = (r: any) => basis === 'topar'
+    ? (r.toPar === 0 ? 'E' : r.toPar > 0 ? '+' + r.toPar : String(r.toPar))
+    : r[key]
+
+  return (
+    <div className={`rounded-[2.5rem] border-2 overflow-hidden shadow-2xl transition-all ${open ? 'border-emerald-500/50' : 'border-emerald-500/20 hover:border-emerald-500/40'}`}>
+      <div className="p-5 sm:p-7 cursor-pointer bg-gradient-to-br from-emerald-950/40 to-zinc-900" onClick={() => setOpen(!open)}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-emerald-500/70 font-black text-[10px] tracking-widest mb-1">
+              <Trophy size={12}/> TRIP SUMMARY
+              {trip.complete && <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-md">COMPLETE</span>}
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-white leading-tight truncate">{trip.tripName}</h2>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <span className="text-[10px] font-black text-zinc-500 flex items-center gap-1">
+                <Calendar size={10}/> {fmt(range[0])} – {fmt(range[1])}
+              </span>
+              <span className="text-[10px] font-black text-zinc-500">{trip.days.length} DAYS</span>
+              <span className="text-[10px] font-black text-zinc-500 flex items-center gap-1">
+                <Users size={10}/> {trip.rows.length} PLAYERS
+              </span>
+            </div>
+          </div>
+          <div className="text-emerald-500 flex-shrink-0">{open ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</div>
+        </div>
+
+        {champ && (
+          <div className="mt-4 bg-black/40 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3">
+            <Medal size={22} className="text-amber-400 flex-shrink-0"/>
+            <div className="min-w-0">
+              <p className="text-[9px] font-black text-zinc-500 tracking-widest">
+                TRIP CHAMPION · {basis === 'net' ? 'NET' : basis === 'gross' ? 'GROSS' : 'TO PAR'}
+              </p>
+              <p className="font-black text-white text-lg truncate">{champ.name}</p>
+            </div>
+            <div className="ml-auto text-right flex-shrink-0">
+              <p className="text-2xl font-black text-emerald-400">{val(champ)}</p>
+              <p className="text-[9px] font-black text-zinc-600">{trip.days.length} ROUNDS</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <div className="bg-black p-5 sm:p-7 space-y-5">
+          {/* basis toggle */}
+          <div className="flex gap-2">
+            {([['net','NET'],['gross','GROSS'],['topar','TO PAR']] as const).map(([v, lbl]) => (
+              <button key={v} onClick={() => setBasis(v as any)}
+                className={`flex-1 py-2 rounded-xl font-black text-[11px] tracking-wider transition-all border ${
+                  basis === v ? 'bg-emerald-500 border-emerald-400 text-black' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* cumulative table */}
+          <div>
+            <p className="text-[10px] font-black text-emerald-500 tracking-widest mb-2 flex items-center gap-1.5">
+              <Trophy size={12}/> CUMULATIVE LEADERBOARD
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[9px] font-black text-zinc-600 tracking-widest border-b border-zinc-800">
+                    <th className="text-left py-2 w-8">#</th>
+                    <th className="text-left py-2">PLAYER</th>
+                    {trip.days.map((d: any) => (
+                      <th key={d.id} className="text-right py-2 px-1 whitespace-nowrap">{d.label.replace('Day ', 'D')}</th>
+                    ))}
+                    <th className="text-right py-2 px-1">SKINS</th>
+                    <th className="text-right py-2 pl-2">TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((r: any, i: number) => (
+                    <tr key={r.name} className={`border-b border-zinc-900 ${i === 0 ? 'bg-emerald-500/5' : ''}`}>
+                      <td className="py-2.5"><RankBadge rank={i + 1}/></td>
+                      <td className="py-2.5 font-black text-white whitespace-nowrap">
+                        {r.name}
+                        <span className="text-zinc-600 text-[10px] font-bold ml-1.5">HCP {r.handicap ?? 0}</span>
+                      </td>
+                      {trip.days.map((d: any) => (
+                        <td key={d.id} className="text-right py-2.5 px-1 text-zinc-400 font-bold tabular-nums">
+                          {r.byDay[d.id] ? (basis === 'net' ? r.byDay[d.id].net : r.byDay[d.id].gross) : '—'}
+                        </td>
+                      ))}
+                      <td className="text-right py-2.5 px-1 text-emerald-400 font-bold tabular-nums">
+                        {r.skinsWon > 0 ? '$' + Math.round(r.skinsWon) : '—'}
+                      </td>
+                      <td className={`text-right py-2.5 pl-2 font-black tabular-nums ${i === 0 ? 'text-emerald-400' : 'text-white'}`}>
+                        {val(r)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {partial.length > 0 && (
+              <p className="text-[10px] font-black text-amber-500/80 mt-3">
+                NOT RANKED — PLAYED FEWER THAN {trip.days.length} ROUNDS: {partial.map((p: any) => `${p.name} (${p.played})`).join(', ')}
+              </p>
+            )}
+          </div>
+
+          {/* day breakdown */}
+          <div>
+            <p className="text-[10px] font-black text-blue-400 tracking-widest mb-2 flex items-center gap-1.5">
+              <Flag size={12}/> ROUNDS
+            </p>
+            <div className="space-y-1.5">
+              {trip.days.map((d: any) => (
+                <div key={d.id} className="flex items-center gap-3 bg-zinc-900 rounded-xl px-4 py-2.5">
+                  <span className="text-[10px] font-black text-blue-400 bg-blue-500/15 px-2 py-1 rounded-lg flex-shrink-0">{d.label}</span>
+                  <span className="font-black text-white text-xs truncate">{d.course}</span>
+                  <span className="text-[10px] font-black text-zinc-600 flex-shrink-0">PAR {d.par}</span>
+                  <span className="ml-auto text-[10px] font-black text-zinc-500 flex-shrink-0">{fmt(d.when)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[9px] font-black text-zinc-700 leading-relaxed">
+            NET USES EACH ROUND&apos;S OWN HANDICAP %. TO PAR USES EACH ROUND&apos;S OWN COURSE PAR,
+            SO ROUNDS ON DIFFERENT COURSES COMPARE FAIRLY. SKINS $ IS THE TRIP TOTAL.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── TO-PAR HELPER ──────────────────────────────────────────────────
 function ToParBadge({ diff }: { diff: number | null }) {
  if (diff === null) return <span className="text-zinc-700">—</span>
@@ -730,11 +946,15 @@ return (
  </div>
  )}
 
- <div className="space-y-4 pb-12">
+ <div className="space-y-4 mb-6">
+ {buildTripRollups(archives).map((t: any) => <TripRollup key={t.tripName} trip={t}/>)}
+</div>
+
+        <div className="space-y-4 pb-12">
  {archives.map(arch => {
  const recap = buildRecap(arch)
  const isExpanded = expandedId === arch.id
- const date = new Date(Number(arch.id)).toLocaleDateString('en-US', {
+ const date = new Date(Number(arch._meta?.playedAt || arch.id)).toLocaleDateString('en-US', {
  weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
  })
  const topSkin = recap.skinsLeaders[0]

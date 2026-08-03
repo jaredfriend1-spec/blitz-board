@@ -40,6 +40,7 @@ export default function AdminWizard() {
  const [closeError, setCloseError] = useState<string|null>(null)
  const [closeDone, setCloseDone] = useState<any>(null)
  const [audit, setAudit] = useState<any>(null)
+ const [playDate, setPlayDate] = useState('')
 
  useEffect(() => {
  onValue(ref(db,'tournament/meta'), snap => {
@@ -115,6 +116,8 @@ export default function AdminWizard() {
  setCloseError(null); setCloseDone(null); setCloseStep(null)
  setShowClose(true)
  setAudit(null)
+ const now = new Date()
+ setPlayDate(new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,10))
  setAudit(await runAudit())
  }
 
@@ -143,6 +146,7 @@ export default function AdminWizard() {
  dayNumber: idx + 1,
  totalDays: meta.totalDays || 1,
  archivedAt: archiveId,
+ playedAt: playDate ? new Date(playDate + 'T12:00:00').getTime() : archiveId,
  isFinal,
  formatName: payload.format?.name || null,
  courseName: payload.course?.name || null,
@@ -331,6 +335,14 @@ export default function AdminWizard() {
  <p className="text-[11px] font-black text-zinc-500 mt-0.5">
  {(meta.tripName||'').toUpperCase()} · DAY {currentDayIdx+1} OF {meta.totalDays}
  </p>
+ </div>
+
+ {/* Play date */}
+ <div>
+ <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">DATE THIS ROUND WAS PLAYED</label>
+ <input type="date" value={playDate} onChange={e=>setPlayDate(e.target.value)}
+ className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-sm transition-colors"/>
+ <p className="text-[9px] font-black text-zinc-700 mt-1">DEFAULTS TO TODAY — CHANGE IT IF YOU ARE CLOSING A ROUND THE NEXT MORNING.</p>
  </div>
 
  {/* Score audit */}
