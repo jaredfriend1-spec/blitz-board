@@ -373,9 +373,11 @@ function buildTripRollups(archives: any[]) {
   }).sort((a, b) => b.latest - a.latest)
 }
 
-function TripRollup({ trip }: { trip: any }) {
+function TripRollup({ trip, onDeleteTrip }: { trip: any, onDeleteTrip: (t: any) => void }) {
   const [open, setOpen] = useState(false)
   const [basis, setBasis] = useState<'net' | 'gross' | 'topar'>('net')
+  const [confirming, setConfirming] = useState(false)
+  const [typed, setTyped] = useState('')
 
   const full = trip.rows.filter((r: any) => r.played === trip.days.length)
   const partial = trip.rows.filter((r: any) => r.played !== trip.days.length)
@@ -513,6 +515,54 @@ function TripRollup({ trip }: { trip: any }) {
             NET USES EACH ROUND&apos;S OWN HANDICAP %. TO PAR USES EACH ROUND&apos;S OWN COURSE PAR,
             SO ROUNDS ON DIFFERENT COURSES COMPARE FAIRLY. SKINS $ IS THE TRIP TOTAL.
           </p>
+
+          {/* ── DELETE WHOLE TRIP ── */}
+          <div className="pt-2 border-t border-zinc-900">
+            {!confirming ? (
+              <button
+                onClick={() => setConfirming(true)}
+                className="w-full flex items-center justify-center gap-2 text-rose-500/70 hover:text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 py-2.5 rounded-xl font-black text-[11px] tracking-wider transition-all">
+                <Trash2 size={12}/> DELETE ENTIRE TRIP ({trip.days.length} ROUND{trip.days.length > 1 ? 'S' : ''})
+              </button>
+            ) : (
+              <div className="border border-rose-500/40 bg-rose-500/10 rounded-2xl p-4 space-y-3">
+                <p className="text-[11px] font-black text-rose-400 leading-snug">
+                  THIS PERMANENTLY DELETES ALL {trip.days.length} ARCHIVED ROUND{trip.days.length > 1 ? 'S' : ''} IN THIS TRIP. IT CANNOT BE UNDONE.
+                </p>
+                <ul className="space-y-1">
+                  {trip.days.map((d: any) => (
+                    <li key={d.id} className="text-[10px] font-black text-zinc-400 flex items-center gap-2">
+                      <span className="text-rose-500">•</span> {d.label} — {d.course}
+                    </li>
+                  ))}
+                </ul>
+                <div>
+                  <label className="text-[9px] font-black text-zinc-500 tracking-widest block mb-1.5">
+                    TYPE <span className="text-white">{trip.tripName}</span> TO CONFIRM
+                  </label>
+                  <input
+                    value={typed}
+                    onChange={e => setTyped(e.target.value)}
+                    placeholder={trip.tripName}
+                    className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-xs transition-colors"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={typed.trim().toUpperCase() !== String(trip.tripName).trim().toUpperCase()}
+                    onClick={() => { onDeleteTrip(trip); setConfirming(false); setTyped('') }}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
+                    DELETE {trip.days.length} ROUND{trip.days.length > 1 ? 'S' : ''}
+                  </button>
+                  <button
+                    onClick={() => { setConfirming(false); setTyped('') }}
+                    className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-xs transition-colors">
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -581,6 +631,12 @@ export default function HistoryPage() {
  if (window.confirm('Permanently delete this record? Cannot be undone.')) {
  set(ref(db, 'history/' + id), null)
  }
+ }
+
+ // Deletes every archived round belonging to a trip. The roll-up card is
+ // derived, so removing a trip means removing its underlying day records.
+ const deleteTrip = (trip: any) => {
+ trip.days.forEach((d: any) => set(ref(db, 'history/' + d.id), null))
  }
 
  // ── SAVE NEW MATCHUP ──
@@ -947,7 +1003,7 @@ return (
  )}
 
  <div className="space-y-4 mb-6">
- {buildTripRollups(archives).map((t: any) => <TripRollup key={t.tripName} trip={t}/>)}
+ {buildTripRollups(archives).map((t: any) => <TripRollup key={t.tripName} trip={t} onDeleteTrip={deleteTrip}/>)}
 </div>
 
         <div className="space-y-4 pb-12">
