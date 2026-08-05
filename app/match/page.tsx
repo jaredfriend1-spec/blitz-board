@@ -81,7 +81,7 @@ export default function QuickMatch() {
  const [buildingType, setBuildingType] = useState<string|null>(null)
  const [matchDraft, setMatchDraft] = useState({
  sideA:'', sideB:'', sideA2:'', sideB2:'',
- nassau:5, overall:10, press:5, birdie:2, eagle:5,
+ nassau:5, nassauF9:5, nassauB9:5, nassauOverall:10, overall:10, press:5, birdie:2, eagle:5,
  scoringType:'NET' as 'NET'|'GROSS',
  autoPress:true,
  handicapPercent: 100,
@@ -402,16 +402,16 @@ export default function QuickMatch() {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
  if (new Set(picks).size !== picks.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  } else if (buildingType === 'TvT') {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different teams')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  } else {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different players')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassau, overall:m.overall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,doSkins:false,skinsAmount:5,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelNassauF9:5,wheelNassauB9:5,wheelNassauOverall:10,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,nassauF9:5,nassauB9:5,nassauOverall:10,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,doSkins:false,skinsAmount:5,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelNassauF9:5,wheelNassauB9:5,wheelNassauOverall:10,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -1394,8 +1394,16 @@ export default function QuickMatch() {
 
  {/* Stakes */}
  {buildingType !== 'Wheel' && (
+ <>
+ <div className="flex items-baseline justify-between">
+ <span className="text-[10px] font-black text-zinc-500 tracking-widest">STAKES</span>
+ <span className="text-[10px] font-black text-zinc-500">
+ NASSAU TOTAL <span className="text-emerald-400">${(Number(matchDraft.nassauF9)||0) + (Number(matchDraft.nassauB9)||0) + (Number(matchDraft.nassauOverall)||0)}</span>
+ <span className="text-zinc-700"> IF ALL THREE WON</span>
+ </span>
+ </div>
  <div className="grid grid-cols-2 gap-3">
- {[['nassau','F9 + B9 ($)','text-white'],['overall','OVERALL ($)','text-purple-400'],['press','PRESS ($)','text-yellow-400'],['birdie','BIRDIE ($)','text-blue-400'],['eagle','EAGLE ($)','text-emerald-400']].map(([key,label,color]) => (
+ {[['nassauF9','FRONT 9 ($)','text-white'],['nassauB9','BACK 9 ($)','text-white'],['nassauOverall','OVERALL ($)','text-purple-400'],['press','PRESS ($)','text-yellow-400'],['birdie','BIRDIE ($)','text-blue-400'],['eagle','EAGLE ($)','text-emerald-400']].map(([key,label,color]) => (
  <div key={key}>
  <label className={`text-[10px] font-black block mb-1 ${color}`}>{label}</label>
  <input type="number"value={(matchDraft as any)[key]}
@@ -1405,6 +1413,7 @@ export default function QuickMatch() {
  </div>
  ))}
  </div>
+ </>
  )}
 
  {/* Wheel options */}

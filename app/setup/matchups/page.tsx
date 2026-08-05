@@ -10,7 +10,7 @@ type MatchType = 'PvP' | '2v2' | 'TvT' | 'Wheel'
 
 const DEFAULT_MATCH = {
  sideA: "", sideB: "", sideA2: "", sideB2: "",
- nassau: 5, press: 5, birdie: 2, eagle: 5,
+ nassau: 5, nassauF9: 5, nassauB9: 5, nassauOverall: 5, press: 5, birdie: 2, eagle: 5,
  scoringType: 'NET' as 'NET'|'GROSS',
  autoPress: true,
  handicapPercent: 100,
@@ -53,11 +53,11 @@ export default function MatchupCenter() {
  if (picks.some(p => !p)) return alert("SELECT ALL 4 PLAYERS")
  if (new Set(picks).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
+ set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassauF9, nassauF9: newMatch.nassauF9, nassauB9: newMatch.nassauB9, nassauOverall: newMatch.nassauOverall, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  } else {
  if (!newMatch.sideA || !newMatch.sideB || newMatch.sideA === newMatch.sideB) return alert("SELECT TWO DISTINCT SIDES")
  const mRef = push(ref(db,'tournament/matchups'))
- set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassau, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
+ set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassauF9, nassauF9: newMatch.nassauF9, nassauB9: newMatch.nassauB9, nassauOverall: newMatch.nassauOverall, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  }
  setIsBuilding(null)
  setNewMatch({...DEFAULT_MATCH})
@@ -408,10 +408,18 @@ export default function MatchupCenter() {
  {/* STAKES — not wheel */}
  {isBuilding !== 'Wheel' && (
  <div className="bg-black p-5 rounded-2xl border border-zinc-800">
- <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-4">STAKES</label>
+ <div className="flex items-baseline justify-between mb-4">
+ <label className="text-[10px] font-black text-zinc-500 tracking-widest">STAKES</label>
+ <span className="text-[10px] font-black text-zinc-500">
+ NASSAU TOTAL <span className="text-emerald-400">${(Number(newMatch.nassauF9)||0) + (Number(newMatch.nassauB9)||0) + (Number(newMatch.nassauOverall)||0)}</span>
+ <span className="text-zinc-700"> IF ALL THREE WON</span>
+ </span>
+ </div>
  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
  {[
- { key:'nassau', label:'NASSAU ($)', color:'text-white' },
+ { key:'nassauF9', label:'FRONT 9 ($)', color:'text-white' },
+ { key:'nassauB9', label:'BACK 9 ($)', color:'text-white' },
+ { key:'nassauOverall', label:'OVERALL ($)', color:'text-purple-400' },
  { key:'press', label:'PRESS ($)', color:'text-yellow-400' },
  { key:'birdie', label:'BIRDIE ($)', color:'text-blue-400' },
  { key:'eagle', label:'EAGLE ($)', color:'text-emerald-400' },

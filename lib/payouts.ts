@@ -142,7 +142,9 @@ export function settleMatch(m: any, ctx: RoundCtx) {
   // without touching this engine again.
   const nF9 = Number(m.nassauF9 ?? nassau)
   const nB9 = Number(m.nassauB9 ?? nassau)
-  const nOverall = Number(m.nassauOverall ?? nassau)
+  // `overall` is the legacy Quick Match field for the overall stake. Honour it
+  // so existing quick matches keep paying what they were set up to pay.
+  const nOverall = Number(m.nassauOverall ?? m.overall ?? nassau)
   const press = Number(m.press) || 5
   const autoPress = m.autoPress !== false && (type === 'PvP' || type === '2v2')
 

@@ -622,7 +622,10 @@ export default function HistoryPage() {
  } else if (newMatchType === 'Team') {
  matchupToSave.sideA = newMatchData.sideA
  matchupToSave.sideB = newMatchData.sideB
- matchupToSave.nassau = Number(newMatchData.nassau) || 5
+ matchupToSave.nassau = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauF9 = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauB9 = Number(newMatchData.nassauB9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauOverall = Number(newMatchData.nassauOverall ?? newMatchData.nassau) || 5
  matchupToSave.press = Number(newMatchData.press) || 5
  matchupToSave.birdie = Number(newMatchData.birdie) || 0
  matchupToSave.eagle = Number(newMatchData.eagle) || 0
@@ -632,7 +635,10 @@ export default function HistoryPage() {
  matchupToSave.sideA2 = newMatchData.sideA2
  matchupToSave.sideB = newMatchData.sideB
  matchupToSave.sideB2 = newMatchData.sideB2
- matchupToSave.nassau = Number(newMatchData.nassau) || 5
+ matchupToSave.nassau = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauF9 = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauB9 = Number(newMatchData.nassauB9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauOverall = Number(newMatchData.nassauOverall ?? newMatchData.nassau) || 5
  matchupToSave.press = Number(newMatchData.press) || 5
  matchupToSave.birdie = Number(newMatchData.birdie) || 0
  matchupToSave.eagle = Number(newMatchData.eagle) || 0
@@ -641,7 +647,10 @@ export default function HistoryPage() {
  // PvP - don't include sideA2/sideB2
  matchupToSave.sideA = newMatchData.sideA
  matchupToSave.sideB = newMatchData.sideB
- matchupToSave.nassau = Number(newMatchData.nassau) || 5
+ matchupToSave.nassau = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauF9 = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauB9 = Number(newMatchData.nassauB9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauOverall = Number(newMatchData.nassauOverall ?? newMatchData.nassau) || 5
  matchupToSave.press = Number(newMatchData.press) || 5
  matchupToSave.birdie = Number(newMatchData.birdie) || 0
  matchupToSave.eagle = Number(newMatchData.eagle) || 0
@@ -1810,15 +1819,17 @@ ${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div
  {/* Match amounts — not needed for Wheel */}
  {newMatchType !== 'Wheel' && (
  <div className="grid grid-cols-3 gap-2">
- <div>
- <label className="text-xs font-black text-zinc-400 tracking-widest">NASSAU</label>
+ {([['nassauF9','FRONT 9'],['nassauB9','BACK 9'],['nassauOverall','OVERALL']] as const).map(([k,lbl]) => (
+ <div key={k}>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">{lbl}</label>
  <input
  type="number"
- value={newMatchData.nassau}
- onChange={(e) => setNewMatchData({...newMatchData, nassau: Number(e.target.value)})}
+ value={(newMatchData as any)[k] ?? newMatchData.nassau ?? 5}
+ onChange={(e) => setNewMatchData({...newMatchData, [k]: Number(e.target.value)})}
  className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
  />
  </div>
+ ))}
  <div>
  <label className="text-xs font-black text-zinc-400 tracking-widest">PRESS</label>
  <input
