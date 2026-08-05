@@ -4,6 +4,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
 import Link from 'next/link'
+import { computeRoundPayouts, BET_CATEGORIES as ENGINE_CATEGORIES } from '@/lib/payouts'
 import {
   BarChart3, DollarSign, Trophy, Zap, Users, Target,
   AlertTriangle, Activity, Hash, ChevronDown, Shield,
@@ -15,23 +16,20 @@ import {
 // Module scope so both the engine and the dashboard can use them.
 // Every distinct kind of wager the app can settle. `pot` categories are
 // funded by a buy-in and paid out one-way; `h2h` categories are zero-sum.
-const BET_CATEGORIES: { key: string; label: string; kind: 'pot' | 'h2h'; color: string }[] = [
-  { key: 'skinsGross', label: 'Gross Skins', kind: 'pot', color: 'text-yellow-400' },
-  { key: 'skinsNet',   label: 'Net Skins',   kind: 'pot', color: 'text-amber-400' },
-  { key: 'pvp',        label: '1v1 Matches', kind: 'h2h', color: 'text-blue-400' },
-  { key: 'twoV2',      label: '2v2 Matches', kind: 'h2h', color: 'text-sky-400' },
-  { key: 'team',       label: 'Team Matches',kind: 'h2h', color: 'text-indigo-400' },
-  { key: 'press',      label: 'Presses',     kind: 'h2h', color: 'text-purple-400' },
-  { key: 'bonus',      label: 'Birdies/Eagles', kind: 'h2h', color: 'text-pink-400' },
-  { key: 'wheel',      label: 'Wheel',       kind: 'h2h', color: 'text-orange-400' },
-]
-
-const addBet = (p: any, cat: string, amt: number) => {
-  if (!amt) return
-  if (!p.bets[cat]) p.bets[cat] = { won: 0, lost: 0 }
-  if (amt > 0) p.bets[cat].won += amt
-  else p.bets[cat].lost += -amt
+// Categories and their settlement rules come from lib/payouts — this
+// only attaches display colours so the two can never fall out of sync.
+const CAT_COLORS: Record<string, string> = {
+  skinsGross: 'text-yellow-400',
+  skinsNet: 'text-amber-400',
+  pvp: 'text-blue-400',
+  twoV2: 'text-sky-400',
+  team: 'text-indigo-400',
+  press: 'text-purple-400',
+  bonus: 'text-pink-400',
+  wheel: 'text-orange-400',
 }
+const BET_CATEGORIES = ENGINE_CATEGORIES.map(c => ({ ...c, color: CAT_COLORS[c.key] || 'text-zinc-400' }))
+
 const betNet = (p: any, cat: string) => (p.bets[cat]?.won || 0) - (p.bets[cat]?.lost || 0)
 const betBuyIn = (p: any, cat: string) =>
   cat === 'skinsGross' ? (p.skinsBuyInGross || 0) : cat === 'skinsNet' ? (p.skinsBuyInNet || 0) : 0
@@ -154,233 +152,89 @@ function computeAnalytics(history: any[]) {
       })
     })
 
-    // ── Skins ────────────────────────────────────────────────────────
-    // Gross and net pools are funded and settled separately, exactly as
-    // the History/Payouts engine does it.
-    if (skinsAlloc > 0) {
-      const fieldSize = roster.length
-      const netOn = !!money.netSkinsEnabled
-      const splitG = Number(money.skinsSplitGross ?? 100)
-      const splitN = Number(money.skinsSplitNet ?? 0)
-      const hcpPct = Number(money.handicapPercent ?? 100)
-      const gC: Record<string, number> = {}
-      const nC: Record<string, number> = {}
+    // ── Money, skins and matches ─────────────────────────────────────
+    // Every dollar below is settled by lib/payouts, the same module the
+    // History and Payouts pages use. Nothing here re-implements the rules.
+    const pay = computeRoundPayouts(arch)
 
-      for (let h = 0; h < numHoles; h++) {
-        const hIdx = holeOffset + h
-        const hs = roster.map(rp => ({ name: rp.name, s: Number(scores[rp.id]?.[hIdx]) || 0 })).filter(x => x.s > 0)
-        if (!hs.length) continue
-        const mn = Math.min(...hs.map(x => x.s))
-        const w = hs.filter(x => x.s === mn)
-        if (w.length === 1) gC[w[0].name] = (gC[w[0].name] || 0) + 1
-      }
+    roster.forEach((rp: any) => {
+      const p = getP(rp.name)
+      const potShare = pay.skins.pot > 0 ? pay.skins.buyIn / pay.skins.pot : 0
+      p.skinsBuyIn += pay.skins.buyIn
+      p.skinsBuyInGross += pay.skins.grossPot * potShare
+      p.skinsBuyInNet += pay.skins.netPot * potShare
+      p.entryFees += entryFee
+      p.skinsWon += Number(pay.skins.gross[rp.name] || 0)
+      p.skinsPerRound.push(Number(pay.skins.gross[rp.name] || 0))
+    })
 
-      if (netOn) {
-        const adj: Record<string, number> = {}
-        roster.forEach(rp => { adj[rp.name] = Math.round((Number(rp.handicap) || 0) * (hcpPct / 100)) })
-        const baseAdj = Math.min(...Object.values(adj))
-        for (let h = 0; h < numHoles; h++) {
-          const hIdx = holeOffset + h
-          const rating = Number(arch.course?.holes?.[hIdx]?.hcp) || (hIdx + 1)
-          const nets = roster.map(rp => {
-            const g = Number(scores[rp.id]?.[hIdx]) || 0
-            if (!g) return null
-            const diff = Math.max(0, adj[rp.name] - baseAdj)
-            let st = Math.floor(diff / 18)
-            if (rating <= (diff % 18)) st++
-            return { name: rp.name, net: g - st }
-          }).filter(Boolean) as any[]
-          if (!nets.length) continue
-          const mn = Math.min(...nets.map(x => x.net))
-          const w = nets.filter(x => x.net === mn)
-          if (w.length === 1) nC[w[0].name] = (nC[w[0].name] || 0) + 1
-        }
-      }
-
-      const pot = skinsAlloc * fieldSize
-      const gPot = netOn ? pot * (splitG / 100) : pot
-      const nPot = netOn ? pot * (splitN / 100) : 0
-      const tg = Object.values(gC).reduce((x, y) => x + y, 0)
-      const tn = Object.values(nC).reduce((x, y) => x + y, 0)
-      const perG = tg > 0 ? gPot / tg : 0
-      const perN = tn > 0 ? nPot / tn : 0
-
-      roster.forEach(rp => {
-        const p = getP(rp.name)
-        p.skinsBuyIn += skinsAlloc
-        p.skinsBuyInGross += skinsAlloc * (netOn ? splitG / 100 : 1)
-        p.skinsBuyInNet += skinsAlloc * (netOn ? splitN / 100 : 0)
-        p.entryFees += entryFee
-        p.skinsPerRound.push(gC[rp.name] || 0)
-      })
-      Object.entries(gC).forEach(([n, c]) => {
-        const p = getP(n); p.skinsWon += c; p.skinsMoney += c * perG; addBet(p, 'skinsGross', c * perG)
-      })
-      Object.entries(nC).forEach(([n, c]) => {
-        const p = getP(n); p.skinsMoney += c * perN; addBet(p, 'skinsNet', c * perN)
-      })
-    } else {
-      roster.forEach(rp => { getP(rp.name).entryFees += entryFee })
-    }
-
-    // ── Matches ──────────────────────────────────────────────────────
-    // Mirrors buildRecap in app/history: match-play nines with auto-press
-    // bets spawning at 2-up, an overall bet on holes won across the round,
-    // plus birdie/eagle bonuses. Wheel settles as round-robin pairs.
-    const holeCount = numHoles
-    const runNine = (sA: number[], sB: number[], from: number, to: number, nassau: number, press: number, autoPress: boolean) => {
-      const legs = [{ score: 0, pressed: false, isBase: true }]
-      for (let i = from; i <= to; i++) {
-        const sa = sA[i], sb = sB[i]
-        let delta = 0
-        if (sa > 0 && sb > 0) delta = sa < sb ? 1 : sb < sa ? -1 : 0
-        if (delta !== 0) {
-          let np = 0
-          legs.forEach(l => {
-            l.score += delta
-            if (autoPress && Math.abs(l.score) >= 2 && !l.pressed) { l.pressed = true; np++ }
-          })
-          for (let k = 0; k < np; k++) legs.push({ score: 0, pressed: false, isBase: false })
-        }
-      }
-      let base = 0, pressNet = 0
-      legs.forEach(l => {
-        const amt = l.isBase ? nassau : press
-        if (l.score > 0) { if (l.isBase) base += amt; else pressNet += amt }
-        else if (l.score < 0) { if (l.isBase) base -= amt; else pressNet -= amt }
-      })
-      return { base, press: pressNet }
-    }
-
-    const strokesFor = (h: number, hcpVal: number, base: number, isGross: boolean) => {
-      if (isGross) return 0
-      const rating = Number(arch.course?.holes?.[h]?.hcp) || (h + 1)
-      const diff = Math.max(0, hcpVal - base)
-      let st = Math.floor(diff / 18)
-      if (rating <= (diff % 18)) st++
-      return st
-    }
-
-    matchups.forEach((m: any) => {
-      const type = m.type || 'PvP'
-      const isGross = m.scoringType === 'GROSS'
-
-      if (type === 'Wheel') {
-        const wp: string[] = m.wheelPlayers || []
-        const amt = Number(m.wheelAmount) || 10
-        const hcps = wp.map(n => Number(roster.find((r: any) => r.name === n)?.handicap) || 0)
-        const base = isGross ? 0 : Math.min(...(hcps.length ? hcps : [0]))
-        const net: Record<string, number[]> = {}
-        wp.forEach(n => {
-          const rp = roster.find((r: any) => r.name === n)
-          if (!rp) return
-          net[n] = Array.from({ length: holeCount }, (_, i) => {
-            const g = Number(scores[rp.id]?.[holeOffset + i]) || 0
-            return g ? g - strokesFor(holeOffset + i, Number(rp.handicap) || 0, base, isGross) : 0
-          })
-        })
-        for (let x = 0; x < wp.length; x++) {
-          for (let y = x + 1; y < wp.length; y++) {
-            const na = wp[x], nb = wp[y]
-            let aW = 0, bW = 0
-            for (let i = 0; i < holeCount; i++) {
-              const sa = net[na]?.[i] || 0, sb = net[nb]?.[i] || 0
-              if (sa > 0 && sb > 0) { if (sa < sb) aW++; else if (sb < sa) bW++ }
-            }
-            if (aW > bW) { addBet(getP(na), 'wheel', amt); addBet(getP(nb), 'wheel', -amt) }
-            else if (bW > aW) { addBet(getP(nb), 'wheel', amt); addBet(getP(na), 'wheel', -amt) }
-          }
-        }
-        return
-      }
-
-      let pA: any[] = [], pB: any[] = []
-      if (type === 'PvP') {
-        pA = roster.filter((p: any) => p.name === m.sideA)
-        pB = roster.filter((p: any) => p.name === m.sideB)
-      } else if (type === '2v2') {
-        pA = roster.filter((p: any) => p.name === m.sideA || p.name === m.sideA2)
-        pB = roster.filter((p: any) => p.name === m.sideB || p.name === m.sideB2)
-      } else {
-        const teams: any[] = arch.teams ? Object.values(arch.teams) : []
-        pA = roster.filter((p: any) => (teams.find((t: any) => t.name === m.sideA)?.playerIds || []).includes(p.id))
-        pB = roster.filter((p: any) => (teams.find((t: any) => t.name === m.sideB)?.playerIds || []).includes(p.id))
-      }
-      if (!pA.length || !pB.length) return
-
-      const allH = isGross ? [0] : [...pA, ...pB].map((p: any) => Number(p.handicap) || 0)
-      const baseH = Math.min(...allH)
-      const bestBall = (list: any[]) => Array.from({ length: holeCount }, (_, i) => {
-        const vals = list.map((p: any) => {
-          const g = Number(scores[p.id]?.[holeOffset + i]) || 0
-          return g ? g - strokesFor(holeOffset + i, Number(p.handicap) || 0, baseH, isGross) : 0
-        }).filter(Boolean)
-        return vals.length ? Math.min(...vals) : 0
-      })
-      const sA = bestBall(pA), sB = bestBall(pB)
-
-      const nassau = Number(m.nassau) || 5
-      const pressAmt = Number(m.press) || 5
-      const autoPress = m.autoPress !== false && (type === 'PvP' || type === '2v2')
-
-      const nines: [number, number][] = holeCount > 9 ? [[0, 8], [9, 17]] : [[0, holeCount - 1]]
-      let baseNet = 0, pressNet = 0
-      nines.forEach(([f, t]) => {
-        const r = runNine(sA, sB, f, t, nassau, pressAmt, autoPress)
-        baseNet += r.base; pressNet += r.press
-      })
-      let aW = 0, bW = 0
-      for (let i = 0; i < holeCount; i++) {
-        if (sA[i] > 0 && sB[i] > 0) { if (sA[i] < sB[i]) aW++; else if (sB[i] < sA[i]) bW++ }
-      }
-      baseNet += aW > bW ? nassau : bW > aW ? -nassau : 0
-
-      const bonusFor = (list: any[]) => Array.from({ length: holeCount }, (_, i) => {
-        const par = pars[holeOffset + i] || 4
-        const g = Math.min(...list.map((p: any) => Number(scores[p.id]?.[holeOffset + i]) || 99).filter((x: number) => x < 99))
-        return (isFinite(g) && g < par) ? (g <= par - 2 ? Number(m.eagle || 0) : Number(m.birdie || 0)) : 0
-      }).reduce((x, y) => x + y, 0)
-      const bonusNet = bonusFor(pA) - bonusFor(pB)
-
-      const cat = type === 'PvP' ? 'pvp' : type === '2v2' ? 'twoV2' : 'team'
-      const total = baseNet + pressNet + bonusNet
-      const aWon = total > 0, bWon = total < 0
-
-      pA.forEach((p: any) => {
-        const pl = getP(p.name)
-        addBet(pl, cat, baseNet); addBet(pl, 'press', pressNet); addBet(pl, 'bonus', bonusNet)
-        if (total > 0) pl.moneyWon += total; else if (total < 0) pl.moneyLost += -total
-        if (aWon) pl.matchWins++; else if (bWon) pl.matchLosses++; else pl.matchTies++
-        if (type === 'PvP') { if (aWon) pl.pvpWins++; else if (bWon) pl.pvpLosses++ }
-        else { if (aWon) pl.tvtWins++; else if (bWon) pl.tvtLosses++ }
-        pA.filter((q: any) => q.name !== p.name).forEach((partner: any) => {
-          if (!pl.partnerships[partner.name]) pl.partnerships[partner.name] = { wins: 0, losses: 0 }
-          if (aWon) pl.partnerships[partner.name].wins++; else if (bWon) pl.partnerships[partner.name].losses++
-        })
-        pB.forEach((o: any) => {
-          if (!pl.opponents[o.name]) pl.opponents[o.name] = { wins: 0, losses: 0, moneyWon: 0 }
-          if (aWon) pl.opponents[o.name].wins++; else if (bWon) pl.opponents[o.name].losses++
-          pl.opponents[o.name].moneyWon += total / pA.length
-        })
-      })
-      pB.forEach((p: any) => {
-        const pl = getP(p.name)
-        addBet(pl, cat, -baseNet); addBet(pl, 'press', -pressNet); addBet(pl, 'bonus', -bonusNet)
-        if (total < 0) pl.moneyWon += -total; else if (total > 0) pl.moneyLost += total
-        if (bWon) pl.matchWins++; else if (aWon) pl.matchLosses++; else pl.matchTies++
-        if (type === 'PvP') { if (bWon) pl.pvpWins++; else if (aWon) pl.pvpLosses++ }
-        else { if (bWon) pl.tvtWins++; else if (aWon) pl.tvtLosses++ }
-        pB.filter((q: any) => q.name !== p.name).forEach((partner: any) => {
-          if (!pl.partnerships[partner.name]) pl.partnerships[partner.name] = { wins: 0, losses: 0 }
-          if (bWon) pl.partnerships[partner.name].wins++; else if (aWon) pl.partnerships[partner.name].losses++
-        })
-        pA.forEach((o: any) => {
-          if (!pl.opponents[o.name]) pl.opponents[o.name] = { wins: 0, losses: 0, moneyWon: 0 }
-          if (bWon) pl.opponents[o.name].wins++; else if (aWon) pl.opponents[o.name].losses++
-          pl.opponents[o.name].moneyWon += -total / pB.length
-        })
+    // Merge this round's bet buckets into each player's running totals
+    Object.entries(pay.buckets).forEach(([name, cats]: any) => {
+      const p = getP(name)
+      Object.entries(cats).forEach(([key, v]: any) => {
+        if (!p.bets[key]) p.bets[key] = { won: 0, lost: 0 }
+        p.bets[key].won += v.won
+        p.bets[key].lost += v.lost
+        const signed = v.won - v.lost
+        if (key === 'skinsGross' || key === 'skinsNet') {
+          p.skinsMoney += v.won
+        } else if (signed > 0) p.moneyWon += signed
+        else if (signed < 0) p.moneyLost += -signed
       })
     })
+
+    // Records, partnerships and head-to-head from the settled matches
+    pay.matches.forEach((r: any) => {
+      const aWon = r.net > 0, bWon = r.net < 0
+      const f9n = r.f9 ? r.f9.net : 0
+      const b9n = r.b9 ? r.b9.net : 0
+      const side = (list: any[], mine: boolean) => {
+        const won = mine ? aWon : bWon
+        const lost = mine ? bWon : aWon
+        const sign = mine ? 1 : -1
+        const partners = mine ? r.pA : r.pB
+        const opps = mine ? r.pB : r.pA
+        list.forEach((pl: any) => {
+          const p = getP(pl.name)
+          if (won) p.matchWins++; else if (lost) p.matchLosses++; else p.matchTies++
+          if (r.nassau > 0) { if (won) p.nassauWins++; else if (lost) p.nassauLosses++ }
+          if (r.type === 'PvP') { if (won) p.pvpWins++; else if (lost) p.pvpLosses++ }
+          else { if (won) p.tvtWins++; else if (lost) p.tvtLosses++ }
+          if (f9n * sign > 0) p.f9Wins++; else if (f9n * sign < 0) p.f9Losses++
+          if (b9n * sign > 0) p.b9Wins++; else if (b9n * sign < 0) p.b9Losses++
+          if (r.overallNet * sign > 0) p.overallWins++; else if (r.overallNet * sign < 0) p.overallLosses++
+          partners.filter((q: any) => q.name !== pl.name).forEach((q: any) => {
+            if (!p.partnerships[q.name]) p.partnerships[q.name] = { wins: 0, losses: 0 }
+            if (won) p.partnerships[q.name].wins++; else if (lost) p.partnerships[q.name].losses++
+          })
+          opps.forEach((o: any) => {
+            if (!p.opponents[o.name]) p.opponents[o.name] = { wins: 0, losses: 0, moneyWon: 0 }
+            if (won) p.opponents[o.name].wins++; else if (lost) p.opponents[o.name].losses++
+            p.opponents[o.name].moneyWon += (r.net * sign) / list.length
+          })
+        })
+      }
+      side(r.pA, true)
+      side(r.pB, false)
+    })
+
+    // Wheels settle per pair; record head-to-head from those pairs
+    pay.wheels.forEach((w: any) => {
+      w.pairs.forEach((pr: any) => {
+        const a = getP(pr.playerA), b = getP(pr.playerB)
+        const tot = pr.net + pr.press
+        if (tot > 0) { a.matchWins++; b.matchLosses++ }
+        else if (tot < 0) { b.matchWins++; a.matchLosses++ }
+        else { a.matchTies++; b.matchTies++ }
+        if (!a.opponents[pr.playerB]) a.opponents[pr.playerB] = { wins: 0, losses: 0, moneyWon: 0 }
+        if (!b.opponents[pr.playerA]) b.opponents[pr.playerA] = { wins: 0, losses: 0, moneyWon: 0 }
+        if (tot > 0) { a.opponents[pr.playerB].wins++; b.opponents[pr.playerA].losses++ }
+        else if (tot < 0) { b.opponents[pr.playerA].wins++; a.opponents[pr.playerB].losses++ }
+        a.opponents[pr.playerB].moneyWon += tot
+        b.opponents[pr.playerA].moneyWon -= tot
+      })
+    })
+
   })
 
   // ── Computed summaries ───────────────────────────────────────────
