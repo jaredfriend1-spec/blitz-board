@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthProvider'
+import { signInAsPlayer } from '@/lib/auth'
 import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set, get, push } from 'firebase/database'
@@ -17,6 +18,11 @@ import Link from 'next/link'
 export default function LandingPage() {
  const { user, role: authRole, loading: authLoading } = useAuth()
  const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
+ // Shared player access — the group code is the password on a read-only account
+ const [showPlayerCode, setShowPlayerCode] = useState(false)
+ const [playerCode, setPlayerCode] = useState('')
+ const [playerErr, setPlayerErr] = useState('')
+ const [playerBusy, setPlayerBusy] = useState(false)
  const [courseName, setCourseName] = useState('')
  const [tripName, setTripName] = useState('')
  const [currentDay, setCurrentDay] = useState('')
@@ -94,9 +100,22 @@ export default function LandingPage() {
  })
  }, [])
 
- const choosePlayer = () => {
- sessionStorage.setItem('role', 'player')
- setRole('player')
+ const choosePlayer = () => { setPlayerErr(''); setPlayerCode(''); setShowPlayerCode(true) }
+
+ const submitPlayerCode = async () => {
+   const code = playerCode.trim()
+   if (!code) return
+   setPlayerBusy(true); setPlayerErr('')
+   try {
+     await signInAsPlayer(code)
+     sessionStorage.setItem('role', 'player')
+     setRole('player')
+     setShowPlayerCode(false)
+   } catch {
+     setPlayerErr('That code is not right. Ask the group admin.')
+   } finally {
+     setPlayerBusy(false)
+   }
  }
 
 
@@ -312,6 +331,41 @@ export default function LandingPage() {
  <div className="space-y-3">
  <p className="text-zinc-600 text-[10px] font-black tracking-[0.3em] text-center">WHO ARE YOU?</p>
 
+ {showPlayerCode ? (
+ <div className="w-full bg-zinc-900 border-2 border-emerald-500/40 p-6 rounded-[2rem] space-y-3">
+   <div>
+     <div className="text-xl font-black text-white">Enter group code</div>
+     <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
+       Ask the group admin if you do not have it
+     </div>
+   </div>
+   <input
+     type="password"
+     autoFocus
+     value={playerCode}
+     onChange={e => setPlayerCode(e.target.value)}
+     onKeyDown={e => { if (e.key === 'Enter') submitPlayerCode() }}
+     placeholder="Group code"
+     className="w-full bg-black border-2 border-zinc-700 focus:border-emerald-500 p-4 rounded-2xl font-black text-white outline-none transition-colors"
+   />
+   {playerErr && <p className="text-[11px] font-black text-rose-400">{playerErr}</p>}
+   <div className="flex gap-2">
+     <button
+       onClick={submitPlayerCode}
+       disabled={playerBusy || !playerCode.trim()}
+       className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 rounded-2xl font-black transition-colors"
+     >
+       {playerBusy ? 'Checking...' : 'Continue'}
+     </button>
+     <button
+       onClick={() => setShowPlayerCode(false)}
+       className="px-5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl font-black transition-colors"
+     >
+       Cancel
+     </button>
+   </div>
+ </div>
+ ) : (
  <button
  onClick={choosePlayer}
  className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
@@ -327,6 +381,7 @@ export default function LandingPage() {
  </div>
  <ChevronRight size={20} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
  </button>
+ )}
  </div>
  <Link href="/login"
  className="w-full flex items-center gap-4 bg-zinc-800/40 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-5 rounded-[2rem] transition-all group">
