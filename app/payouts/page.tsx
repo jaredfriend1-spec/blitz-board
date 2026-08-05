@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase'
 import { ref, onValue, get, set } from 'firebase/database'
 import { ArrowLeft, Zap, ZapOff, DollarSign, Target, RefreshCw, Archive } from 'lucide-react'
 import Link from 'next/link'
+import { runNine as sharedRunNine } from '@/lib/payouts'
 
 // ── TYPES ──────────────────────────────────────────────────────────
 type BallType = 'net' | 'gross'
@@ -95,44 +96,8 @@ function calculateWheel(
 
  const netWinnings = resolved.map(() => 0)
 
- const runNine = (scA: number[], scB: number[], start: number, end: number, nassau: number, press: number, autoPress: boolean) => {
- let bets = [{score:0, pressed:false, isBase:true}]
- let totalPresses = 0
- const pressHoles: number[] = [] // which holes (relative 0-8) fired a press
- for (let i = start; i <= end; i++) {
- const sa = scA[i], sb = scB[i]
- if (sa === 0 || sb === 0) continue
- const delta = sa < sb ? 1 : sb < sa ? -1 : 0
- if (delta !== 0) {
- let newPressCount = 0
- bets.forEach(b => {
- b.score += delta
- if (autoPress && Math.abs(b.score) >= 2 && !b.pressed) {
- b.pressed = true
- newPressCount++
- totalPresses++
- pressHoles.push(i - start) // relative hole index 0-8
- }
- })
- for (let p = 0; p < newPressCount; p++) {
- bets.push({ score: 0, pressed: false, isBase: false })
- }
- }
- }
- let payA = 0, payB = 0
- bets.forEach(b => {
- const amt = b.isBase ? nassau : press
- if (b.score > 0) payA += amt
- else if (b.score < 0) payB += amt
- })
- const holeWinners: string[] = []
- for (let i = start; i <= end; i++) {
- const sa = scA[i], sb = scB[i]
- if (!sa || !sb) { holeWinners.push('·'); continue }
- holeWinners.push(sa < sb ? 'A' : sb < sa ? 'B' : '½')
- }
- return {payA, payB, totalPresses, holeWinners, pressHoles}
- }
+ // Nassau nines with auto-press come from lib/payouts.
+ const runNine = sharedRunNine
 
  const pairResults = pairs.map(({a, b}) => {
  const scA = playerNetScores[a]
@@ -436,7 +401,10 @@ export default function PayoutsPage() {
 
  const f9 = runNine(0, 8)
  const b9 = runNine(9, 17)
- const overallAmt = Number(m.overall || 0)
+ // A Nassau is three bets: front, back and overall. The overall leg pays
+ // the nassau amount unless a per-leg amount is set. Previously this read
+ // m.overall, which is never set, so the overall leg silently paid nothing.
+ const overallAmt = Number(m.nassauOverall ?? m.overall ?? m.nassau ?? 0)
  let overallPayA = 0, overallPayB = 0
  if (overallAmt > 0) {
  const allHoles = [...(f9.holeResults||[]), ...(b9.holeResults||[])]

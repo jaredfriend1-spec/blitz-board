@@ -137,11 +137,18 @@ export function settleMatch(m: any, ctx: RoundCtx) {
   const sA = bestBall(pA), sB = bestBall(pB)
 
   const nassau = Number(m.nassau) || 5
+  // A Nassau is three bets. Today they share one amount; nassauF9 /
+  // nassauB9 / nassauOverall let each leg carry its own stake later
+  // without touching this engine again.
+  const nF9 = Number(m.nassauF9 ?? nassau)
+  const nB9 = Number(m.nassauB9 ?? nassau)
+  const nOverall = Number(m.nassauOverall ?? nassau)
   const press = Number(m.press) || 5
   const autoPress = m.autoPress !== false && (type === 'PvP' || type === '2v2')
 
   const nines: [number, number][] = numHoles > 9 ? [[0, 8], [9, 17]] : [[0, numHoles - 1]]
-  const legs = nines.map(([f, t]) => runNine(sA, sB, f, t, nassau, press, autoPress))
+  const legAmts = numHoles > 9 ? [nF9, nB9] : [nF9]
+  const legs = nines.map(([f, t], li) => runNine(sA, sB, f, t, legAmts[li], press, autoPress))
   const baseNet = legs.reduce((s, l) => s + l.baseNet, 0)
   const pressNet = legs.reduce((s, l) => s + l.pressNet, 0)
 
@@ -149,7 +156,7 @@ export function settleMatch(m: any, ctx: RoundCtx) {
   for (let i = 0; i < numHoles; i++) {
     if (sA[i] > 0 && sB[i] > 0) { if (sA[i] < sB[i]) aW++; else if (sB[i] < sA[i]) bW++ }
   }
-  const overallNet = aW > bW ? nassau : bW > aW ? -nassau : 0
+  const overallNet = aW > bW ? nOverall : bW > aW ? -nOverall : 0
 
   const bonusFor = (list: Player[]) => Array.from({ length: numHoles }, (_, i) => {
     const par = pars[holeOffset + i] || 4
@@ -168,6 +175,7 @@ export function settleMatch(m: any, ctx: RoundCtx) {
     pressNet, bonusNet, net,
     f9: legs[0], b9: legs[1] || null,
     overallNet, aWins18: aW, bWins18: bW,
+    nassauF9: nF9, nassauB9: nB9, nassauOverall: nOverall,
     winner: net > 0 ? 'A' : net < 0 ? 'B' : 'TIE',
     nassau, press, autoPress,
   }
