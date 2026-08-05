@@ -9,6 +9,7 @@ import {
  Flag, DollarSign, Sword, RefreshCw, Check, FileDown, Loader2, Plus
 } from 'lucide-react'
 import Link from 'next/link'
+import { getStrokes as sharedStrokes, runNine, betHandicapPercent, settleWheel, buildCtx } from '@/lib/payouts'
 
 // ── FULL RECAP ENGINE ──────────────────────────────────────────────
 function buildRecap(arch: any) {
@@ -167,48 +168,13 @@ function buildRecap(arch: any) {
 
  // ── MATCH RESULTS (full payout engine) ──────────────────────────
  // GHIN METHOD: Apply HCP% BEFORE stroke calculation
- const getStrokes = (playerHcp: number, holeIdx: number, baseHcp: number, isGross: boolean) => {
- if (isGross) return 0
- const adjustedHcp = Math.round(playerHcp * (handicapPercent / 100))
- const adjustedBase = Math.round(baseHcp * (handicapPercent / 100))
- const hcpRating = Number(course.holes?.[holeIdx]?.hcp) || (holeIdx + 1)
- const diff = Math.max(0, adjustedHcp - adjustedBase)
- let s = Math.floor(diff / 18)
- if (hcpRating <= (diff % 18)) s++
- return s
- }
+ // Strokes come from lib/payouts. `pct` is the individual bet's handicap
+ // percentage — a matchup's own setting wins, falling back to the round's.
+ const getStrokes = (playerHcp: number, holeIdx: number, baseHcp: number, isGross: boolean, pct: number = handicapPercent) =>
+ sharedStrokes(playerHcp, holeIdx, baseHcp, pct, isGross, course.holes)
 
- const runNassauNine = (scA: number[], scB: number[], start: number, end: number, nassau: number, press: number, autoPress: boolean) => {
- let bets = [{ score: 0, pressed: false, isBase: true }]
- const holeWinners: string[] = []
- let totalPresses = 0
- for (let i = start; i <= end; i++) {
- const sa = scA[i], sb = scB[i]
- let winner = '·'
- if (sa > 0 && sb > 0) {
- if (sa < sb) winner = 'A'
- else if (sb < sa) winner = 'B'
- else winner = '½'
- }
- holeWinners.push(winner)
- const delta = winner === 'A' ? 1 : winner === 'B' ? -1 : 0
- if (delta !== 0) {
- let newPresses = 0
- bets.forEach(b => {
- b.score += delta
- if (autoPress && Math.abs(b.score) >= 2 && !b.pressed) { b.pressed = true; newPresses++; totalPresses++ }
- })
- for (let p = 0; p < newPresses; p++) bets.push({ score: 0, pressed: false, isBase: false })
- }
- }
- let payA = 0, payB = 0
- bets.forEach(b => {
- const amt = b.isBase ? nassau : press
- if (b.score > 0) payA += amt
- else if (b.score < 0) payB += amt
- })
- return { payA, payB, totalPresses, holeWinners }
- }
+ // Nassau nines (with auto-press) are settled by lib/payouts.
+ const runNassauNine = runNine
 
  const matchResults = matchups.map(m => {
  let pA: any[] = [], pB: any[] = []
@@ -219,56 +185,30 @@ function buildRecap(arch: any) {
  pA = activePlayers.filter(p => p.name === m.sideA || p.name === m.sideA2)
  pB = activePlayers.filter(p => p.name === m.sideB || p.name === m.sideB2)
  } else if (m.type === 'Wheel') {
- // Calculate wheel pair results
- const wp = m.wheelPlayers || []
- const isGrossW = m.scoringType === 'GROSS'
- const wpHcps = isGrossW ? [0] : wp.map((name: string) => {
- const p = activePlayers.find((pl:any) => pl.name === name)
- return Number(p?.handicap) || 0
- })
- const baseHcpW = Math.min(...wpHcps)
- const netScoresW: Record<string, number[]> = {}
- wp.forEach((name: string) => {
- const p = activePlayers.find((pl:any) => pl.name === name)
- if (!p) return
- netScoresW[name] = pars.map((par, i) => {
- const g = scores[p.id]?.[holeOffset + i] || 0
- if (!g) return 0
- const hcpR = Number(course.holes?.[holeOffset + i]?.hcp) || (holeOffset + i + 1)
- const diff = Math.max(0, (Number(p.handicap)||0) - baseHcpW)
- let s = Math.floor(diff/18); if (hcpR <= (diff%18)) s++
- return isGrossW ? g : g - s
- })
- })
- const wheelPairs: any[] = []
- const netWinnings: Record<string, number> = {}
- wp.forEach((n: string) => { netWinnings[n] = 0 })
- for (let a = 0; a < wp.length; a++) {
- for (let b = a+1; b < wp.length; b++) {
- const na = wp[a], nb = wp[b]
- let aW = 0, bW = 0
- for (let i = 0; i < 18; i++) {
- const sa = netScoresW[na]?.[i]||0, sb = netScoresW[nb]?.[i]||0
- if (sa>0&&sb>0) { if(sa<sb) aW++; else if(sb<sa) bW++ }
- }
- const amt = m.wheelAmount || 10
- const winner = aW>bW?na:bW>aW?nb:'tie'
- if (winner===na) { netWinnings[na]+=amt; netWinnings[nb]-=amt }
- else if (winner===nb) { netWinnings[nb]+=amt; netWinnings[na]-=amt }
- wheelPairs.push({ playerA:na, playerB:nb, aWins:aW, bWins:bW, winner, amount:amt })
- }
- }
- return { type:'Wheel', id:m.id, wheelPlayers:wp, wheelAmount:m.wheelAmount, scoringType:m.scoringType||'NET', sideA:'Wheel', sideB:'', winner:'', wheelPairs, netWinnings }
+        // Wheels are settled by lib/payouts so History, Payouts and
+        // Analytics always agree — including press money and nassau format.
+        const w = settleWheel(m, buildCtx(arch))
+        if (!w) return null
+        const wp: string[] = (m.wheelPlayers || [])
+        const netWinnings: Record<string, number> = {}
+        wp.forEach(n => { netWinnings[n] = (w.netWinnings[n] || 0) + (w.pressWinnings[n] || 0) })
+        const wheelPairs = w.pairs.map((pr: any) => ({
+          playerA: pr.playerA, playerB: pr.playerB,
+          winner: (pr.net + pr.press) > 0 ? pr.playerA : (pr.net + pr.press) < 0 ? pr.playerB : 'tie',
+          amount: Math.abs(pr.net + pr.press), press: pr.press, format: pr.format,
+        }))
+        return { type:'Wheel', id:m.id, wheelPlayers:wp, wheelAmount:m.wheelAmount, scoringType:m.scoringType||'NET', sideA:'Wheel', sideB:'', winner:'', wheelPairs, netWinnings }
  } else {
  pA = activePlayers.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id))
  pB = activePlayers.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id))
  }
  if (pA.length === 0 || pB.length === 0) return null
  const isGross = m.scoringType === 'GROSS'
+ const betPct = betHandicapPercent(m, money)
  const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Number(p.handicap) || 0)
  const baseHcp = Math.min(...allHcps)
  const makeNetScores = (playerList: any[]) => pars.map((par, i) => {
- const valid = playerList.map(p => { const g = scores[p.id]?.[holeOffset + i] || 0; return g > 0 ? g - getStrokes(Number(p.handicap)||0, holeOffset + i, baseHcp, isGross) : 0 }).filter(Boolean)
+ const valid = playerList.map(p => { const g = scores[p.id]?.[holeOffset + i] || 0; return g > 0 ? g - getStrokes(Number(p.handicap)||0, holeOffset + i, baseHcp, isGross, betPct) : 0 }).filter(Boolean)
  return valid.length > 0 ? Math.min(...valid) : 0
  })
  const sA = makeNetScores(pA)
@@ -291,7 +231,7 @@ function buildRecap(arch: any) {
  // Individual raw scores for each player (for 2v2 display)
  const pAScores = pA.map((p:any) => ({ id:p.id, name:p.name, handicap:p.handicap, scores: arch.scores?.[p.id] || Array(18).fill(0) }))
  const pBScores = pB.map((p:any) => ({ id:p.id, name:p.name, handicap:p.handicap, scores: arch.scores?.[p.id] || Array(18).fill(0) }))
- return { id: m.id, type: m.type, sideA: sideALabel, sideB: sideBLabel, sA, sB, pAScores, pBScores, f9, b9, tot18Pay, birdieA, birdieB, net, winner, nassau, press, autoPress, scoringType: m.scoringType||'NET', pars }
+ return { id: m.id, type: m.type, sideA: sideALabel, sideB: sideBLabel, sA, sB, pAScores, pBScores, f9, b9, tot18Pay, birdieA, birdieB, net, winner, nassau, press, autoPress, betPct, scoringType: m.scoringType||'NET', pars }
  }).filter(Boolean)
 
  return {
