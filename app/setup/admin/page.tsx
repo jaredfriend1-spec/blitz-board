@@ -31,6 +31,10 @@ export default function AdminWizard() {
  const [loading, setLoading] = useState(false)
  const [actionMsg, setActionMsg] = useState<string|null>(null)
  const [showDestructive, setShowDestructive] = useState(false)
+ const [destructiveErr, setDestructiveErr] = useState<string | null>(null)
+ const [abandonConfirm, setAbandonConfirm] = useState(false)
+ const [abandonText, setAbandonText] = useState('')
+ const [destructiveBusy, setDestructiveBusy] = useState(false)
  const [transitioningDay, setTransitioningDay] = useState(false)
 
  // ── CLOSE DAY FLOW ──
@@ -76,6 +80,24 @@ export default function AdminWizard() {
  }, [])
 
  const flash = (msg:string) => { setActionMsg(msg); setTimeout(()=>setActionMsg(null), 5000) }
+
+ // Writes can be rejected by the database rules (for example when an admin
+ // session has expired). Previously those failures were silent and the button
+ // simply appeared to do nothing — surface them instead.
+ const runDestructive = async (label: string, fn: () => Promise<void>) => {
+   setDestructiveErr(null); setDestructiveBusy(true)
+   try {
+     await fn()
+     flash(`✓ ${label}`)
+   } catch (e: any) {
+     const m = String(e?.message || e)
+     setDestructiveErr(/permission|PERMISSION_DENIED/i.test(m)
+       ? 'Permission denied. Your admin session may have expired — sign out, sign back in, and try again.'
+       : m)
+   } finally {
+     setDestructiveBusy(false)
+   }
+ }
 
  const saveTripMeta = async () => {
  await set(ref(db,'tournament/meta'), {
@@ -589,23 +611,91 @@ export default function AdminWizard() {
  </Link>
  </div>
 
- {/* ── DESTRUCTIVE ── */}
+ {/* ── RESET / ABANDON ── */}
  <div className="pt-4 border-t border-zinc-900">
  <button onClick={()=>setShowDestructive(!showDestructive)} className="w-full text-[9px] font-black text-zinc-700 hover:text-zinc-500 tracking-[0.3em] py-3 transition-colors">
- {showDestructive?'▲ HIDE':'▼ SHOW'} DESTRUCTIVE COMMANDS
+ {showDestructive?'▲ HIDE':'▼ SHOW'} RESET &amp; ABANDON
  </button>
  {showDestructive && (
  <div className="space-y-2 pt-1">
- <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("WIPE SCORES ONLY?"))return;await set(ref(db,'tournament/scores'),null);flash("✓ Scores wiped.")}}
+
+ {destructiveErr && (
+ <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-4 py-3 text-[11px] font-black leading-snug">
+ {destructiveErr}
+ </div>
+ )}
+
+ <button disabled={destructiveBusy}
+ onClick={()=>{
+ const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
+ if(!confirm("Wipe scores only?\n\nTeams, matchups, course and trip settings all stay.")) return
+ runDestructive('Scores wiped.', async()=>{ await set(ref(db,'tournament/scores'), null) })
+ }}
  className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
  <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>
- <span className="text-amber-800 text-[9px]">KEEPS TEAMS & BETS</span>
+ <span className="text-amber-800 text-[9px]">KEEPS TEAMS &amp; BETS</span>
  </button>
- <button onClick={async()=>{const pw=prompt("ADMIN PASSWORD:");if(pw!=="jeff")return alert("ACCESS DENIED");if(!confirm("FULL RESET?"))return;await set(ref(db,'tournament/scores'),null);await set(ref(db,'tournament/teams'),null);await set(ref(db,'tournament/matchups'),null);await set(ref(db,'tournament/meta'),null);flash("✓ Full reset.")}}
+
+ <button disabled={destructiveBusy}
+ onClick={()=>{
+ const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
+ if(!confirm("Reset the round?\n\nClears scores, teams, matchups and trip settings.\nKeeps the course and money settings so you can run it again.")) return
+ runDestructive('Round reset. Course and money settings kept.', async()=>{
+ await set(ref(db,'tournament/scores'), null)
+ await set(ref(db,'tournament/teams'), null)
+ await set(ref(db,'tournament/matchups'), null)
+ await set(ref(db,'tournament/meta'), null)
+ })
+ }}
  className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Trash2 size={12} className="inline mr-2"/>WIPE ALL DATA</span>
- <span className="text-rose-900 text-[9px]">FULL RESET</span>
+ <span><Trash2 size={12} className="inline mr-2"/>RESET ROUND</span>
+ <span className="text-rose-900 text-[9px]">KEEPS COURSE</span>
  </button>
+
+ {/* Abandon — the only action that clears the course and money too */}
+ {!abandonConfirm ? (
+ <button disabled={destructiveBusy}
+ onClick={()=>{ setDestructiveErr(null); setAbandonText(''); setAbandonConfirm(true) }}
+ className="w-full bg-rose-600/15 border border-rose-600/40 hover:border-rose-500 text-rose-400 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
+ <span><Trash2 size={12} className="inline mr-2"/>ABANDON SETUP</span>
+ <span className="text-rose-700 text-[9px]">CLEARS EVERYTHING</span>
+ </button>
+ ) : (
+ <div className="border border-rose-500/40 bg-rose-500/10 rounded-2xl p-4 space-y-3">
+ <p className="text-[11px] font-black text-rose-400 leading-snug">
+ THIS CLEARS THE ENTIRE TOURNAMENT — SCORES, TEAMS, MATCHUPS, ROSTER, COURSE,
+ MONEY SETTINGS AND TRIP DETAILS. THE WIZARD STARTS FROM SCRATCH.
+ </p>
+ <p className="text-[10px] font-black text-zinc-500 leading-snug">
+ Archived rounds in History, your saved courses and the permanent roster are not touched.
+ </p>
+ <div>
+ <label className="text-[9px] font-black text-zinc-500 tracking-widest block mb-1.5">
+ TYPE <span className="text-white">ABANDON</span> TO CONFIRM
+ </label>
+ <input value={abandonText} onChange={e=>setAbandonText(e.target.value)} placeholder="ABANDON"
+ className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-xs transition-colors"/>
+ </div>
+ <div className="flex gap-2">
+ <button
+ disabled={destructiveBusy || abandonText.trim().toUpperCase() !== 'ABANDON'}
+ onClick={()=>{
+ const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
+ runDestructive('Setup abandoned. Ready for a fresh tournament.', async()=>{
+ await set(ref(db,'tournament'), null)
+ setAbandonConfirm(false); setAbandonText('')
+ })
+ }}
+ className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
+ {destructiveBusy ? 'CLEARING...' : 'CLEAR EVERYTHING'}
+ </button>
+ <button onClick={()=>{ setAbandonConfirm(false); setAbandonText('') }}
+ className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-xs transition-colors">
+ CANCEL
+ </button>
+ </div>
+ </div>
+ )}
  </div>
  )}
  </div>
