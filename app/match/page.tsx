@@ -34,8 +34,10 @@ export default function QuickMatch() {
  const [courseName, setCourseName] = useState('')
  const [nineHole, setNineHole] = useState(false)
  const [nineHoleStart, setNineHoleStart] = useState<'front'|'back'>('front')
- const [doSkins, setDoSkins] = useState(false) // kept for legacy compat
- const [skinsAmount, setSkinsAmount] = useState(5) // kept for legacy compat
+ // Skins are a round-level pot: every player buys in, hole winners split it.
+ // This is what the payout engine reads (money.skinsAllocation).
+ const [doSkins, setDoSkins] = useState(false)
+ const [skinsAmount, setSkinsAmount] = useState(5)
  const [holes, setHoles] = useState(Array.from({length:18}, (_, i) => ({ par: 4, hcp: i + 1 })))
  const [savedCourses, setSavedCourses] = useState<any[]>([])
  const [showCourseLibrary, setShowCourseLibrary] = useState(false)
@@ -88,8 +90,6 @@ export default function QuickMatch() {
  netSkinsEnabled: false,
  skinsSplitGross: 100,
  skinsSplitNet: 0,
- doSkins: false,
- skinsAmount: 5,
  wheelPlayers:['','',''] as string[],
  wheelAmount:10,
  wheelFormat:'straight' as 'straight'|'nassau',
@@ -397,21 +397,21 @@ export default function QuickMatch() {
  const filled = m.wheelPlayers.filter(Boolean)
  if (filled.length < 3) return showToast('Select at least 3 players for the wheel')
  if (new Set(filled).size !== filled.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassauF9, wheelNassauF9:m.wheelNassauF9, wheelNassauB9:m.wheelNassauB9, wheelNassauOverall:m.wheelNassauOverall, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'Wheel', wheelPlayers:m.wheelPlayers, wheelAmount:m.wheelAmount, scoringType:m.scoringType, wheelFormat:m.wheelFormat, wheelNassau:m.wheelNassauF9, wheelNassauF9:m.wheelNassauF9, wheelNassauB9:m.wheelNassauB9, wheelNassauOverall:m.wheelNassauOverall, wheelPress:m.wheelPress, wheelAutoPress:m.wheelAutoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  } else if (buildingType === '2v2') {
  const picks = [m.sideA, m.sideA2, m.sideB, m.sideB2]
  if (picks.filter(Boolean).length < 3) return showToast('Select at least 3 players')
  if (new Set(picks).size !== picks.length) return showToast('All players must be different')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'2v2', sideA:m.sideA, sideA2:m.sideA2, sideB:m.sideB, sideB2:m.sideB2, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  } else if (buildingType === 'TvT') {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different teams')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'TvT', sideA:m.sideA, sideB:m.sideB, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  } else {
  if (!m.sideA || !m.sideB || m.sideA===m.sideB) return showToast('Select two different players')
- setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet, doSkins:m.doSkins, skinsAmount:m.skinsAmount }])
+ setMatches(prev => [...prev, { id:`m_${Date.now()}`, type:'PvP', sideA:m.sideA, sideB:m.sideB, nassau:m.nassauF9, nassauF9:m.nassauF9, nassauB9:m.nassauB9, nassauOverall:m.nassauOverall, overall:m.nassauOverall, press:m.press, birdie:m.birdie, eagle:m.eagle, scoringType:m.scoringType, autoPress:m.autoPress, handicapPercent:m.handicapPercent, netSkinsEnabled:m.netSkinsEnabled, skinsSplitGross:m.skinsSplitGross, skinsSplitNet:m.skinsSplitNet }])
  }
  setBuildingType(null)
- setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,nassauF9:5,nassauB9:5,nassauOverall:10,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,doSkins:false,skinsAmount:5,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelNassauF9:5,wheelNassauB9:5,wheelNassauOverall:10,wheelPress:5,wheelAutoPress:true})
+ setMatchDraft({sideA:'',sideB:'',sideA2:'',sideB2:'',nassau:5,nassauF9:5,nassauB9:5,nassauOverall:10,overall:10,press:5,birdie:2,eagle:5,scoringType:'NET',autoPress:true,handicapPercent:100,netSkinsEnabled:false,skinsSplitGross:100,skinsSplitNet:0,wheelPlayers:['','',''],wheelAmount:10,wheelFormat:'straight',wheelNassau:5,wheelNassauF9:5,wheelNassauB9:5,wheelNassauOverall:10,wheelPress:5,wheelAutoPress:true})
  }
 
  // ── GO LIVE ───────────────────────────────────────────────────────
@@ -442,7 +442,7 @@ export default function QuickMatch() {
  const mRef = push(ref(db,'tournament/matchups'))
  await set(mRef, { id:mRef.key, ...m })
  }
- await set(ref(db,'tournament/money'), { entryFee:0, skinsAllocation:0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
+ await set(ref(db,'tournament/money'), { entryFee:0, skinsAllocation: doSkins ? Number(skinsAmount)||0 : 0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
  showToast('✓ Setup updated — scores preserved')
  setLoading(false)
  router.push('/scorer')
@@ -495,7 +495,7 @@ export default function QuickMatch() {
  const mRef = push(ref(db,'tournament/matchups'))
  await set(mRef, { id:mRef.key, ...m })
  }
- await set(ref(db,'tournament/money'), { entryFee:0, skinsAllocation:0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
+ await set(ref(db,'tournament/money'), { entryFee:0, skinsAllocation: doSkins ? Number(skinsAmount)||0 : 0, handicapPercent, netSkinsEnabled, skinsSplitGross, skinsSplitNet })
  setLoading(false)
  router.push('/scorer')
  }
@@ -1529,37 +1529,38 @@ export default function QuickMatch() {
  </div>
  )}
 
- {/* ── SKINS (per match) ── */}
+ {/* ── SKINS (round pot) ── */}
  <div className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-4 space-y-3">
  <div className="flex items-center justify-between">
  <div>
  <p className="font-black text-sm text-zinc-300">Skins</p>
- <p className="text-zinc-600 text-[10px] font-black normal-case mt-0.5">Best score per hole in this match</p>
+ <p className="text-zinc-600 text-[10px] font-black normal-case mt-0.5">
+ Applies to the whole round — everyone buys in, hole winners split the pot
+ </p>
  </div>
  <div className="flex gap-2">
- <button onClick={() => setMatchDraft(d=>({...d,doSkins:false}))}
- className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${!matchDraft.doSkins?'bg-zinc-600 border-zinc-500 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>No</button>
- <button onClick={() => setMatchDraft(d=>({...d,doSkins:true}))}
- className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${matchDraft.doSkins?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>Yes</button>
+ <button onClick={() => setDoSkins(false)}
+ className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${!doSkins?'bg-zinc-600 border-zinc-500 text-white':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>No</button>
+ <button onClick={() => setDoSkins(true)}
+ className={`px-3 py-1.5 rounded-xl font-black text-xs border-2 transition-all ${doSkins?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-500'}`}>Yes</button>
  </div>
  </div>
- {matchDraft.doSkins && (
+ {doSkins && (
  <div className="space-y-3">
  <div>
  <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-2">$ PER PLAYER</p>
  <div className="flex gap-2">
  {[2,5,10,20].map(amt => (
- <button key={amt} onClick={() => setMatchDraft(d=>({...d,skinsAmount:amt}))}
- className={`flex-1 py-2 rounded-xl font-black text-sm border-2 transition-all ${matchDraft.skinsAmount===amt?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-400'}`}>
+ <button key={amt} onClick={() => setSkinsAmount(amt)}
+ className={`flex-1 py-2 rounded-xl font-black text-sm border-2 transition-all ${skinsAmount===amt?'bg-emerald-500 border-emerald-400 text-black':'bg-zinc-900 border-zinc-700 text-zinc-400'}`}>
  ${amt}
  </button>
  ))}
- <input type="number" value={matchDraft.skinsAmount}
- onChange={e => setMatchDraft(d=>({...d,skinsAmount:Number(e.target.value)}))}
+ <input type="number" value={skinsAmount}
+ onChange={e => setSkinsAmount(Number(e.target.value))}
  className="w-14 bg-black border border-zinc-700 p-2 rounded-xl font-black text-emerald-400 outline-none text-center text-sm"/>
  </div>
  </div>
- {/* Skins type: GROSS / NET / BOTH */}
  <div>
  <p className="text-[10px] font-black text-zinc-500 tracking-widest mb-2">SKINS TYPE</p>
  <div className="grid grid-cols-3 gap-2">
@@ -1569,13 +1570,13 @@ export default function QuickMatch() {
  {label:'BOTH', g:50, n:50, net:true},
  ].map(opt => {
  const isActive = opt.label==='GROSS'
- ? (!matchDraft.netSkinsEnabled || matchDraft.skinsSplitNet===0)
+ ? (!netSkinsEnabled || skinsSplitNet===0)
  : opt.label==='NET'
- ? (matchDraft.netSkinsEnabled && matchDraft.skinsSplitGross===0)
- : (matchDraft.netSkinsEnabled && matchDraft.skinsSplitGross>0 && matchDraft.skinsSplitNet>0)
+ ? (netSkinsEnabled && skinsSplitGross===0)
+ : (netSkinsEnabled && skinsSplitGross>0 && skinsSplitNet>0)
  return (
  <button key={opt.label}
- onClick={() => setMatchDraft(d=>({...d, netSkinsEnabled:opt.net, skinsSplitGross:opt.g, skinsSplitNet:opt.n}))}
+ onClick={() => { setNetSkinsEnabled(opt.net); setSkinsSplitGross(opt.g); setSkinsSplitNet(opt.n) }}
  className={`py-2.5 rounded-xl font-black text-xs transition-all ${isActive?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
  {opt.label}
  </button>
@@ -1583,17 +1584,9 @@ export default function QuickMatch() {
  })}
  </div>
  </div>
- {/* Split selector — only when BOTH */}
- {matchDraft.netSkinsEnabled && matchDraft.skinsSplitGross > 0 && matchDraft.skinsSplitNet > 0 && (
- <div className="grid grid-cols-2 gap-2">
- {[{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'},{g:40,n:60,label:'40/60'}].map(p => (
- <button key={p.label} onClick={() => setMatchDraft(d=>({...d,skinsSplitGross:p.g,skinsSplitNet:p.n}))}
- className={`py-2 rounded-xl font-black text-xs transition-all ${matchDraft.skinsSplitGross===p.g&&matchDraft.skinsSplitNet===p.n?'bg-amber-500 text-black':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
- <div>{p.label}</div><div className="text-[9px] opacity-75">Gross/Net</div>
- </button>
- ))}
- </div>
- )}
+ <p className="text-[10px] font-black text-emerald-500/80">
+ POT: {players.filter(p=>p.name).length} PLAYERS x ${Number(skinsAmount)||0} = ${(players.filter(p=>p.name).length) * (Number(skinsAmount)||0)}
+ </p>
  </div>
  )}
  </div>
