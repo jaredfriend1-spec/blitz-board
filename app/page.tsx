@@ -602,77 +602,91 @@ export default function LandingPage() {
  }
 
  // ── ADMIN HUB ──────────────────────────────────────────────────
- const adminItems = [
- {
- title:"Tournament Wizard",
- desc:"Full tournament · Multi-day · Skins",
- path:"/setup",
- icon:<ShieldAlert className="text-rose-400"size={28}/>,
- color:"border-rose-500/30 hover:border-rose-500/80",
- accent:"text-rose-400",
- pill: true
- },
- {
- title:"Live Scorer",
- desc:"Enter hole-by-hole scores",
- path:"/scorer",
- icon:<Target className="text-emerald-500"size={28}/>,
- color:"border-emerald-500/20 hover:border-emerald-500",
- accent:"text-emerald-400"
- },
- {
- title:"Tournament Results",
- desc:"Leaderboard & team rankings",
- path:"/results",
- icon:<Trophy className="text-[#33CCFF]"size={28}/>,
- color:"border-blue-400/20 hover:border-blue-400",
- accent:"text-blue-400"
- },
- {
- title:"Side Bets & Payouts",
- desc:"Match payouts & evidence",
- path:"/payouts",
- icon:<DollarSign className="text-amber-400"size={28}/>,
- color:"border-amber-400/20 hover:border-amber-400",
- accent:"text-amber-400"
- },
- {
- title:"History",
- desc:"Past tournament results",
- path:"/history",
- icon:<Archive className="text-blue-400"size={28}/>,
- color:"border-blue-800/20 hover:border-blue-600",
- accent:"text-blue-400"
- },
- {
- title:"Roster Manager",
- desc:"Your permanent player list",
- path:"/roster",
- icon:<Users className="text-emerald-400"size={28}/>,
- color:"border-emerald-800/20 hover:border-emerald-600",
- accent:"text-emerald-400"
- },
- {
- key:'courses',
- title:"Course Library",
- desc:"Saved courses · Scan scorecards",
- path:"/courses",
- icon:<Flag className="text-teal-400"size={28}/>,
- color:"border-teal-800/20 hover:border-teal-600",
- accent:"text-teal-400"
- },
- ...((authRole === 'master' || scorerCanSeeAnalytics) ? [{
- title:"Analytics",
- desc:"Stats, records & betting trends",
- path:"/master/analytics",
- icon:<BarChart3 className="text-purple-400"size={28}/>,
- color:"border-purple-800/20 hover:border-purple-600",
- accent:"text-purple-400"
- }] : []),
- ]
+  // Grouped by what you are actually doing: play, start, keep, review.
+  const playItems = [
+    { title:"Live Scorer",    desc:"Enter hole-by-hole scores", path:"/scorer",  icon:<Target size={20} className="text-emerald-400"/>,   hover:"hover:border-emerald-500/60" },
+    { title:"Results",        desc:"Leaderboard & teams",       path:"/results", icon:<Trophy size={20} className="text-[#33CCFF]"/>,     hover:"hover:border-blue-400/60" },
+    { title:"Payouts",        desc:"Side bets & evidence",      path:"/payouts", icon:<DollarSign size={20} className="text-amber-400"/>, hover:"hover:border-amber-400/60" },
+  ]
+  const dataItems = [
+    { title:"Roster",  desc:"Permanent player list", path:"/roster",  icon:<Users size={20} className="text-emerald-400"/>, hover:"hover:border-emerald-600/60" },
+    { title:"Courses", desc:"Saved · scan cards",    path:"/courses", icon:<Flag size={20} className="text-teal-400"/>,     hover:"hover:border-teal-600/60" },
+  ]
+  const reviewItems = [
+    { title:"History", desc:"Past trips & rounds", path:"/history", icon:<Archive size={20} className="text-blue-400"/>, hover:"hover:border-blue-600/60" },
+    ...((authRole === 'master' || scorerCanSeeAnalytics) ? [
+    { title:"Analytics", desc:"Stats & betting trends", path:"/master/analytics", icon:<BarChart3 size={20} className="text-purple-400"/>, hover:"hover:border-purple-600/60" }] : []),
+  ]
 
- const setupItem = adminItems[0]
- const mainItems = adminItems.slice(1)
+  // A round is live when there is a mode set and we are not in demo.
+  const liveRound = !isMock && !!activeMode
+  const liveLabel = activeMode === 'match' ? 'Quick match' : (tripName || 'Tournament')
+
+  const Tile = ({ item, wide = false }: { item:any, wide?:boolean }) => (
+    <Link href={item.path}
+      className={`group bg-zinc-900/40 border border-zinc-800 ${item.hover} rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${wide ? 'col-span-2' : ''}`}>
+      {item.icon}
+      <h2 className="text-[15px] font-bold leading-tight mt-1.5">{item.title}</h2>
+      <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">{item.desc}</p>
+    </Link>
+  )
+
+  const GroupLabel = ({ children }: { children:React.ReactNode }) => (
+    <p className="text-[9px] font-black text-zinc-600 tracking-[0.2em] mb-2">{children}</p>
+  )
+
+  const StartGroup = () => (
+    <div className="mb-5">
+      <GroupLabel>START A ROUND</GroupLabel>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Link href="/setup"
+          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
+            activeMode && activeMode !== 'match' ? 'border-rose-500/60 bg-rose-950/10' : 'border-rose-500/25 hover:border-rose-500/70'}`}>
+          <ShieldAlert size={20} className="text-rose-400"/>
+          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Tournament</h2>
+          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Multi-day &amp; skins</p>
+        </Link>
+        <Link href="/match"
+          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
+            activeMode === 'match' ? 'border-amber-500/60 bg-amber-950/10' : 'border-amber-500/25 hover:border-amber-500/70'}`}>
+          <Zap size={20} className="text-amber-400"/>
+          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Quick match</h2>
+          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Casual · just bets</p>
+        </Link>
+        {!isMock ? (
+          <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
+            className="col-span-2 text-left bg-zinc-900/30 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl px-3.5 py-2.5 transition-all active:scale-[0.99] flex items-center gap-2.5 disabled:opacity-50">
+            <PlayCircle size={16} className="text-purple-400 flex-shrink-0"/>
+            <span className="text-[13px] font-bold text-purple-400">{demoLoading ? 'Loading demo…' : 'Demo round'}</span>
+            <span className="text-[11px] text-zinc-600 font-medium normal-case truncate">Tiger · Rory · Augusta</span>
+          </button>
+        ) : (
+          <div className="col-span-2 bg-purple-500/10 border border-purple-500/30 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-purple-400 font-black text-[13px]">Demo active</p>
+              <p className="text-zinc-500 text-[10px] font-medium normal-case truncate">Augusta National · 8 pros</p>
+            </div>
+            <button onClick={clearDemo}
+              className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-[11px] font-black transition-all flex-shrink-0">
+              <X size={12}/> EXIT
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  const PlayGroup = () => (
+    <div className="mb-5">
+      <GroupLabel>DURING PLAY</GroupLabel>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Tile item={playItems[0]} wide={liveRound}/>
+        <Tile item={playItems[1]}/>
+        <Tile item={playItems[2]}/>
+      </div>
+    </div>
+  )
+
 
  return (
  <div className="min-h-screen bg-zinc-950 text-white font-sans">
@@ -690,151 +704,64 @@ export default function LandingPage() {
  {isMock && <span className="text-amber-400">· DEMO</span>}
  <span className="text-zinc-700">·</span>
  <span className="text-rose-500 flex items-center gap-1"><ShieldAlert size={10}/> ADMIN</span>
+ {authRole === 'master' && (
+ <Link href="/master" className="ml-auto flex items-center gap-1 text-emerald-500 hover:text-emerald-400 transition-colors">
+ <Shield size={11}/> MASTER
+ </Link>
+ )}
  </div>
  </header>
 
- {/* Setup pill — full width, above everything else */}
- <Link href={setupItem.path}
- className={`group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 ${setupItem.color} transition-all active:scale-95 flex items-center gap-4 shadow-xl mb-4 relative overflow-hidden`}>
- <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
- <ShieldAlert size={80} className="text-rose-400"/>
- </div>
- <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- {setupItem.icon}
- </div>
- <div className="relative z-10 flex-1">
- <h2 className="text-xl font-black leading-tight group-hover:text-rose-400 transition-colors">{setupItem.title}</h2>
- <p className="text-[10px] font-bold text-zinc-500 tracking-widest">{setupItem.desc}</p>
- </div>
- <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-rose-500 group-hover:text-white transition-all flex-shrink-0">
- <ChevronRight size={16}/>
- </div>
- </Link>
+             {/* Live round banner — the "you are here" */}
+            {liveRound && (
+              <Link href={activeMode === 'match' ? '/match' : '/setup'}
+                className="w-full bg-emerald-500/10 border-2 border-emerald-500/40 hover:border-emerald-500 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3 transition-all active:scale-[0.99] block">
+                <Trophy size={18} className="text-emerald-400 flex-shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-emerald-400 truncate">
+                    {liveLabel}{currentDay ? ` · ${currentDay}` : ''}
+                  </p>
+                  <p className="text-[11px] text-emerald-600/80 font-medium normal-case truncate">
+                    {courseName || 'Tap to continue'} · in progress
+                  </p>
+                </div>
+                <ChevronRight size={16} className="text-emerald-500 flex-shrink-0"/>
+              </Link>
+            )}
 
- {/* Quick Match pill */}
- <Link href="/match"
- className={`group w-full bg-zinc-900/40 p-5 rounded-[2rem] border-2 transition-all active:scale-95 flex items-center gap-4 shadow-xl mb-4 relative overflow-hidden ${
- activeMode === 'match' ? 'border-amber-500/60 bg-amber-950/10' : 'border-amber-500/20 hover:border-amber-500'
- }`}>
- <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
- <Zap size={80} className="text-amber-400"/>
- </div>
- <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <Zap size={22} className="text-amber-400"/>
- </div>
- <div className="relative z-10 flex-1">
- <h2 className="text-xl font-black leading-tight group-hover:text-amber-400 transition-colors">Quick Match</h2>
- <p className="text-[10px] font-bold text-zinc-500 tracking-widest">
- {activeMode === 'match'
- ? <span className="text-amber-400">⚡ MATCH IN PROGRESS · {courseName || 'TAP TO CONTINUE'}</span>
- : 'Casual round · No entry fees · Just bets'
- }
- </p>
- </div>
- <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-black transition-all flex-shrink-0">
- <ChevronRight size={16}/>
- </div>
- </Link>
+            {/* Mid-round, the scorer matters more than starting something new */}
+            {liveRound ? <><PlayGroup/><StartGroup/></> : <><StartGroup/><PlayGroup/></>}
 
- {/* Demo Round — right below Quick Match */}
- {!isMock ? (
- <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
- className={`group w-full text-left bg-zinc-900/40 p-5 rounded-[2rem] border-2 border-purple-500/20 hover:border-purple-500/50 mb-4 transition-all active:scale-95 flex items-center gap-4 shadow-xl relative overflow-hidden disabled:opacity-50`}>
- <div className="absolute -right-2 -bottom-2 opacity-5 group-hover:opacity-10 transition-opacity">
- <PlayCircle size={80} className="text-purple-400"/>
- </div>
- <div className="bg-zinc-950 w-12 h-12 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <PlayCircle size={22} className="text-purple-400 group-hover:text-purple-300 transition-colors"/>
- </div>
- <div className="relative z-10 flex-1">
- <h2 className="text-xl font-black leading-tight group-hover:text-purple-300 transition-colors text-purple-400">
- {demoLoading ? 'Loading Demo...' : '🎮 Demo Round'}
- </h2>
- <p className="text-[10px] font-bold text-zinc-500 tracking-widest">Tiger · Rory · Rahm · Brooks · Augusta</p>
- </div>
- <div className="w-8 h-8 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-all flex-shrink-0">
- <ChevronRight size={16}/>
- </div>
- </button>
- ) : (
- <div className="bg-purple-500/10 border-2 border-purple-500/30 rounded-[2rem] px-5 py-4 mb-4 flex items-center justify-between">
- <div>
- <p className="text-purple-400 font-black text-sm">🎮 DEMO ACTIVE</p>
- <p className="text-zinc-500 text-[10px] font-bold tracking-widest">Augusta National · 8 Pros</p>
- </div>
- <button onClick={clearDemo}
- className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-400 px-4 py-2.5 rounded-xl text-xs font-black transition-all">
- <X size={13}/> EXIT DEMO
- </button>
- </div>
- )}
+            <div className="mb-5">
+              <GroupLabel>YOUR DATA</GroupLabel>
+              <div className="grid grid-cols-2 gap-2.5">
+                {dataItems.map(item => <Tile key={item.title} item={item}/>)}
+              </div>
+            </div>
 
- {/* Main items grid */}
- {/* Master Dashboard — only visible to master admin */}
- {authRole === 'master' && (
- <Link href="/master"
- className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border-2 border-emerald-500/30 hover:border-emerald-500 p-4 rounded-2xl transition-all group mb-3 block">
- <div className="flex items-center gap-3">
- <Shield size={18} className="text-emerald-400"/>
- <div>
- <div className="font-bold text-sm text-emerald-400">⚡ Master Dashboard</div>
- <div className="text-zinc-500 text-[10px] font-medium normal-case">Roster · History · Full control</div>
- </div>
- </div>
- <ChevronRight size={16} className="text-emerald-500"/>
- </Link>
- )}
+            <div className="mb-4">
+              <GroupLabel>REVIEW</GroupLabel>
+              <div className="grid grid-cols-2 gap-2.5">
+                {reviewItems.map(item => <Tile key={item.title} item={item}/>)}
+              </div>
+            </div>
 
- <div className="space-y-3 mb-6">
- {mainItems.map(item => (
- <Link key={item.title} href={item.path}
- className={`group w-full bg-zinc-900/40 p-4 rounded-2xl border ${item.color} transition-all active:scale-[0.99] flex items-center gap-4`}>
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- {React.cloneElement(item.icon, { size: 20 })}
- </div>
- <div className="flex-1 min-w-0">
- <h2 className={`text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors`}>{item.title}</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">{item.desc}</p>
- </div>
- <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:border-zinc-600 transition-all flex-shrink-0">
- <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
- </div>
- </Link>
- ))}
- </div>
+            <div className="grid grid-cols-2 gap-2.5 mb-6">
+              <Link href="/guide"
+                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
+                <BookOpen size={13}/> How it works
+              </Link>
+              <button onClick={async () => {
+                sessionStorage.removeItem('role')
+                if (user) await signOut()
+                setRole('none')
+              }}
+                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
+                <RefreshCw size={13}/> Exit
+              </button>
+            </div>
 
- {/* Guide + Exit — uniform pill style */}
- <div className="space-y-3">
- <Link href="/guide"
- className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <BookOpen size={20} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
- </div>
- <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How Blitz Board Works</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Guide, tips & feature walkthrough</p>
- </div>
- <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:border-zinc-600 transition-all">
- <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
- </div>
- </Link>
- <button onClick={async () => {
- sessionStorage.removeItem('role')
- if (user) await signOut()
- setRole('none')
- }}
- className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
- </div>
- <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Exit</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Return to home screen</p>
- </div>
- </button>
- </div>
-
- {/* Demo type modal */}
+{/* Demo type modal */}
  {showDemoModal && (
  <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
  <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
