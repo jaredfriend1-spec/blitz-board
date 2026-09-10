@@ -192,6 +192,7 @@ export default function AdminWizard() {
  setCloseStep('Verified. Clearing the day…')
  await set(ref(db,'tournament/scores'), null)
  await set(ref(db,'tournament/matchups'), null)
+ await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
 
  if (isFinal) {
  await set(ref(db,'tournament/meta'), {
@@ -226,6 +227,7 @@ export default function AdminWizard() {
  setLoading(true)
  await set(ref(db,'tournament/scores'), null)
  await set(ref(db,'tournament/matchups'), null)
+ await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
  await set(ref(db,'tournament/teams'), null)
  await set(ref(db,'tournament/meta'), null)
  flash("✓ Ready for a fresh tournament.")
@@ -629,7 +631,7 @@ export default function AdminWizard() {
  onClick={()=>{
  const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
  if(!confirm("Wipe scores only?\n\nTeams, matchups, course and trip settings all stay.")) return
- runDestructive('Scores wiped.', async()=>{ await set(ref(db,'tournament/scores'), null) })
+ runDestructive('Scores wiped.', async()=>{ await set(ref(db,'tournament/scores'), null); await set(ref(db,'tournament/draws'), null) })
  }}
  className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
  <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>

@@ -108,7 +108,7 @@ function computeAnalytics(history: any[]) {
     const pars: number[] = arch.course?.pars || Array(18).fill(4)
     const courseName: string = arch.course?.name || 'Unknown'
     const money = arch.money || {}
-    const skinsAlloc = Number(money.skinsAllocation) || 0
+    const draws: Record<string, any> = arch.draws || {}
     const entryFee = Number(money.entryFee) || 0
     const archDate = Number(arch.id) || 0
     const nineHole = !!arch.course?.nineHole
@@ -122,6 +122,9 @@ function computeAnalytics(history: any[]) {
       const sc = scores[rp.id] || []
       const holeScores = sc.slice(holeOffset, holeOffset + numHoles).map(Number).filter(s => s > 0)
       if (holeScores.length < numHoles * 0.5) return // skip incomplete rounds
+      // A drawn card is another player's round. It settles bets, but it is not
+      // this player's score — it must never touch their averages or records.
+      if (draws[rp.id]) return
 
       p.rounds++
       p.roundDates.push(archDate)
@@ -159,11 +162,13 @@ function computeAnalytics(history: any[]) {
 
     roster.forEach((rp: any) => {
       const p = getP(rp.name)
+      p.entryFees += entryFee
+      // Excluded from the pot, so no buy-in and no skins.
+      if (draws[rp.id]) return
       const potShare = pay.skins.pot > 0 ? pay.skins.buyIn / pay.skins.pot : 0
       p.skinsBuyIn += pay.skins.buyIn
       p.skinsBuyInGross += pay.skins.grossPot * potShare
       p.skinsBuyInNet += pay.skins.netPot * potShare
-      p.entryFees += entryFee
       p.skinsWon += Number(pay.skins.gross[rp.name] || 0)
       p.skinsPerRound.push(Number(pay.skins.gross[rp.name] || 0))
     })
