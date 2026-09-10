@@ -301,6 +301,45 @@ export default function ScorerPage() {
  )}
  </div>
 
+ {/* Draw scores — visible summary so the feature is findable */}
+ {(Object.keys(draws).length > 0 || editMode) && (
+ <div className="px-2 mt-2">
+ <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl px-4 py-3">
+ <div className="flex items-center gap-2">
+ <Copy size={13} className="text-amber-400"/>
+ <p className="text-[11px] font-black text-zinc-400 tracking-widest">DRAW SCORES</p>
+ </div>
+ {Object.keys(draws).length > 0 ? (
+ <div className="mt-2 space-y-1">
+ {Object.entries(draws).map(([pid, d]) => (
+ <div key={pid} className="flex items-center gap-2 text-[11px]">
+ <span className="font-black text-amber-400">
+ {players.find((x:any)=>x.id===pid)?.name || '?'}
+ </span>
+ <span className="text-zinc-600 font-medium normal-case">is using</span>
+ <span className="font-black text-white">
+ {players.find((x:any)=>x.id===d.source)?.name || '?'}
+ </span>
+ <span className="text-zinc-700 font-medium normal-case">&middot; not in skins</span>
+ {editMode && (
+ <button onClick={() => clearDraw(pid)}
+ className="ml-auto text-zinc-600 hover:text-rose-400 transition-colors" aria-label="Clear draw">
+ <X size={12}/>
+ </button>
+ )}
+ </div>
+ ))}
+ </div>
+ ) : (
+ <p className="text-[10px] text-zinc-600 font-medium normal-case mt-1 leading-snug">
+ Someone missing today? Tap <span className="text-zinc-400">USE DRAW</span> under their
+ name below to copy another player&apos;s card.
+ </p>
+ )}
+ </div>
+ </div>
+ )}
+
  {/* If no teams (1v1/wheel), show all players in one card */}
  {teams.length === 0 && players.length > 0 && (
  <div className="bg-zinc-950 rounded-[2rem] border-2 border-zinc-800 overflow-hidden shadow-2xl">
@@ -459,6 +498,18 @@ export default function ScorerPage() {
  <td className="sticky left-0 bg-zinc-950 z-20 border-r border-zinc-800 px-4 py-3">
  <div className="font-black text-sm text-white leading-tight">{p.name}</div>
  <div className="text-[9px] text-zinc-600 font-black mt-0.5">HCP {p.handicap||0}</div>
+ {draws[p.id] ? (
+ <button onClick={() => clearDraw(p.id)}
+ className="mt-1 flex items-center gap-1 text-[9px] font-black text-amber-400 bg-amber-500/15 border border-amber-500/30 hover:border-amber-500 px-1.5 py-0.5 rounded-md transition-colors">
+ <Copy size={9}/> DRAW · {(players.find((x:any)=>x.id===draws[p.id].source)?.name||'?').split(' ')[0]}
+ <X size={9} className="ml-0.5"/>
+ </button>
+ ) : editMode ? (
+ <button onClick={() => { setDrawFor(p); setDrawSource('') }}
+ className="mt-1 flex items-center gap-1 text-[9px] font-black text-zinc-600 hover:text-amber-400 transition-colors">
+ <Copy size={9}/> USE DRAW
+ </button>
+ ) : null}
  </td>
  {Array.from({length:9},(_,i)=>holeOffset+i).map(idx => (
  <td key={idx} className="px-0.5 py-2 text-center">
