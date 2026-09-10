@@ -1,563 +1,812 @@
 "use client"
-import { useState, useEffect } from 'react'
+
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '@/components/AuthProvider'
+import { signInAsPlayer } from '@/lib/auth'
+import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
-import { ref, set, onValue, push } from 'firebase/database'
+import { ref, onValue, set, get, push } from 'firebase/database'
+import { useBlockedPlayers } from '@/lib/blocked'
 import {
- ArrowLeft, UserPlus, Trash2, Users, Check, Pencil,
- X, ChevronRight, AlertTriangle, CheckCircle2, RotateCcw, Plus
+ Shield, Zap, Users, BookOpen, ShieldAlert,
+ User, Lock, Eye, EyeOff, Archive, RefreshCw, PlayCircle, X,
+ Target, DollarSign, Trophy, History, Settings, BarChart3, Activity,
+ ChevronRight, Flag
 } from 'lucide-react'
 import Link from 'next/link'
 
-export default function RosterManager() {
- const [players, setPlayers] = useState<any[]>([])
- const [teams, setTeams] = useState<any[]>([])
 
- const [newPlayerName, setNewPlayerName] = useState("")
- const [newPlayerHcp, setNewPlayerHcp] = useState<string>("")
-
- const [editingHcp, setEditingHcp] = useState<string|null>(null)
- const [editingHcpValue, setEditingHcpValue] = useState(0)
-
- const [editingTeamName, setEditingTeamName] = useState<string|null>(null)
- const [editingTeamNameValue, setEditingTeamNameValue] = useState("")
-
- const [showTeamBuilder, setShowTeamBuilder] = useState(false)
- const [builderStep, setBuilderStep] = useState<'count'|'names'>('count')
- const [teamCount, setTeamCount] = useState(2)
- const [teamNames, setTeamNames] = useState(['Team 1', 'Team 2'])
-
- const [toast, setToast] = useState<string|null>(null)
+export default function LandingPage() {
+ const { user, role: authRole, loading: authLoading } = useAuth()
+ const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
+ // Shared player access — the group code is the password on a read-only account
+ const [showPlayerCode, setShowPlayerCode] = useState(false)
+ const [playerCode, setPlayerCode] = useState('')
+ const [playerErr, setPlayerErr] = useState('')
+ const [playerBusy, setPlayerBusy] = useState(false)
+ const [courseName, setCourseName] = useState('')
+ const [tripName, setTripName] = useState('')
+ const [currentDay, setCurrentDay] = useState('')
+ const [isMock, setIsMock] = useState(false)
+ const [activeMode, setActiveMode] = useState<string>('')
+ const [archiving, setArchiving] = useState(false)
+ const [archiveSuccess, setArchiveSuccess] = useState(false)
+ const [demoLoading, setDemoLoading] = useState(false)
+ const [showDemoModal, setShowDemoModal] = useState(false)
+ const [toast, setToast] = useState('')
+ const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
+ // Blocked names are managed in the Master Dashboard, not hardcoded.
+ const { isBlocked, blockedMessage } = useBlockedPlayers()
+ const [scorerCanSeeAnalytics, setScorerCanSeeAnalytics] = useState(true)
+ const [playerCanSeeAnalytics, setPlayerCanSeeAnalytics] = useState(false)
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
- const [showRosterPicker, setShowRosterPicker] = useState(false)
+ const [courseLibrary, setCourseLibrary] = useState<any[]>([])
+ const [history, setHistory] = useState<any[]>([])
+ const [modal, setModal] = useState<{
+ title: string
+ body: string
+ warning?: string
+ confirmLabel: string
+ cancelLabel?: string
+ danger?: boolean
+ onConfirm: () => void
+ onCancel?: () => void
+ } | null>(null)
+
+ const showModal = (opts: typeof modal) => setModal(opts)
+ const closeModal = () => setModal(null)
+
+
+ // Watch Firebase Auth — auto-login when authenticated
+ useEffect(() => {
+ if (authLoading) return
+  if (authRole === 'master') { setRole('admin'); return } // master → admin hub + dashboard button
+  if (authRole === 'scorer') { setRole('admin'); return } // scorer → admin hub
+ // Fall back to session for guests
+ const stored = sessionStorage.getItem('role')
+ if (stored === 'player') setRole('player')
+ }, [authRole, authLoading])
 
  useEffect(() => {
- onValue(ref(db,'tournament/roster'), snap => setPlayers(snap.val() ? Object.values(snap.val()) : []))
- onValue(ref(db,'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
- onValue(ref(db,'globalRoster'), snap => {
- if (snap.val()) setGlobalRoster(Object.values(snap.val()) as any[])
+ // Firebase data
+    onValue(ref(db,'analyticsFlags'), snap => {
+      const d = snap.val() || {}
+      if (d.scorer_access !== undefined) setScorerCanSeeAnalytics(!!d.scorer_access)
+      if (d.player_access !== undefined) setPlayerCanSeeAnalytics(!!d.player_access)
+    })
+ onValue(ref(db, 'tournament/course'), snap => {
+ if (snap.val()?.name) setCourseName(snap.val().name)
+ })
+ onValue(ref(db, 'tournament/meta'), snap => {
+ const m = snap.val() || {}
+ setTripName(m.tripName || '')
+ setCurrentDay(m.currentDay || '')
+ setIsMock(!!m.isMock)
+ setActiveMode(m.mode || '')
+ })
+ // Master data listeners
+ onValue(ref(db, 'globalRoster'), snap => {
+ if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
  else setGlobalRoster([])
+ })
+ onValue(ref(db, 'courseHistory'), snap => {
+ if (snap.val()) setCourseLibrary(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
+ else setCourseLibrary([])
+ })
+ onValue(ref(db, 'history'), snap => {
+ if (snap.val()) {
+ const items = Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})).sort((a:any,b:any)=>Number(b.id)-Number(a.id))
+ setHistory(items)
+ } else setHistory([])
  })
  }, [])
 
- const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(null), 2500) }
+ const choosePlayer = () => { setPlayerErr(''); setPlayerCode(''); setShowPlayerCode(true) }
 
- // ── LOAD FROM GLOBAL ROSTER ──────────────────────────────────
- const loadFromGlobalRoster = (rp: any) => {
- const already = players.find(p => p.name === rp.name)
- if (already) return showToast(`${rp.name} already in roster`)
- const pRef = push(ref(db,'tournament/roster'))
- set(pRef, { id: pRef.key, name: rp.name, handicap: rp.handicap || 0 })
- showToast(`✓ Added ${rp.name}`)
+ const submitPlayerCode = async () => {
+   const code = playerCode.trim()
+   if (!code) return
+   setPlayerBusy(true); setPlayerErr('')
+   try {
+     await signInAsPlayer(code)
+     sessionStorage.setItem('role', 'player')
+     setRole('player')
+     setShowPlayerCode(false)
+   } catch {
+     setPlayerErr('That code is not right. Ask the group admin.')
+   } finally {
+     setPlayerBusy(false)
+   }
  }
 
- const loadAllFromGlobalRoster = () => {
- let added = 0
- globalRoster.forEach(rp => {
- const already = players.find(p => p.name === rp.name)
- if (!already) {
- const pRef = push(ref(db,'tournament/roster'))
- set(pRef, { id: pRef.key, name: rp.name, handicap: rp.handicap || 0 })
- added++
- }
+
+ const archiveMatch = () => {
+ showModal({
+ title: 'Archive Match to History',
+ body: 'This saves the current match to History and closes it. All scores, payouts and results will be preserved.',
+ confirmLabel: 'Archive & Close',
+ cancelLabel: 'Not yet',
+ onConfirm: async () => {
+ closeModal()
+ setArchiving(true)
+ try {
+ const snap = await get(ref(db, 'tournament'))
+ if (snap.exists()) {
+ const data = snap.val()
+ await set(ref(db, `history/${Date.now()}`), {
+ ...data,
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:data.course?.name||'Quick Match' }
  })
- setShowRosterPicker(false)
- showToast(`✓ Added ${added} player${added !== 1 ? 's' : ''} from roster`)
  }
-
- // ── PLAYERS ───────────────────────────────────────────────────
- const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
- const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b))
-
- const addPlayer = () => {
- if (!newPlayerName.trim()) return
- if (isBlocked(newPlayerName)) {
- alert('⛔ Sam Silverman cannot be added to Blitz Board')
- setNewPlayerName('')
- return
- }
- const pRef = push(ref(db,'tournament/roster'))
- set(pRef, { id: pRef.key, name: newPlayerName.trim().toUpperCase(), handicap: Number(newPlayerHcp) || 0 })
- setNewPlayerName("")
- setNewPlayerHcp("")
- }
-
- const deletePlayer = (id: string) => {
- set(ref(db,`tournament/roster/${id}`), null)
- teams.forEach(t => {
- if ((t.playerIds||[]).includes(id)) {
- const updated = (t.playerIds||[]).filter((pid:string) => pid !== id)
- set(ref(db,`tournament/teams/${t.id}/playerIds`), updated.length ? updated : null)
- }
+ await set(ref(db, 'tournament'), null)
+ setArchiveSuccess(true)
+ setActiveMode('')
+ setTimeout(() => setArchiveSuccess(false), 3000)
+ } catch(e) { }
+ setArchiving(false)
+ },
+ onCancel: closeModal
  })
  }
 
- const saveHcp = async (id: string) => {
- await set(ref(db,`tournament/roster/${id}/handicap`), editingHcpValue)
- setEditingHcp(null)
- showToast('✓ Handicap updated')
- }
+  // ── DEMO ──────────────────────────────────────────────────────────
+  const DEMO_HOLES = [
+    {par:4,hcp:7},{par:3,hcp:15},{par:5,hcp:3},{par:4,hcp:11},
+    {par:4,hcp:1},{par:3,hcp:17},{par:5,hcp:5},{par:4,hcp:9},
+    {par:4,hcp:13},{par:4,hcp:4},{par:3,hcp:16},{par:5,hcp:2},
+    {par:3,hcp:18},{par:4,hcp:10},{par:4,hcp:6},{par:5,hcp:8},
+    {par:3,hcp:14},{par:4,hcp:12}
+  ]
+  const DEMO_PLAYERS = [
+    {name:'TIGER WOODS',       handicap:0,  scores:[4,2,4,3,4,3,5,3,4,4,3,4,2,4,4,5,3,4]},
+    {name:'RORY MCILROY',      handicap:3,  scores:[4,3,5,4,4,3,5,4,4,4,3,5,3,4,4,5,3,4]},
+    {name:'JON RAHM',          handicap:2,  scores:[5,3,4,4,5,3,5,3,4,4,2,4,3,4,4,5,3,4]},
+    {name:'SCOTTIE SCHEFFLER', handicap:1,  scores:[4,2,4,3,4,3,4,4,4,4,3,4,3,4,4,5,3,4]},
+    {name:'PHIL MICKELSON',    handicap:5,  scores:[5,3,5,4,5,4,5,4,4,5,3,5,3,5,4,5,3,5]},
+    {name:'JUSTIN THOMAS',     handicap:4,  scores:[5,3,5,4,4,3,5,4,4,4,3,5,3,4,5,5,3,4]},
+    {name:'BROOKS KOEPKA',     handicap:3,  scores:[4,3,5,4,5,4,5,4,4,5,3,5,3,4,4,5,4,4]},
+    {name:'DUSTIN JOHNSON',    handicap:2,  scores:[4,3,4,4,5,3,5,4,4,4,3,5,3,4,4,5,3,4]},
+  ]
 
- // ── TEAM NAME EDITING ─────────────────────────────────────────
- const startEditTeamName = (t: any) => {
- setEditingTeamName(t.id)
- setEditingTeamNameValue(t.name)
- }
+  const loadDemo = async () => {
+    const metaSnap = await get(ref(db,'tournament/meta'))
+    const meta = metaSnap.val()
+    if (meta && !meta.isMock && (meta.mode || meta.tripName)) {
+      showModal({
+        title: '⚠️ Match In Progress',
+        body: 'You have a real match currently active. Archive it to History first, or load the demo which will replace it.',
+        warning: 'Choosing "Archive & Demo" will save the current match to History first.',
+        confirmLabel: 'Archive & Load Demo',
+        cancelLabel: 'Cancel — Keep My Match',
+        danger: true,
+        onConfirm: async () => {
+          closeModal()
+          const snap = await get(ref(db,'tournament'))
+          if (snap.exists()) {
+            await set(ref(db,`history/${Date.now()}`), {
+              ...snap.val(),
+              _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+            })
+          }
+          setDemoLoading(true)
+          await runDemoLoad()
+        },
+        onCancel: closeModal
+      })
+      return
+    }
+    showModal({
+      title: 'Load Live Demo?',
+      body: 'Loads a sample match with 8 players, 4 teams, and all 4 match types fully scored — great for showing the app to someone new.',
+      confirmLabel: 'Load Demo',
+      cancelLabel: 'Cancel',
+      onConfirm: async () => { closeModal(); setDemoLoading(true); await runDemoLoad() },
+      onCancel: closeModal
+    })
+  }
 
- const saveTeamName = async (id: string) => {
- if (!editingTeamNameValue.trim()) return
- await set(ref(db,`tournament/teams/${id}/name`), editingTeamNameValue.trim())
- setEditingTeamName(null)
- showToast('✓ Team renamed')
- }
+  const runDemoLoad = async () => {
+    setDemoLoading(true)
+    try {
+      await set(ref(db,'tournament'), null)
+      await set(ref(db,'tournament/meta'), {isMock:true, mode:'match', currentDay:'Demo Day', totalDays:1})
+      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map(h=>h.par)})
+      const pidMap: Record<string,string> = {}
+      for (const p of DEMO_PLAYERS) {
+        const pRef = push(ref(db,'tournament/roster'))
+        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
+        pidMap[p.name] = pRef.key!
+      }
+      for (const p of DEMO_PLAYERS) {
+        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
+      }
+      const teamDefs = [
+        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
+        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
+        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
+        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
+      ]
+      for (const t of teamDefs) {
+        const tRef = push(ref(db,'tournament/teams'))
+        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map(n=>pidMap[n])})
+      }
+      await set(ref(db,'tournament/format'), {
+        name:"PGA Demo Round",
+        par3:[{type:'net'},{type:'net'},{type:'net'}],
+        par4:[{type:'net'},{type:'net'}],
+        par5:[{type:'net'},{type:'net'}],
+      })
+      const m1 = push(ref(db,'tournament/matchups'))
+      await set(m1, {id:m1.key, type:'PvP', sideA:'TIGER WOODS', sideB:'RORY MCILROY', nassau:5, press:5, autoPress:true, birdie:2, eagle:5, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:5, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      const m2 = push(ref(db,'tournament/matchups'))
+      await set(m2, {id:m2.key, type:'2v2', sideA:'TIGER WOODS', sideA2:'RORY MCILROY', sideB:'JON RAHM', sideB2:'SCOTTIE SCHEFFLER', nassau:10, press:10, autoPress:true, birdie:3, eagle:6, scoringType:'NET'})
+      const m3 = push(ref(db,'tournament/matchups'))
+      await set(m3, {id:m3.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:false, birdie:0, eagle:0, scoringType:'NET'})
+      const m4 = push(ref(db,'tournament/matchups'))
+      await set(m4, {id:m4.key, type:'Wheel', wheelPlayers:['TIGER WOODS','JON RAHM','PHIL MICKELSON','BROOKS KOEPKA'], wheelAmount:10, wheelFormat:'nassau', wheelNassau:10, wheelPress:5, wheelAutoPress:true, scoringType:'NET'})
+      await set(ref(db,'tournament/money'), {entryFee:50, skinsAllocation:20, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      setDemoLoading(false)
+      showToast('🎮 Demo loaded! Tiger, Rory, Rahm & friends at Augusta.')
+    } catch(e) {
+      console.error(e)
+      setDemoLoading(false)
+      showModal({ title:'Demo Failed', body:'Could not load the demo — check your internet connection and try again.', confirmLabel:'OK', onConfirm:closeModal })
+    }
+  }
 
- // ── ASSIGNMENT ────────────────────────────────────────────────
- const assignPlayerToTeam = (playerId: string, teamId: string) => {
- teams.forEach(t => {
- if ((t.playerIds||[]).includes(playerId)) {
- const updated = (t.playerIds||[]).filter((pid:string) => pid !== playerId)
- set(ref(db,`tournament/teams/${t.id}/playerIds`), updated.length ? updated : null)
- }
- })
- if (teamId !== 'none') {
- const target = teams.find(t => t.id === teamId)
- if (!target) return
- set(ref(db,`tournament/teams/${teamId}/playerIds`), [...(target.playerIds||[]), playerId])
- }
- }
+  const clearDemo = async () => {
+    await set(ref(db,'tournament'), null)
+    showToast('Demo cleared')
+  }
 
- const removeFromTeam = (playerId: string, teamId: string) => {
- const team = teams.find(t => t.id === teamId)
- if (!team) return
- const updated = (team.playerIds||[]).filter((pid:string) => pid !== playerId)
- set(ref(db,`tournament/teams/${teamId}/playerIds`), updated.length ? updated : null)
- }
+  const runTournamentDemo = async () => {
+    setDemoLoading(true)
+    try {
+      await set(ref(db,'tournament'), null)
+      await set(ref(db,'tournament/meta'), {
+        isMock:true, mode:'tournament', tripName:'Augusta Invitational',
+        currentDay:'Day 1', totalDays:3
+      })
+      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map((h:any)=>h.par)})
+      const pidMap: Record<string,string> = {}
+      for (const p of DEMO_PLAYERS) {
+        const pRef = push(ref(db,'tournament/roster'))
+        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
+        pidMap[p.name] = pRef.key!
+      }
+      for (const p of DEMO_PLAYERS) {
+        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
+      }
+      const teamDefs = [
+        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
+        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
+        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
+        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
+      ]
+      for (const t of teamDefs) {
+        const tRef = push(ref(db,'tournament/teams'))
+        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map((n:string)=>pidMap[n])})
+      }
+      await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      const m1 = push(ref(db,'tournament/matchups'))
+      await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:10, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      const m2 = push(ref(db,'tournament/matchups'))
+      await set(m2, {id:m2.key, type:'TvT', sideA:'Team Phil', sideB:'Team Brooks', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
+      setDemoLoading(false)
+      showToast('🏆 Tournament demo loaded!')
+    } catch(e) {
+      console.error(e)
+      setDemoLoading(false)
+      showToast('Demo failed — check connection')
+    }
+  }
 
- const getPlayerTeam = (playerId: string) => teams.find(t => (t.playerIds||[]).includes(playerId))
 
- // ── TEAM BUILDER ──────────────────────────────────────────────
- const openTeamBuilder = () => {
- setTeamCount(2); setTeamNames(['Team 1','Team 2']); setBuilderStep('count'); setShowTeamBuilder(true)
- }
-
- const handleTeamCountSelect = (n: number) => {
- setTeamCount(n)
- setTeamNames(Array.from({length:n}, (_,i) => `Team ${i+1}`))
- }
-
- const createTeams = async () => {
- await set(ref(db,'tournament/teams'), null)
- for (const name of teamNames) {
- const tRef = push(ref(db,'tournament/teams'))
- await set(tRef, { id: tRef.key, name: name.trim() || `Team ${teamNames.indexOf(name)+1}`, playerIds: [] })
- }
- setShowTeamBuilder(false)
- showToast(`✓ ${teamCount} teams created`)
- }
-
- const playerCount = players.length
- const isEven = playerCount > 0 && playerCount % teamCount === 0
- const perTeam = Math.floor(playerCount / teamCount)
- const assignedIds = new Set(teams.flatMap(t => t.playerIds || []))
- const unassigned = players.filter(p => !assignedIds.has(p.id))
-
+ // Show loading while Firebase Auth resolves
+ if (authLoading) {
  return (
- <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans">
-
- {toast && (
- <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-800 border border-zinc-600 text-white text-sm font-black px-6 py-3 rounded-2xl shadow-2xl">
- {toast}
+ <div className="min-h-screen bg-black flex items-center justify-center">
+ <div className="text-zinc-700 text-sm font-medium">Loading...</div>
  </div>
- )}
+ )
+ }
 
- <Link href="/setup/admin"className="text-emerald-500 font-black mb-6 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
- <ArrowLeft size={18}/> CHECKLIST
+ // ── ROLE SELECTION SCREEN ──────────────────────────────────────
+ if (role === 'none') {
+ return (
+ <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 font-sans">
+ <div className="w-full max-w-sm space-y-8">
+
+ {/* Logo */}
+ <div className="text-center">
+ <h1 className="text-6xl font-black tracking-tighter leading-none mb-1">
+ BLITZ <span className="text-emerald-500">BOARD</span>
+ </h1>
+ <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
+ GOLF TOURNAMENT SCORING
+ </p>
+ <p className="text-zinc-700 text-[10px] font-medium normal-case mt-1">By Jared Friend</p>
+ </div>
+
+ {/* Role choice */}
+ <div className="space-y-3">
+ <p className="text-zinc-600 text-[10px] font-black tracking-[0.3em] text-center">WHO ARE YOU?</p>
+
+ {showPlayerCode ? (
+ <div className="w-full bg-zinc-900 border-2 border-emerald-500/40 p-6 rounded-[2rem] space-y-3">
+   <div>
+     <div className="text-xl font-black text-white">Enter group code</div>
+     <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
+       Ask the group admin if you do not have it
+     </div>
+   </div>
+   <input
+     type="password"
+     autoFocus
+     value={playerCode}
+     onChange={e => setPlayerCode(e.target.value)}
+     onKeyDown={e => { if (e.key === 'Enter') submitPlayerCode() }}
+     placeholder="Group code"
+     className="w-full bg-black border-2 border-zinc-700 focus:border-emerald-500 p-4 rounded-2xl font-black text-white outline-none transition-colors"
+   />
+   {playerErr && <p className="text-[11px] font-black text-rose-400">{playerErr}</p>}
+   <div className="flex gap-2">
+     <button
+       onClick={submitPlayerCode}
+       disabled={playerBusy || !playerCode.trim()}
+       className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 rounded-2xl font-black transition-colors"
+     >
+       {playerBusy ? 'Checking...' : 'Continue'}
+     </button>
+     <button
+       onClick={() => setShowPlayerCode(false)}
+       className="px-5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl font-black transition-colors"
+     >
+       Cancel
+     </button>
+   </div>
+ </div>
+ ) : (
+ <button
+ onClick={choosePlayer}
+ className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
+ >
+ <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/30 transition-colors">
+ <User size={28} className="text-emerald-400"/>
+ </div>
+ <div className="text-left">
+ <div className="text-xl font-black text-white">I'm a Player</div>
+ <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
+ View scores, results & payouts
+ </div>
+ </div>
+ <ChevronRight size={20} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
+ </button>
+ )}
+ </div>
+ <Link href="/login"
+ className="w-full flex items-center gap-4 bg-zinc-800/40 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-5 rounded-[2rem] transition-all group">
+ <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
+ <Shield size={24} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
+ </div>
+ <div className="text-left flex-1">
+ <div className="text-xl font-black text-zinc-400 group-hover:text-white">Admin Sign In</div>
+ <div className="text-[10px] font-black text-zinc-600 tracking-widest normal-case mt-0.5">Sign in with email & password</div>
+ </div>
+ <ChevronRight size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
  </Link>
 
- <h1 className="text-4xl font-black tracking-tight mb-8">Roster & Teams</h1>
 
- <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10">
 
- {/* ── LEFT: PLAYERS ── */}
- <section>
- <div className="flex items-center gap-3 mb-5">
- <UserPlus size={22} className="text-emerald-500"/>
- <h2 className="text-2xl font-black text-emerald-400">Players</h2>
- <span className="text-zinc-600 text-[10px] font-black tracking-widest ml-auto">{playerCount} TOTAL</span>
- </div>
 
- {/* Add form */}
- <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 space-y-3 mb-5">
- <input
- value={newPlayerName}
- onChange={e => setNewPlayerName(e.target.value)}
- onKeyDown={e => e.key === 'Enter' && addPlayer()}
- className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none transition-colors"
- placeholder="PLAYER NAME"
- />
- <div className="flex gap-3">
- <input
- type="number"
- value={newPlayerHcp}
- onChange={e => setNewPlayerHcp(e.target.value)}
- onKeyDown={e => e.key === 'Enter' && addPlayer()}
- className="w-28 bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-emerald-400 outline-none transition-colors text-center"
- placeholder="HCP"
- min={0} max={54}
- />
- <button onClick={addPlayer}
- className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black transition-colors flex items-center justify-center gap-2">
- <Plus size={16}/> ADD PLAYER
- </button>
- </div>
- </div>
-
- {/* Load from global roster */}
- {globalRoster.length > 0 && (
- <div>
- <button onClick={() => setShowRosterPicker(!showRosterPicker)}
- className="w-full flex items-center justify-between bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500 px-4 py-3 rounded-2xl transition-all group">
- <span className="flex items-center gap-2 text-zinc-500 group-hover:text-emerald-400 transition-colors text-sm font-semibold">
- <Users size={15}/> Load from Roster ({globalRoster.length} saved)
+ <Link href="/guide"
+ className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
+ <BookOpen size={14} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+ <span className="font-black text-xs text-zinc-600 group-hover:text-emerald-400 transition-colors tracking-widest">
+ EXPLORE HOW BLITZ BOARD WORKS
  </span>
- <span className="text-zinc-700 text-xs">{showRosterPicker ? '▲' : '▼'}</span>
- </button>
- {showRosterPicker && (
- <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 mt-1 space-y-2">
- <button onClick={loadAllFromGlobalRoster}
- className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2">
- <Users size={14}/> Add All from Roster
- </button>
- <div className="border-t border-zinc-800 pt-2 space-y-1">
- {globalRoster.map((rp: any) => {
- const alreadyAdded = players.some(p => p.name === rp.name)
- return (
- <button key={rp.id} onClick={() => !alreadyAdded && loadFromGlobalRoster(rp)}
- disabled={alreadyAdded}
- className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all ${
- alreadyAdded ? 'text-zinc-700 cursor-not-allowed' : 'text-white hover:bg-zinc-800 hover:text-emerald-400'
+ </Link>
+ <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
+ BLITZ BOARD · {new Date().getFullYear()}
+ 
+ </p>
+
+ </div>
+
+ {/* In-app confirm modal — no popup blockers */}
+ {modal && (
+ <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/80 backdrop-blur-sm overflow-y-auto">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-[2rem] border border-zinc-700 shadow-2xl overflow-hidden">
+ <div className="p-6 space-y-3">
+ <h2 className="font-bold text-lg text-white">{modal.title}</h2>
+ <p className="text-zinc-400 text-sm font-medium normal-case leading-relaxed">{modal.body}</p>
+ {modal.warning && (
+ <div className={`flex items-start gap-2 rounded-xl p-3 text-xs font-medium normal-case leading-relaxed ${
+ modal.danger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
  }`}>
- <span className="font-semibold">{rp.name}</span>
- <span className={`text-xs font-semibold ${alreadyAdded ? 'text-zinc-700' : 'text-emerald-500'}`}>
- {alreadyAdded ? '✓ Added' : `HCP ${rp.handicap ?? 0}`}
- </span>
+ <span className="flex-shrink-0">⚠️</span>
+ <span>{modal.warning}</span>
+ </div>
+ )}
+ </div>
+ <div className="px-6 pb-6 flex flex-col gap-2">
+ <button onClick={modal.onConfirm}
+ className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-colors ${
+ modal.danger ? 'bg-rose-500 hover:bg-rose-400 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
+ }`}>
+ {modal.confirmLabel}
  </button>
+ {modal.cancelLabel && (
+ <button onClick={modal.onCancel || closeModal}
+ className="w-full py-3.5 rounded-2xl font-bold text-sm text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 transition-colors">
+ {modal.cancelLabel}
+ </button>
+ )}
+ </div>
+ </div>
+ </div>
+ )}
+
+ </div>
  )
- })}
+ }
+
+ // ── PLAYER HUB ─────────────────────────────────────────────────
+ if (role === 'player') {
+ const playerItems = [
+ { title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
+ { title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"},
+ { title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"},
+ { title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"},
+ ...(playerCanSeeAnalytics ? [{ title:"Analytics", desc:"Stats, records & betting trends", path:"/master/analytics", icon:<BarChart3 className="text-purple-400"size={28}/>, color:"border-purple-800/20 hover:border-purple-600", accent:"text-purple-400"}] : []),
+ ]
+
+ return (
+ <div className="min-h-screen bg-zinc-950 text-white font-sans">
+ <div className="max-w-2xl mx-auto px-4 py-10">
+
+ {/* Header */}
+ <header className="mb-10 border-b-4 border-emerald-500 pb-6">
+ <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
+ BLITZ <span className="text-emerald-500 text-4xl">BOARD</span>
+ </h1>
+ <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
+ {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
+ {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-400">{tripName}</span></>}
+ {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-400">{currentDay}</span></>}
+ {isMock && <span className="text-amber-400">· DEMO</span>}
  </div>
+ </header>
+ {/* Demo banner - purple for pro golfer demo */}
+ {isMock && (
+ <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
+ <div>
+ <p className="text-purple-400 font-bold text-sm">🎮 Demo Active</p>
+ <p className="text-zinc-500 text-xs font-medium normal-case">Tiger, Rory & friends at Augusta National</p>
+ </div>
+ <button onClick={clearDemo}
+ className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 hover:border-rose-500 text-zinc-400 hover:text-rose-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
+ <X size={12}/> Clear Demo
+ </button>
  </div>
  )}
+ {/* Old demo banner - keep for backward compat */}
+ {false && isMock && (
+ <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
+ <div>
+ <p className="text-amber-400 font-bold text-sm">Demo Mode</p>
+ <p className="text-zinc-500 text-xs font-medium normal-case">Sample match — 1v1, 2v2, Team, Wheel</p>
+ </div>
+ <button onClick={clearDemo}
+ className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 hover:border-rose-500 text-zinc-400 hover:text-rose-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
+ <X size={12}/> Exit Demo
+ </button>
  </div>
  )}
 
- {/* Player list */}
- <div className="space-y-2">
- {players.length === 0 && (
- <div className="border border-dashed border-zinc-800 rounded-2xl p-8 text-center">
- <p className="text-zinc-700 text-xs font-black">ADD PLAYERS ABOVE TO GET STARTED</p>
+
+ {/* Player nav — uniform pill style */}
+ <div className="space-y-3 mb-6">
+ {playerItems.map(item => (
+ <Link key={item.title} href={item.path}
+ className={`group w-full bg-zinc-900/40 p-4 rounded-2xl border ${item.color} transition-all active:scale-[0.99] flex items-center gap-4`}>
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ {React.cloneElement(item.icon, { size: 20 })}
  </div>
- )}
- {players.map(p => {
- const playerTeam = getPlayerTeam(p.id)
- const isEditingThisHcp = editingHcp === p.id
- return (
- <div key={p.id} className={`rounded-2xl border p-4 transition-all ${
- playerTeam ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-900/50 border-zinc-800'
- }`}>
- <div className="flex items-center gap-3">
  <div className="flex-1 min-w-0">
- <div className="flex items-center gap-2 flex-wrap mb-1.5">
- <span className="font-black text-base">{p.name}</span>
- {playerTeam && (
- <span className="text-[9px] font-black bg-blue-600/20 text-blue-300 px-2 py-0.5 rounded-lg border border-blue-500/20">
- {playerTeam.name}
- </span>
- )}
- {!playerTeam && teams.length > 0 && (
- <span className="text-[9px] font-black bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-lg border border-amber-500/20">
- UNASSIGNED
- </span>
- )}
+ <h2 className={`text-base font-bold leading-tight group-hover:${item.accent} transition-colors`}>{item.title}</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">{item.desc}</p>
  </div>
- {isEditingThisHcp ? (
- <div className="flex items-center gap-2">
- <span className="text-zinc-500 text-[10px] font-black">HCP</span>
- <input
- type="number"
- value={editingHcpValue}
- onChange={e => setEditingHcpValue(Number(e.target.value))}
- onKeyDown={e => { if(e.key==='Enter') saveHcp(p.id); if(e.key==='Escape') setEditingHcp(null) }}
- className="w-16 bg-black border border-emerald-500 text-emerald-400 px-2 py-1 rounded-lg font-black text-sm text-center outline-none"
- autoFocus min={0} max={54}
- />
- <button onClick={() => saveHcp(p.id)} className="text-emerald-400 hover:text-emerald-300"><Check size={14}/></button>
- <button onClick={() => setEditingHcp(null)} className="text-zinc-600 hover:text-zinc-400"><X size={14}/></button>
+ <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:border-zinc-600 transition-all flex-shrink-0">
+ <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
  </div>
- ) : (
- <button onClick={() => { setEditingHcp(p.id); setEditingHcpValue(p.handicap||0) }}
- className="flex items-center gap-1.5 text-emerald-500 text-xs font-black hover:text-emerald-400 transition-colors group">
- <span>HCP {p.handicap ?? 0}</span>
- <Pencil size={10} className="opacity-40 group-hover:opacity-100 transition-opacity"/>
- </button>
- )}
- </div>
-
- {/* Team assignment — radio-style buttons, NOT a dropdown */}
- {teams.length > 0 && !isEditingThisHcp && (
- <div className="flex gap-1.5 flex-wrap justify-end">
- {teams.map(t => (
- <button
- key={t.id}
- onClick={() => assignPlayerToTeam(p.id, playerTeam?.id === t.id ? 'none' : t.id)}
- className={`px-3 py-1.5 rounded-xl font-black text-xs transition-all border ${
- playerTeam?.id === t.id
- ? 'bg-blue-600 border-blue-500 text-white'
- : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white'
- }`}
- >
- {t.name}
- </button>
+ </Link>
  ))}
  </div>
+
+ {/* Guide + Exit — uniform pill style */}
+ <div className="space-y-3">
+ <Link href="/guide"
+ className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ <BookOpen size={20} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
+ </div>
+ <div className="flex-1 min-w-0">
+ <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How Blitz Board Works</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Guide, tips & feature walkthrough</p>
+ </div>
+ <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:border-zinc-600 transition-all">
+ <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
+ </div>
+ </Link>
+ <button onClick={async () => {
+ sessionStorage.removeItem('role')
+ if (user) await signOut()
+ setRole('none')
+ }}
+ className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
+ </div>
+ <div className="flex-1 min-w-0">
+ <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Exit</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Return to home screen</p>
+ </div>
+ </button>
+ </div>
+
+ {/* Demo type modal */}
+ {showDemoModal && (
+ <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
+ <div className="text-center">
+ <div className="text-3xl mb-2">🎮</div>
+ <h2 className="font-black text-lg">Load Demo Round</h2>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-1">8 pro golfers at Augusta National with all bet types pre-loaded.</p>
+ </div>
+ {isMock && (
+ <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+ <p className="text-amber-400 text-xs font-semibold">⚠️ Demo already active</p>
+ <button onClick={async () => { await clearDemo(); setShowDemoModal(false) }}
+ className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
+ </div>
+ )}
+ <div className="space-y-2">
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
+ <div className="font-black">⚡ Quick Match Demo</div>
+ <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
+ <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
+ </button>
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
+ <div className="font-black">🏆 Tournament Demo</div>
+ <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ </button>
+ </div>
+ <button onClick={() => setShowDemoModal(false)}
+ className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
+ Cancel
+ </button>
+ </div>
+ </div>
  )}
 
- <button onClick={() => deletePlayer(p.id)}
- className="text-zinc-700 hover:text-rose-500 transition-colors flex-shrink-0 ml-1">
- <Trash2 size={16}/>
- </button>
  </div>
  </div>
  )
- })}
- </div>
- </section>
-
- {/* ── RIGHT: TEAMS ── */}
- <section>
- <div className="flex items-center gap-3 mb-5">
- <Users size={22} className="text-blue-500"/>
- <h2 className="text-2xl font-black text-blue-400">Teams</h2>
- <button onClick={openTeamBuilder}
- className="ml-auto flex items-center gap-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 px-3 py-1.5 rounded-xl font-black text-[10px] transition-all">
- <RotateCcw size={11}/>
- {teams.length > 0 ? 'REBUILD TEAMS' : 'CREATE TEAMS'}
- </button>
- </div>
-
- {teams.length === 0 ? (
- <div className="border-2 border-dashed border-zinc-800 rounded-2xl p-12 text-center">
- <Users size={40} className="text-zinc-700 mx-auto mb-4"/>
- <p className="text-zinc-600 text-xs font-black mb-5">NO TEAMS CREATED YET</p>
- <button onClick={openTeamBuilder}
- className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black text-sm transition-colors inline-flex items-center gap-2">
- <Plus size={16}/> CREATE TEAMS
- </button>
- </div>
- ) : (
- <div className="space-y-5">
-
- {/* Status banner */}
- <div className={`rounded-xl px-4 py-3 border flex items-center gap-2 ${
- unassigned.length === 0 && players.length > 0
- ? 'bg-emerald-500/10 border-emerald-500/30'
- : 'bg-zinc-900 border-zinc-800'
- }`}>
- {unassigned.length === 0 && players.length > 0
- ? <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0"/>
- : <AlertTriangle size={14} className="text-amber-400 flex-shrink-0"/>
  }
- <p className={`text-xs font-black normal-case ${
- unassigned.length === 0 && players.length > 0 ? 'text-emerald-400' : 'text-amber-400'
- }`}>
- {players.length === 0
- ? 'Add players on the left to assign them'
- : unassigned.length === 0
- ? `All ${players.length} players assigned across ${teams.length} teams ✓`
- : `${unassigned.length} player${unassigned.length>1?'s':''} not yet assigned`
- }
- </p>
- </div>
 
- {/* Team cards */}
- {teams.map(t => {
- const members = (t.playerIds||[])
- .map((pid:string) => players.find(p => p.id === pid))
- .filter(Boolean)
- const isEditingThisName = editingTeamName === t.id
+ // ── ADMIN HUB ──────────────────────────────────────────────────
+  // Grouped by what you are actually doing: play, start, keep, review.
+  const playItems = [
+    { title:"Live Scorer",    desc:"Enter hole-by-hole scores", path:"/scorer",  icon:<Target size={20} className="text-emerald-400"/>,   hover:"hover:border-emerald-500/60" },
+    { title:"Results",        desc:"Leaderboard & teams",       path:"/results", icon:<Trophy size={20} className="text-[#33CCFF]"/>,     hover:"hover:border-blue-400/60" },
+    { title:"Payouts",        desc:"Side bets & evidence",      path:"/payouts", icon:<DollarSign size={20} className="text-amber-400"/>, hover:"hover:border-amber-400/60" },
+  ]
+  const dataItems = [
+    { title:"Roster",  desc:"Permanent player list", path:"/roster",  icon:<Users size={20} className="text-emerald-400"/>, hover:"hover:border-emerald-600/60" },
+    { title:"Courses", desc:"Saved · scan cards",    path:"/courses", icon:<Flag size={20} className="text-teal-400"/>,     hover:"hover:border-teal-600/60" },
+  ]
+  const reviewItems = [
+    { title:"History", desc:"Past trips & rounds", path:"/history", icon:<Archive size={20} className="text-blue-400"/>, hover:"hover:border-blue-600/60" },
+    ...((authRole === 'master' || scorerCanSeeAnalytics) ? [
+    { title:"Analytics", desc:"Stats & betting trends", path:"/master/analytics", icon:<BarChart3 size={20} className="text-purple-400"/>, hover:"hover:border-purple-600/60" }] : []),
+  ]
+
+  // A round is live when there is a mode set and we are not in demo.
+  const liveRound = !isMock && !!activeMode
+  const liveLabel = activeMode === 'match' ? 'Quick match' : (tripName || 'Tournament')
+
+  const Tile = ({ item, wide = false }: { item:any, wide?:boolean }) => (
+    <Link href={item.path}
+      className={`group bg-zinc-900/40 border border-zinc-800 ${item.hover} rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${wide ? 'col-span-2' : ''}`}>
+      {item.icon}
+      <h2 className="text-[15px] font-bold leading-tight mt-1.5">{item.title}</h2>
+      <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">{item.desc}</p>
+    </Link>
+  )
+
+  const GroupLabel = ({ children }: { children:React.ReactNode }) => (
+    <p className="text-[9px] font-black text-zinc-600 tracking-[0.2em] mb-2">{children}</p>
+  )
+
+  const StartGroup = () => (
+    <div className="mb-5">
+      <GroupLabel>START A ROUND</GroupLabel>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Link href="/setup"
+          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
+            activeMode && activeMode !== 'match' ? 'border-rose-500/60 bg-rose-950/10' : 'border-rose-500/25 hover:border-rose-500/70'}`}>
+          <ShieldAlert size={20} className="text-rose-400"/>
+          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Tournament</h2>
+          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Multi-day &amp; skins</p>
+        </Link>
+        <Link href="/match"
+          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
+            activeMode === 'match' ? 'border-amber-500/60 bg-amber-950/10' : 'border-amber-500/25 hover:border-amber-500/70'}`}>
+          <Zap size={20} className="text-amber-400"/>
+          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Quick match</h2>
+          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Casual · just bets</p>
+        </Link>
+        {!isMock ? (
+          <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
+            className="col-span-2 text-left bg-zinc-900/30 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl px-3.5 py-2.5 transition-all active:scale-[0.99] flex items-center gap-2.5 disabled:opacity-50">
+            <PlayCircle size={16} className="text-purple-400 flex-shrink-0"/>
+            <span className="text-[13px] font-bold text-purple-400">{demoLoading ? 'Loading demo…' : 'Demo round'}</span>
+            <span className="text-[11px] text-zinc-600 font-medium normal-case truncate">Tiger · Rory · Augusta</span>
+          </button>
+        ) : (
+          <div className="col-span-2 bg-purple-500/10 border border-purple-500/30 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-purple-400 font-black text-[13px]">Demo active</p>
+              <p className="text-zinc-500 text-[10px] font-medium normal-case truncate">Augusta National · 8 pros</p>
+            </div>
+            <button onClick={clearDemo}
+              className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-[11px] font-black transition-all flex-shrink-0">
+              <X size={12}/> EXIT
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  const PlayGroup = () => (
+    <div className="mb-5">
+      <GroupLabel>DURING PLAY</GroupLabel>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Tile item={playItems[0]} wide={liveRound}/>
+        <Tile item={playItems[1]}/>
+        <Tile item={playItems[2]}/>
+      </div>
+    </div>
+  )
+
 
  return (
- <div key={t.id} className="bg-zinc-900 rounded-[1.75rem] border-2 border-zinc-800 overflow-hidden">
+ <div className="min-h-screen bg-zinc-950 text-white font-sans">
+ <div className="max-w-2xl mx-auto px-4 py-10">
 
- {/* Team header */}
- <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-3">
- <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"/>
-
- {/* Editable team name */}
- {isEditingThisName ? (
- <div className="flex items-center gap-2 flex-1">
- <input
- value={editingTeamNameValue}
- onChange={e => setEditingTeamNameValue(e.target.value)}
- onKeyDown={e => { if(e.key==='Enter') saveTeamName(t.id); if(e.key==='Escape') setEditingTeamName(null) }}
- className="flex-1 bg-black border border-blue-500 text-white px-3 py-1.5 rounded-xl font-black text-sm outline-none"
- autoFocus
- />
- <button onClick={() => saveTeamName(t.id)} className="text-emerald-400 hover:text-emerald-300"><Check size={16}/></button>
- <button onClick={() => setEditingTeamName(null)} className="text-zinc-600 hover:text-zinc-400"><X size={16}/></button>
+ {/* Header */}
+ <header className="mb-10 border-b-4 border-emerald-500 pb-6">
+ <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
+ BLITZ <span className="text-emerald-500 text-4xl">BOARD</span>
+ </h1>
+ <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
+ {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
+ {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-400">{tripName}</span></>}
+ {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-400">{currentDay}</span></>}
+ {isMock && <span className="text-amber-400">· DEMO</span>}
+ <span className="text-zinc-700">·</span>
+ <span className="text-rose-500 flex items-center gap-1"><ShieldAlert size={10}/> ADMIN</span>
+ {authRole === 'master' && (
+ <Link href="/master" className="ml-auto flex items-center gap-1 text-emerald-500 hover:text-emerald-400 transition-colors">
+ <Shield size={11}/> MASTER
+ </Link>
+ )}
  </div>
- ) : (
- <button onClick={() => startEditTeamName(t)}
- className="flex items-center gap-2 group flex-1 text-left">
- <span className="font-black text-base text-white group-hover:text-blue-400 transition-colors">{t.name}</span>
- <Pencil size={12} className="text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity"/>
+ </header>
+
+             {/* Live round banner — the "you are here" */}
+            {liveRound && (
+              <Link href={activeMode === 'match' ? '/match' : '/setup'}
+                className="w-full bg-emerald-500/10 border-2 border-emerald-500/40 hover:border-emerald-500 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3 transition-all active:scale-[0.99] block">
+                <Trophy size={18} className="text-emerald-400 flex-shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-emerald-400 truncate">
+                    {liveLabel}{currentDay ? ` · ${currentDay}` : ''}
+                  </p>
+                  <p className="text-[11px] text-emerald-600/80 font-medium normal-case truncate">
+                    {courseName || 'Tap to continue'} · in progress
+                  </p>
+                </div>
+                <ChevronRight size={16} className="text-emerald-500 flex-shrink-0"/>
+              </Link>
+            )}
+
+            {/* Mid-round, the scorer matters more than starting something new */}
+            {liveRound ? <><PlayGroup/><StartGroup/></> : <><StartGroup/><PlayGroup/></>}
+
+            <div className="mb-5">
+              <GroupLabel>YOUR DATA</GroupLabel>
+              <div className="grid grid-cols-2 gap-2.5">
+                {dataItems.map(item => <Tile key={item.title} item={item}/>)}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <GroupLabel>REVIEW</GroupLabel>
+              <div className="grid grid-cols-2 gap-2.5">
+                {reviewItems.map(item => <Tile key={item.title} item={item}/>)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 mb-6">
+              <Link href="/guide"
+                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
+                <BookOpen size={13}/> How it works
+              </Link>
+              <button onClick={async () => {
+                sessionStorage.removeItem('role')
+                if (user) await signOut()
+                setRole('none')
+              }}
+                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
+                <RefreshCw size={13}/> Exit
+              </button>
+            </div>
+
+{/* Demo type modal */}
+ {showDemoModal && (
+ <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
+ <div className="text-center">
+ <div className="text-3xl mb-2">🎮</div>
+ <h2 className="font-black text-lg">Load Demo Round</h2>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-1">8 pro golfers at Augusta National with all bet types pre-loaded.</p>
+ </div>
+ {isMock && (
+ <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+ <p className="text-amber-400 text-xs font-semibold">⚠️ Demo already active</p>
+ <button onClick={async () => { await clearDemo(); setShowDemoModal(false) }}
+ className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
+ </div>
+ )}
+ <div className="space-y-2">
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
+ <div className="font-black">⚡ Quick Match Demo</div>
+ <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
+ <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
  </button>
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
+ <div className="font-black">🏆 Tournament Demo</div>
+ <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ </button>
+ </div>
+ <button onClick={() => setShowDemoModal(false)}
+ className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
+ Cancel
+ </button>
+ </div>
+ </div>
  )}
 
- <span className="text-zinc-600 text-[10px] font-black flex-shrink-0">{members.length} PLAYERS</span>
- <button onClick={() => set(ref(db,`tournament/teams/${t.id}`), null)}
- className="text-zinc-700 hover:text-rose-500 transition-colors flex-shrink-0">
- <X size={18}/>
- </button>
- </div>
-
- {/* Members */}
- <div className="p-4 space-y-2">
- {members.map((p:any) => (
- <div key={p.id} className="flex items-center justify-between bg-black rounded-xl px-4 py-3 border border-zinc-800">
- <div className="flex items-center gap-3">
- <div className="w-1.5 h-1.5 rounded-full bg-blue-500"/>
- <span className="font-black text-sm text-white">{p.name}</span>
- <span className="text-zinc-500 text-[10px] font-black">HCP {p.handicap??0}</span>
- </div>
- <button onClick={() => removeFromTeam(p.id, t.id)}
- className="text-zinc-700 hover:text-rose-500 transition-colors">
- <X size={14}/>
- </button>
- </div>
- ))}
-
- {members.length === 0 && (
- <p className="text-zinc-700 text-[10px] font-black text-center py-3">
- NO PLAYERS — ASSIGN FROM THE LEFT
- </p>
- )}
  </div>
  </div>
  )
- })}
- </div>
- )}
- </section>
- </div>
 
- {/* ── TEAM BUILDER MODAL ── */}
- {showTeamBuilder && (
- <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
- <div className="w-full max-w-md bg-zinc-900 rounded-[2.5rem] border-2 border-zinc-700 shadow-2xl overflow-hidden">
- <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
- <div className="flex items-center gap-3">
- <Users size={20} className="text-blue-400"/>
- <h2 className="font-black text-lg">
- {builderStep === 'count' ? 'How Many Teams?' : 'Name Your Teams'}
- </h2>
- </div>
- <button onClick={() => setShowTeamBuilder(false)}><X size={20} className="text-zinc-500 hover:text-white"/></button>
- </div>
 
- <div className="p-6 space-y-5">
- {builderStep === 'count' && (
- <>
- <div>
- <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-3">NUMBER OF TEAMS</label>
- <div className="flex gap-3">
- {[2,3,4].map(n => (
- <button key={n} onClick={() => handleTeamCountSelect(n)}
- className={`flex-1 py-5 rounded-2xl font-black text-3xl border-2 transition-all ${
- teamCount === n ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'
- }`}>{n}</button>
- ))}
- </div>
- </div>
-
- {/* Distribution preview */}
- <div className={`rounded-2xl p-4 border ${
- playerCount === 0 ? 'bg-zinc-900 border-zinc-800' :
- isEven ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'
- }`}>
- <div className="flex items-center gap-2">
- {playerCount > 0 && (isEven
- ? <CheckCircle2 size={14} className="text-emerald-400"/>
- : <AlertTriangle size={14} className="text-amber-400"/>
- )}
- <p className={`text-xs font-black normal-case ${
- playerCount === 0 ? 'text-zinc-500' : isEven ? 'text-emerald-400' : 'text-amber-400'
- }`}>
- {playerCount === 0
- ? `${teamCount} teams will be created — add players after`
- : isEven
- ? `${playerCount} players ÷ ${teamCount} teams = ${perTeam} per team ✓`
- : `${playerCount} players ÷ ${teamCount} teams = uneven (${perTeam}-${perTeam+1} per team)`
- }
- </p>
- </div>
- </div>
-
- {teams.length > 0 && (
- <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">
- <AlertTriangle size={14} className="text-rose-400 flex-shrink-0"/>
- <p className="text-rose-400 text-[10px] font-black normal-case">
- Replaces existing {teams.length} teams — player assignments will be cleared
- </p>
- </div>
- )}
-
- <button onClick={() => setBuilderStep('names')}
- className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2 transition-colors">
- NEXT — NAME TEAMS <ChevronRight size={16}/>
- </button>
- </>
- )}
-
- {builderStep === 'names' && (
- <>
- <div>
- <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-3">TEAM NAMES — TAP TO EDIT</label>
- <div className="space-y-3">
- {teamNames.map((name, i) => (
- <div key={i} className="flex items-center gap-3">
- <span className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-black text-sm flex-shrink-0">
- {i+1}
- </span>
- <input
- value={name}
- onChange={e => {
- const updated = [...teamNames]
- updated[i] = e.target.value
- setTeamNames(updated)
- }}
- className="flex-1 bg-black border border-zinc-700 focus:border-blue-500 p-3 rounded-xl font-black text-white outline-none transition-colors"
- placeholder={`Team ${i+1}`}
- />
- </div>
- ))}
- </div>
- </div>
-
- <div className="flex gap-3">
- <button onClick={() => setBuilderStep('count')}
- className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-2xl font-black text-sm transition-colors">
- ← BACK
- </button>
- <button onClick={createTeams}
- className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-2xl font-black text-sm transition-colors flex items-center justify-center gap-2">
- <Check size={16}/> CREATE TEAMS
- </button>
- </div>
- </>
- )}
- </div>
- </div>
- </div>
- )}
- </div>
- )
 }

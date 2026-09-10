@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, get, push, onValue } from 'firebase/database'
+import { useBlockedPlayers } from '@/lib/blocked'
 import {
  ArrowLeft, ArrowRight, Flag, Users, Layers, Sword, Play,
  Check, X, Plus, Trash2, Zap, ZapOff, ChevronRight,
@@ -316,14 +317,14 @@ export default function QuickMatch() {
  }
 
  // ── BLOCKED PLAYERS ───────────────────────────────────────────
- const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
- const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b))
+ // Blocked names are managed in the Master Dashboard, not hardcoded.
+ const { isBlocked, blockedMessage } = useBlockedPlayers()
 
  // ── PLAYERS ───────────────────────────────────────────────────────
  const addPlayer = () => {
  if (!newName.trim()) return
  if (isBlocked(newName)) {
- showToast('⛔ Sam Silverman cannot be added to Blitz Board')
+ showToast(blockedMessage(newName))
  setNewName('')
  return
  }
@@ -333,7 +334,7 @@ export default function QuickMatch() {
  }
 
  const loadFromRoster = (rosterPlayer: any) => {
- if (isBlocked(rosterPlayer.name)) { showToast('⛔ Sam Silverman cannot be added to Blitz Board'); return }
+ if (isBlocked(rosterPlayer.name)) { showToast(blockedMessage(rosterPlayer.name)); return }
  const already = players.find(p => p.name === rosterPlayer.name)
  if (already) return showToast(`${rosterPlayer.name} already added`)
  const id = `p_${Date.now()}_${Math.random().toString(36).slice(2)}`

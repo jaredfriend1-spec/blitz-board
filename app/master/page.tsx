@@ -5,6 +5,7 @@ import { signOut, resetPassword } from '@/lib/auth'
 import { auth } from '@/lib/firebase'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set, push, remove, get } from 'firebase/database'
+import { normalizeBlocked, type BlockedEntry } from '@/lib/blocked'
 import Link from 'next/link'
 import {
   Shield, Users, BookOpen, History, Settings, BarChart3,
@@ -18,6 +19,36 @@ import {
 // ── SECTION WRAPPER ────────────────────────────────────────────────
 function Section({ title, icon, children, defaultOpen = false }: any) {
   const [open, setOpen] = useState(defaultOpen)
+ // Blocked names live in the database so they can be changed without a deploy.
+ useEffect(() => {
+   const unsub = onValue(ref(db, 'blockedPlayers'), snap => setBlockedPlayers(normalizeBlocked(snap.val())))
+   return () => unsub()
+ }, [])
+
+ const addBlocked = async () => {
+   const name = newBlockedName.trim()
+   if (!name) return
+   setBlockedBusy(true); setBlockedErr(null)
+   try {
+     await push(ref(db, 'blockedPlayers'), {
+       name: name.toUpperCase(),
+       note: newBlockedNote.trim() || null,
+       addedAt: Date.now(),
+     })
+     setNewBlockedName(''); setNewBlockedNote('')
+   } catch (e: any) {
+     setBlockedErr(/permission/i.test(String(e?.message||e))
+       ? 'Permission denied — only a master admin can change this list.'
+       : String(e?.message || e))
+   } finally { setBlockedBusy(false) }
+ }
+
+ const removeBlocked = async (id: string) => {
+   setBlockedErr(null)
+   try { await remove(ref(db, `blockedPlayers/${id}`)) }
+   catch (e: any) { setBlockedErr(String(e?.message || e)) }
+ }
+
   return (
     <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
       <button onClick={() => setOpen(!open)}
@@ -47,6 +78,11 @@ export default function MasterPage() {
   const [history, setHistory] = useState<any[]>([])
   const [globalRoster, setGlobalRoster] = useState<any[]>([])
   const [courseLibrary, setCourseLibrary] = useState<any[]>([])
+ const [blockedPlayers, setBlockedPlayers] = useState<BlockedEntry[]>([])
+ const [newBlockedName, setNewBlockedName] = useState('')
+ const [newBlockedNote, setNewBlockedNote] = useState('')
+ const [blockedBusy, setBlockedBusy] = useState(false)
+ const [blockedErr, setBlockedErr] = useState<string | null>(null)
   const [activeTournament, setActiveTournament] = useState<any>(null)
   const [savedFormats, setSavedFormats] = useState<any[]>([])
 
@@ -657,7 +693,56 @@ export default function MasterPage() {
         </Section>
 
         {/* ── APP SETTINGS ── */}
-        <Section title="App Settings" icon={<Settings size={16}/>} defaultOpen={false}>
+<Section title={`⛔ Blocked Players (${blockedPlayers.length})`} icon={<Users size={16}/>} defaultOpen={false}>
+ <div className="space-y-3">
+ <p className="text-[11px] text-zinc-500 font-medium normal-case leading-relaxed">
+ These names can never be added to a roster or a match. Matching ignores case and
+ catches partial names — a first and last name also blocks &quot;Jr&quot; variants.
+ Add each spelling you want caught.
+ </p>
+
+ {blockedErr && (
+ <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-3 py-2 text-[11px] font-black">
+ {blockedErr}
+ </div>
+ )}
+
+ <div className="space-y-2">
+ {blockedPlayers.length === 0 && (
+ <p className="text-[11px] text-zinc-600 font-medium normal-case">No blocked names. Anyone can be added.</p>
+ )}
+ {blockedPlayers.map(b => (
+ <div key={b.id} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5">
+ <div className="flex-1 min-w-0">
+ <p className="font-black text-sm text-white truncate">{b.name}</p>
+ {b.note && <p className="text-[10px] text-zinc-500 font-medium normal-case truncate">{b.note}</p>}
+ </div>
+ <button onClick={() => removeBlocked(b.id)}
+ className="text-zinc-600 hover:text-rose-400 transition-colors flex-shrink-0" aria-label={`Unblock ${b.name}`}>
+ <Trash2 size={14}/>
+ </button>
+ </div>
+ ))}
+ </div>
+
+ <div className="border-t border-zinc-800 pt-3 space-y-2">
+ <input value={newBlockedName} onChange={e => setNewBlockedName(e.target.value)}
+ onKeyDown={e => { if (e.key === 'Enter') addBlocked() }}
+ placeholder="Name to block"
+ className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-sm transition-colors"/>
+ <input value={newBlockedNote} onChange={e => setNewBlockedNote(e.target.value)}
+ onKeyDown={e => { if (e.key === 'Enter') addBlocked() }}
+ placeholder="Reason (optional, only you see this)"
+ className="w-full bg-black border border-zinc-700 focus:border-zinc-500 p-2.5 rounded-xl font-medium text-zinc-300 outline-none text-xs transition-colors"/>
+ <button onClick={addBlocked} disabled={blockedBusy || !newBlockedName.trim()}
+ className="w-full bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
+ {blockedBusy ? 'ADDING…' : 'BLOCK THIS NAME'}
+ </button>
+ </div>
+ </div>
+ </Section>
+
+         <Section title="App Settings" icon={<Settings size={16}/>} defaultOpen={false}>
           <div className="p-4 space-y-4">
 
 

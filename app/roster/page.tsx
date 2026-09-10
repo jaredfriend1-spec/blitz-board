@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, onValue, push } from 'firebase/database'
+import { useBlockedPlayers } from '@/lib/blocked'
 import { ArrowLeft, UserPlus, Trash2, Pencil, Check, X, Users, Search } from 'lucide-react'
 import Link from 'next/link'
 
@@ -32,13 +33,13 @@ export default function RosterManager() {
  setTimeout(() => setToast(null), 2500)
  }
 
- const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
- const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b))
+ // Blocked names are managed in the Master Dashboard, not hardcoded.
+ const { isBlocked, blockedMessage } = useBlockedPlayers()
 
  const addPlayer = () => {
  if (!newName.trim()) return
  if (isBlocked(newName)) {
- alert('⛔ Sam Silverman cannot be added to Blitz Board')
+ alert(blockedMessage(newName))
  setNewName('')
  return
  }

@@ -6,6 +6,7 @@ import { signInAsPlayer } from '@/lib/auth'
 import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
 import { ref, onValue, set, get, push } from 'firebase/database'
+import { useBlockedPlayers } from '@/lib/blocked'
 import {
  Shield, Zap, Users, BookOpen, ShieldAlert,
  User, Lock, Eye, EyeOff, Archive, RefreshCw, PlayCircle, X,
@@ -34,8 +35,8 @@ export default function LandingPage() {
  const [showDemoModal, setShowDemoModal] = useState(false)
  const [toast, setToast] = useState('')
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
- const BLOCKED_PLAYERS = ['SAM SILVERMAN', 'SAMUEL SILVERMAN']
- const isBlocked = (name: string) => BLOCKED_PLAYERS.some(b => name.trim().toUpperCase().includes(b.toUpperCase()))
+ // Blocked names are managed in the Master Dashboard, not hardcoded.
+ const { isBlocked, blockedMessage } = useBlockedPlayers()
  const [scorerCanSeeAnalytics, setScorerCanSeeAnalytics] = useState(true)
  const [playerCanSeeAnalytics, setPlayerCanSeeAnalytics] = useState(false)
  const [globalRoster, setGlobalRoster] = useState<any[]>([])
