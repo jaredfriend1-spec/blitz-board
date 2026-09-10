@@ -280,11 +280,15 @@ export default function LandingPage() {
 
       // Dustin Johnson sits this one out and takes Brooks Koepka's card so the
       // draw feature has something to demonstrate. DJ is excluded from skins.
-      await set(ref(db,`tournament/scores/${pidMap['DUSTIN JOHNSON']}`),
-        DEMO_PLAYERS.find((p:any)=>p.name==='BROOKS KOEPKA').scores)
-      await set(ref(db,'tournament/draws'), {
-        [pidMap['DUSTIN JOHNSON']]: { source: pidMap['BROOKS KOEPKA'], setAt: Date.now() },
-      })
+      const drawSrc = DEMO_PLAYERS.find((p:any)=>p.name==='BROOKS KOEPKA')
+      const djId = pidMap['DUSTIN JOHNSON']
+      const brooksId = pidMap['BROOKS KOEPKA']
+      if (drawSrc && djId && brooksId) {
+        await set(ref(db,`tournament/scores/${djId}`), drawSrc.scores)
+        await set(ref(db,'tournament/draws'), {
+          [djId]: { source: brooksId, setAt: Date.now() },
+        })
+      }
       const teamDefs = [
         {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
         {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
