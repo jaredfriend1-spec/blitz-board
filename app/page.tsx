@@ -33,6 +33,7 @@ export default function LandingPage() {
  const [archiveSuccess, setArchiveSuccess] = useState(false)
  const [demoLoading, setDemoLoading] = useState(false)
  const [showDemoModal, setShowDemoModal] = useState(false)
+ const [showLegal, setShowLegal] = useState(false)
  const [toast, setToast] = useState('')
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
  // Blocked names are managed in the Master Dashboard, not hardcoded.
@@ -75,7 +76,9 @@ export default function LandingPage() {
       if (d.player_access !== undefined) setPlayerCanSeeAnalytics(!!d.player_access)
     })
  onValue(ref(db, 'tournament/course'), snap => {
- if (snap.val()?.name) setCourseName(snap.val().name)
+ // Clear when the course goes away, or the header keeps the old name after a
+ // demo is exited or the tournament is cleared.
+ setCourseName(snap.val()?.name || '')
  })
  onValue(ref(db, 'tournament/meta'), snap => {
  const m = snap.val() || {}
@@ -256,6 +259,8 @@ export default function LandingPage() {
 
   const clearDemo = async () => {
     await set(ref(db,'tournament'), null)
+    // Reset the header immediately rather than waiting for the listener.
+    setCourseName(''); setTripName(''); setCurrentDay(''); setIsMock(false); setActiveMode('')
     showToast('Demo cleared')
   }
 
@@ -418,10 +423,10 @@ export default function LandingPage() {
  EXPLORE HOW BLITZ BOARD WORKS
  </span>
  </Link>
- <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
- BLITZ BOARD · {new Date().getFullYear()}
- 
- </p>
+ <button onClick={() => setShowLegal(true)}
+ className="w-full text-center text-[9px] text-zinc-700 hover:text-zinc-500 font-black tracking-widest transition-colors py-2">
+ © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
+ </button>
 
  </div>
 
@@ -566,6 +571,61 @@ export default function LandingPage() {
  </div>
  </button>
  </div>
+
+ {showLegal && (
+ <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+ onClick={() => setShowLegal(false)}>
+ <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+ onClick={e => e.stopPropagation()}>
+ <div>
+ <p className="font-black text-lg text-white">Blitz Board</p>
+ <p className="text-[11px] font-black text-zinc-500 tracking-widest mt-0.5">
+ © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
+ </p>
+ </div>
+
+ <div className="space-y-3 text-[12px] text-zinc-400 font-medium normal-case leading-relaxed">
+ <p>
+ Blitz Board is an original software application conceived, designed, built and
+ owned solely by Jared Friend. This includes its source code, database design,
+ scoring and payout engines, user interface, visual design and all supporting
+ materials.
+ </p>
+ <p>
+ No other person or party holds any ownership interest in this application.
+ Providing scorecards, spreadsheets, game formats, feedback, feature requests or
+ testing does not create any claim to the software, in whole or in part.
+ </p>
+ <p>
+ Access is a personal, non-exclusive, non-transferable licence to use the
+ application as provided. It grants no right of ownership, may be modified or
+ withdrawn at any time at the owner&apos;s sole discretion, and ends when the owner
+ says it ends.
+ </p>
+ <p>
+ The application may not be copied, modified, distributed, published, sold,
+ sublicensed, reverse-engineered, or used to create a competing or derivative
+ product, in whole or in part, without the owner&apos;s express written consent.
+ </p>
+ <p className="text-zinc-500">
+ Scores, handicaps and other information you enter remain yours. The software
+ that stores, calculates and presents them does not.
+ </p>
+ </div>
+
+ <div className="border-t border-zinc-900 pt-3">
+ <p className="text-[10px] text-zinc-600 font-medium normal-case leading-relaxed">
+ Questions about use or licensing: contact the owner directly.
+ </p>
+ </div>
+
+ <button onClick={() => setShowLegal(false)}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-2xl font-black text-sm transition-colors">
+ CLOSE
+ </button>
+ </div>
+ </div>
+ )}
 
  {/* Demo type modal */}
  {showDemoModal && (
