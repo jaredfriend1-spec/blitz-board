@@ -19,36 +19,6 @@ import {
 // ── SECTION WRAPPER ────────────────────────────────────────────────
 function Section({ title, icon, children, defaultOpen = false }: any) {
   const [open, setOpen] = useState(defaultOpen)
- // Blocked names live in the database so they can be changed without a deploy.
- useEffect(() => {
-   const unsub = onValue(ref(db, 'blockedPlayers'), snap => setBlockedPlayers(normalizeBlocked(snap.val())))
-   return () => unsub()
- }, [])
-
- const addBlocked = async () => {
-   const name = newBlockedName.trim()
-   if (!name) return
-   setBlockedBusy(true); setBlockedErr(null)
-   try {
-     await push(ref(db, 'blockedPlayers'), {
-       name: name.toUpperCase(),
-       note: newBlockedNote.trim() || null,
-       addedAt: Date.now(),
-     })
-     setNewBlockedName(''); setNewBlockedNote('')
-   } catch (e: any) {
-     setBlockedErr(/permission/i.test(String(e?.message||e))
-       ? 'Permission denied — only a master admin can change this list.'
-       : String(e?.message || e))
-   } finally { setBlockedBusy(false) }
- }
-
- const removeBlocked = async (id: string) => {
-   setBlockedErr(null)
-   try { await remove(ref(db, `blockedPlayers/${id}`)) }
-   catch (e: any) { setBlockedErr(String(e?.message || e)) }
- }
-
   return (
     <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
       <button onClick={() => setOpen(!open)}
@@ -83,6 +53,37 @@ export default function MasterPage() {
  const [newBlockedNote, setNewBlockedNote] = useState('')
  const [blockedBusy, setBlockedBusy] = useState(false)
  const [blockedErr, setBlockedErr] = useState<string | null>(null)
+
+ // Blocked names live in the database so they can be changed without a deploy.
+ useEffect(() => {
+   const unsub = onValue(ref(db, 'blockedPlayers'), snap => setBlockedPlayers(normalizeBlocked(snap.val())))
+   return () => unsub()
+ }, [])
+
+ const addBlocked = async () => {
+   const name = newBlockedName.trim()
+   if (!name) return
+   setBlockedBusy(true); setBlockedErr(null)
+   try {
+     await push(ref(db, 'blockedPlayers'), {
+       name: name.toUpperCase(),
+       note: newBlockedNote.trim() || null,
+       addedAt: Date.now(),
+     })
+     setNewBlockedName(''); setNewBlockedNote('')
+   } catch (e: any) {
+     setBlockedErr(/permission/i.test(String(e?.message||e))
+       ? 'Permission denied — only a master admin can change this list.'
+       : String(e?.message || e))
+   } finally { setBlockedBusy(false) }
+ }
+
+ const removeBlocked = async (id: string) => {
+   setBlockedErr(null)
+   try { await remove(ref(db, `blockedPlayers/${id}`)) }
+   catch (e: any) { setBlockedErr(String(e?.message || e)) }
+ }
+
   const [activeTournament, setActiveTournament] = useState<any>(null)
   const [savedFormats, setSavedFormats] = useState<any[]>([])
 
