@@ -40,7 +40,11 @@ function buildRecap(arch: any) {
  const activePlayers = teams.length > 0
  ? players.filter(p => activeIds.has(p.id))
  : players
- const fieldSize = activePlayers.length
+ // A drawn card is a copy of another player's round — already in the pot
+ // under their name. Counting it again doubles it and ties out their skins.
+ const draws = arch.draws || {}
+ const skinsPlayers = activePlayers.filter((p:any) => !draws[p.id])
+ const fieldSize = skinsPlayers.length
 
  // Helper: get player's scored holes correctly for 9 or 18
  const getScores = (playerId: string) => {
@@ -76,7 +80,7 @@ function buildRecap(arch: any) {
 
  for (let h = 0; h < numHoles; h++) {
  const hIdx = holeOffset + h
- const holeScores = activePlayers
+ const holeScores = skinsPlayers
  .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[hIdx] || 0 }))
  .filter(x => x.s > 0)
  if (holeScores.length > 0) {
@@ -95,14 +99,14 @@ function buildRecap(arch: any) {
 
  if (netSkinsEnabled) {
  // Calculate adjusted handicaps for all players using HCP%
- const allAdjHcps = activePlayers.map(p => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
+ const allAdjHcps = skinsPlayers.map((p:any) => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
  const baseAdjHcp = Math.min(...allAdjHcps)
 
  for (let h = 0; h < numHoles; h++) {
  const hIdx = holeOffset + h
  const hcpRating = Number(course.holes?.[hIdx]?.hcp) || (hIdx + 1)
 
- const holeNetScores = activePlayers.map(p => {
+ const holeNetScores = skinsPlayers.map((p:any) => {
  const grossScore = (scores[p.id] || [])[hIdx] || 0
  if (!grossScore) return null
  const adjHcp = Math.round((Number(p.handicap) || 0) * (handicapPercent / 100))
@@ -134,7 +138,7 @@ function buildRecap(arch: any) {
  const perSkin = totalSkinsWon > 0 ? Math.round((grossSkinsPot / totalSkinsWon) * 100) / 100 : 0
  const perNetSkin = totalNetSkinsWon > 0 ? Math.round((netSkinsPot / totalNetSkinsWon) * 100) / 100 : 0
 
- const skinsLeaders = activePlayers
+ const skinsLeaders = skinsPlayers
  .filter(p => skinsCount[p.id] > 0)
  .map(p => ({ name: p.name, count: skinsCount[p.id], winnings: Math.round(skinsCount[p.id] * perSkin * 100) / 100 }))
  .sort((a, b) => b.count - a.count)

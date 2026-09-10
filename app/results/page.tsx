@@ -48,7 +48,12 @@ export default function ResultsPage() {
     const activePlayers = teams.length > 0
       ? players.filter(p => activePlayerIds.has(p.id))
       : players
-    const activeFieldSize = activePlayers.length
+    // A drawn card is a copy of another player's round. It is already in the
+    // pot under their name, so including it again would double-count it and
+    // turn every one of their holes into a tie — wiping out their skins.
+    // Drawn players sit skins out; everyone else is unaffected.
+    const skinsPlayers = activePlayers.filter(p => !draws[p.id])
+    const activeFieldSize = skinsPlayers.length
 
     const nineHoleLocal = !!course.nineHole
     const offsetLocal = nineHoleLocal && course.nineHoleStart === 'back' ? 9 : 0
@@ -73,7 +78,7 @@ export default function ResultsPage() {
 
     for (let h = 0; h < numHoles; h++) {
       const hIdx = holeOffset + h
-      const holeScores = activePlayers
+      const holeScores = skinsPlayers
         .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[hIdx] || 0 }))
         .filter(x => x.s > 0)
       if (holeScores.length > 0) {
@@ -97,14 +102,14 @@ export default function ResultsPage() {
     const netSkinsCount: Record<string, number> = {}
 
     if (netSkinsEnabled) {
-      const allAdjHcps = activePlayers.map(p => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
+      const allAdjHcps = skinsPlayers.map(p => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
       const baseAdjHcp = allAdjHcps.length > 0 ? Math.min(...allAdjHcps) : 0
 
       for (let h = 0; h < numHoles; h++) {
         const hIdx = holeOffset + h
         const hcpRating = Number(course.holes?.[hIdx]?.hcp) || (hIdx + 1)
 
-        const holeNetScores = activePlayers.map(p => {
+        const holeNetScores = skinsPlayers.map(p => {
           const grossScore = (scores[p.id] || [])[hIdx] || 0
           if (!grossScore) return null
           const adjHcp = Math.round((Number(p.handicap) || 0) * (handicapPercent / 100))
