@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
-import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users } from 'lucide-react'
+import { normalizeDraws, type DrawMap } from '@/lib/draws'
+import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users, Copy } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ResultsPage() {
@@ -14,10 +15,25 @@ export default function ResultsPage() {
   const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
   const [mode, setMode] = useState('')
 
+  const [draws, setDraws] = useState<DrawMap>({})
+
+  // A drawn card belongs to someone else — label it wherever a name appears.
+  const DrawBadge = ({ id }: { id: string }) => {
+    const d = draws[id]
+    if (!d) return null
+    const src = players.find((x: any) => x.id === d.source)
+    return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-black text-amber-400 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-md ml-2 align-middle">
+        <Copy size={9}/> DRAW{src ? ' · ' + src.name.split(' ')[0] : ''}
+      </span>
+    )
+  }
+
   useEffect(() => {
     onValue(ref(db, 'tournament/meta'), snap => setMode(snap.val()?.mode || ''))
     onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
+    onValue(ref(db, 'tournament/draws'), snap => setDraws(normalizeDraws(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
     onValue(ref(db, 'tournament/course'), snap => snap.val() && setCourse(snap.val()))
     onValue(ref(db, 'tournament/money'), snap => snap.val() && setMoney((prev:any) => ({ ...prev, ...snap.val() })))
@@ -248,7 +264,7 @@ export default function ResultsPage() {
                           <span className={`text-sm font-bold ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-zinc-400' : 'text-amber-700'}`}>
                             {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
                           </span>
-                          <span className="font-semibold text-sm">{w.name}</span>
+                          <span className="font-semibold text-sm">{w.name}<DrawBadge id={w.id}/></span>
                         </div>
                         <span className="text-emerald-400 font-bold">{(w as any)[section.key]}</span>
                       </div>
@@ -280,7 +296,7 @@ export default function ResultsPage() {
                   }`}>
                     <span className="text-[10px] text-zinc-600 font-medium mb-1">Hole {holeOffset + i + 1}</span>
                     <span className={`text-[10px] font-semibold text-center leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-700'}`}>
-                      {winner ? winner.name : '—'}
+                      {winner ? <>{winner.name}<DrawBadge id={winner.id}/></> : '—'}
                     </span>
                   </div>
                 ))}
@@ -307,7 +323,7 @@ export default function ResultsPage() {
                   }`}>
                     <span className="text-[10px] text-zinc-600 font-medium mb-1">Hole {holeOffset + i + 1}</span>
                     <span className={`text-[10px] font-semibold text-center leading-tight ${winner ? 'text-blue-400' : 'text-zinc-700'}`}>
-                      {winner ? winner.name : '—'}
+                      {winner ? <>{winner.name}<DrawBadge id={winner.id}/></> : '—'}
                     </span>
                   </div>
                 ))}
@@ -320,7 +336,7 @@ export default function ResultsPage() {
                       <div key={p.id} className="flex items-center justify-between px-5 py-3">
                         <div className="flex items-center gap-3">
                           <Trophy size={14} className="text-blue-400"/>
-                          <span className="font-semibold text-sm">{p.name}</span>
+                          <span className="font-semibold text-sm">{p.name}<DrawBadge id={p.id}/></span>
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="text-zinc-500 text-xs">{ind.netSkinsCount[p.id]} skin{ind.netSkinsCount[p.id] > 1 ? 's' : ''}</span>
@@ -354,7 +370,7 @@ export default function ResultsPage() {
                       <div key={p.id} className="flex items-center justify-between px-5 py-4">
                         <div className="flex items-center gap-3">
                           <Trophy size={14} className="text-amber-400"/>
-                          <span className="font-semibold text-sm">{p.name}</span>
+                          <span className="font-semibold text-sm">{p.name}<DrawBadge id={p.id}/></span>
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="text-zinc-500 text-xs">{ind.skinsCount[p.id]} skin{ind.skinsCount[p.id] > 1 ? 's' : ''}</span>

@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
 import { ref, set, get, onValue } from 'firebase/database'
-import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive } from 'lucide-react'
+import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive, Copy, X, AlertTriangle } from 'lucide-react'
+import { applyDraws, normalizeDraws, type DrawMap } from '@/lib/draws'
 import Link from 'next/link'
 
 
@@ -74,6 +75,8 @@ function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
 export default function ScorerPage() {
  const [scores, setScores] = useState<Record<string, number[]>>({})
  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
+ const [money, setMoney] = useState<any>({})
+ const [matchups, setMatchups] = useState<any>({})
  const allPars: number[] = course.pars || Array(18).fill(4)
  const nineHole: boolean = !!course.nineHole
  const nineHoleStart: 'front'|'back' = course.nineHoleStart || 'front'
@@ -101,7 +104,62 @@ export default function ScorerPage() {
  })
  onValue(ref(db,'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
  onValue(ref(db,'tournament/roster'), snap => setPlayers(snap.val() ? Object.values(snap.val()) : []))
+ onValue(ref(db,'tournament/money'), snap => setMoney(snap.val() || {}))
+ onValue(ref(db,'tournament/matchups'), snap => setMatchups(snap.val() || {}))
  }, [])
+
+ // ── DRAW SCORES ──
+ // A player who misses a day can take another player's card. The drawn card
+ // is written into scores like any other, so results and matches need no
+ // special handling; tournament/draws records the source so skins can skip it.
+ const [draws, setDraws] = useState<DrawMap>({})
+ const [drawFor, setDrawFor] = useState<any>(null)
+ const [drawSource, setDrawSource] = useState('')
+
+ useEffect(() => {
+   const unsub = onValue(ref(db, 'tournament/draws'), snap => setDraws(normalizeDraws(snap.val())))
+   return () => unsub()
+ }, [])
+
+ // Keep every drawn card in step with its source as scores are entered.
+ useEffect(() => {
+   if (!Object.keys(draws).length || !players.length) return
+   const next = applyDraws(scores, draws, nineHole ? 9 : 18)
+   const changed = Object.keys(draws).some(pid =>
+     JSON.stringify(next[pid] || []) !== JSON.stringify(scores[pid] || []))
+   if (changed) { setScores(next); saveScoresNow(next) }
+ }, [scores, draws, players])
+
+ const saveScoresNow = async (sc: Record<string, number[]>) => {
+   await set(ref(db, 'tournament/scores'), sc)
+ }
+
+ const confirmDraw = async () => {
+   if (!drawFor || !drawSource) return
+   await set(ref(db, `tournament/draws/${drawFor.id}`), {
+     source: drawSource, setAt: Date.now(),
+   })
+   setDrawFor(null); setDrawSource('')
+ }
+
+ const clearDraw = async (pid: string) => {
+   await set(ref(db, `tournament/draws/${pid}`), null)
+   const cleared = { ...scores, [pid]: Array(18).fill(0) }
+   setScores(cleared); await saveScoresNow(cleared)
+ }
+
+ // Warn if the draw source is an opponent — they would halve every hole.
+ const sourceIsOpponent = (targetName: string, sourceName: string) => {
+   if (!targetName || !sourceName) return false
+   return Object.values(matchups || {}).some((m: any) => {
+     const side = [m.sideA, m.sideA2, m.sideB, m.sideB2].filter(Boolean)
+     const a = [m.sideA, m.sideA2].filter(Boolean)
+     const b = [m.sideB, m.sideB2].filter(Boolean)
+     if (!side.includes(targetName) || !side.includes(sourceName)) return false
+     return (a.includes(targetName) && b.includes(sourceName)) ||
+            (b.includes(targetName) && a.includes(sourceName))
+   })
+ }
 
  const saveScores = useCallback(
  debounce(async (s: Record<string, number[]>) => {
@@ -115,6 +173,7 @@ export default function ScorerPage() {
 
  const updateScore = (pid: string, holeIdx: number, val: number) => {
  if (!editMode) return
+ if (draws[pid]) return // drawn cards mirror their source
  const current = scores[pid] || Array(18).fill(0)
  const updated = [...current]
  updated[holeIdx] = val
@@ -297,6 +356,18 @@ export default function ScorerPage() {
  <td className="sticky left-0 bg-black z-10 border-r border-zinc-800 px-4 py-3 min-w-[130px]">
  <div className="font-bold text-sm text-white">{p.name}</div>
  <div className="text-[9px] text-zinc-600 font-semibold">HCP {p.handicap||0}</div>
+ {draws[p.id] ? (
+ <button onClick={() => clearDraw(p.id)}
+ className="mt-1 flex items-center gap-1 text-[9px] font-black text-amber-400 bg-amber-500/15 border border-amber-500/30 hover:border-amber-500 px-1.5 py-0.5 rounded-md transition-colors">
+ <Copy size={9}/> DRAW · {(players.find((x:any)=>x.id===draws[p.id].source)?.name||'?').split(' ')[0]}
+ <X size={9} className="ml-0.5"/>
+ </button>
+ ) : editMode ? (
+ <button onClick={() => { setDrawFor(p); setDrawSource('') }}
+ className="mt-1 flex items-center gap-1 text-[9px] font-black text-zinc-600 hover:text-amber-400 transition-colors">
+ <Copy size={9}/> USE DRAW
+ </button>
+ ) : null}
  </td>
  {Array.from({length:9},(_,i)=>holeOffset+i).map(idx => (
  <td key={idx} className="px-1 py-2 text-center w-12">
@@ -462,6 +533,65 @@ export default function ScorerPage() {
  )}
  </div>
 
+ 
+ {drawFor && (
+ <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+ onClick={() => setDrawFor(null)}>
+ <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+ onClick={e => e.stopPropagation()}>
+ <div>
+ <p className="font-black text-lg text-white">Draw score for {drawFor.name}</p>
+ <p className="text-[11px] font-black text-zinc-500 mt-0.5">
+ THEIR CARD MIRRORS THE PLAYER YOU PICK, HOLE BY HOLE
+ </p>
+ <p className="text-[10px] font-medium text-zinc-600 normal-case mt-2 leading-snug">
+ The card is copied exactly as shot and {drawFor.name.split(' ')[0]}&apos;s own handicap
+ is applied to it, so it scores like any other round. Drawing someone near your
+ handicap keeps it fair.
+ </p>
  </div>
+
+ <div>
+ <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-2">DRAW FROM</label>
+ <div className="space-y-1.5">
+ {players.filter((x:any) => x.id !== drawFor.id && !draws[x.id]).map((x:any) => {
+ const opp = sourceIsOpponent(drawFor.name, x.name)
+ return (
+ <button key={x.id} onClick={() => setDrawSource(x.id)}
+ className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left ${
+ drawSource===x.id ? 'bg-emerald-500/15 border-emerald-500' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-600'}`}>
+ <span className="font-black text-sm text-white flex-1 truncate">{x.name}</span>
+ <span className="text-[10px] font-black text-zinc-600">HCP {x.handicap||0}</span>
+ {opp && <AlertTriangle size={12} className="text-amber-400 flex-shrink-0"/>}
+ </button>
+ )
+ })}
+ </div>
+ {drawSource && sourceIsOpponent(drawFor.name, players.find((x:any)=>x.id===drawSource)?.name || '') && (
+ <p className="text-[10px] font-black text-amber-400 mt-2 leading-snug">
+ ⚠ YOU HAVE A MATCH AGAINST THIS PLAYER. IDENTICAL CARDS HALVE EVERY HOLE AND THE BET PAYS NOTHING.
+ </p>
+ )}
+ </div>
+
+ <p className="text-[10px] font-medium text-zinc-600 normal-case leading-snug border-t border-zinc-900 pt-3">
+ A drawn card does not play for skins — that score is already in the pot under
+ the other player's name. It still counts for matches and team best ball.
+ </p>
+
+ <div className="flex gap-2">
+ <button onClick={confirmDraw} disabled={!drawSource}
+ className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-3 rounded-2xl font-black text-sm transition-colors">
+ USE THIS CARD
+ </button>
+ <button onClick={() => setDrawFor(null)}
+ className="px-5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-3 rounded-2xl font-black text-xs transition-colors">
+ CANCEL
+ </button>
+ </div>
+ </div>
+ </div>
+ )}
+</div>
  )
 }

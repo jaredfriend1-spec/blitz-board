@@ -277,6 +277,14 @@ export default function LandingPage() {
       for (const p of DEMO_PLAYERS) {
         await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
       }
+
+      // Dustin Johnson sits this one out and takes Brooks Koepka's card so the
+      // draw feature has something to demonstrate. DJ is excluded from skins.
+      await set(ref(db,`tournament/scores/${pidMap['DUSTIN JOHNSON']}`),
+        DEMO_PLAYERS.find((p:any)=>p.name==='BROOKS KOEPKA').scores)
+      await set(ref(db,'tournament/draws'), {
+        [pidMap['DUSTIN JOHNSON']]: { source: pidMap['BROOKS KOEPKA'], setAt: Date.now() },
+      })
       const teamDefs = [
         {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
         {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
@@ -623,7 +631,7 @@ export default function LandingPage() {
   const liveRound = !isMock && !!activeMode
   const liveLabel = activeMode === 'match' ? 'Quick match' : (tripName || 'Tournament')
 
-  const Tile = ({ item, wide = false }: { item:any, wide?:boolean }) => (
+  const Tile = ({ item, wide = false }: { item:any, wide?:boolean, key?:any }) => (
     <Link href={item.path}
       className={`group bg-zinc-900/40 border border-zinc-800 ${item.hover} rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${wide ? 'col-span-2' : ''}`}>
       {item.icon}
@@ -632,7 +640,7 @@ export default function LandingPage() {
     </Link>
   )
 
-  const GroupLabel = ({ children }: { children:React.ReactNode }) => (
+  const GroupLabel = ({ children }: { children?:React.ReactNode }) => (
     <p className="text-[9px] font-black text-zinc-600 tracking-[0.2em] mb-2">{children}</p>
   )
 

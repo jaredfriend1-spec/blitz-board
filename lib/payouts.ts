@@ -29,6 +29,7 @@ export type RoundCtx = {
   pars: number[]
   money: any
   teams: any[]
+  draws: Record<string, any>
   holeOffset: number
   numHoles: number
 }
@@ -245,7 +246,12 @@ export function settleWheel(m: any, ctx: RoundCtx) {
 
 // ── Skins: gross and net pools ───────────────────────────────────────
 export function computeSkins(ctx: RoundCtx) {
-  const { players, scores, courseHoles, money, holeOffset, numHoles } = ctx
+  // A drawn card is a copy of another player's round. It is already in the
+  // pot under their name, so counting it again would double it and turn every
+  // hole into a tie. Drawn players sit skins out.
+  const drawn = new Set(Object.keys(ctx.draws || {}))
+  const { scores, courseHoles, money, holeOffset, numHoles } = ctx
+  const players = ctx.players.filter(p => !drawn.has(p.id))
   const alloc = Number(money?.skinsAllocation) || 0
   const netOn = !!money?.netSkinsEnabled
   const splitG = Number(money?.skinsSplitGross ?? 100)
@@ -315,6 +321,7 @@ export function buildCtx(arch: any): RoundCtx {
     pars,
     money: arch?.money || {},
     teams: arch?.teams ? Object.values(arch.teams) : [],
+    draws: arch?.draws || {},
     holeOffset: nineHole && arch?.course?.startingNine === 'back' ? 9 : 0,
     numHoles: nineHole ? 9 : (pars.length || 18),
   }
