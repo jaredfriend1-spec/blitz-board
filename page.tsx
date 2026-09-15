@@ -1,812 +1,1980 @@
 "use client"
-
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthProvider'
-import { signInAsPlayer } from '@/lib/auth'
-import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
-import { ref, onValue, set, get, push } from 'firebase/database'
-import { useBlockedPlayers } from '@/lib/blocked'
+import { ref, onValue, set, push } from 'firebase/database'
 import {
- Shield, Zap, Users, BookOpen, ShieldAlert,
- User, Lock, Eye, EyeOff, Archive, RefreshCw, PlayCircle, X,
- Target, DollarSign, Trophy, History, Settings, BarChart3, Activity,
- ChevronRight, Flag
+ ArrowLeft, Archive, Calendar, Users, Trophy, Zap,
+ Trash2, ChevronDown, ChevronUp, Medal, Target,
+ Flag, DollarSign, Sword, RefreshCw, Check, FileDown, Loader2, Plus
 } from 'lucide-react'
 import Link from 'next/link'
+import { getStrokes as sharedStrokes, runNine, betHandicapPercent, settleWheel, buildCtx } from '@/lib/payouts'
 
+// ── FULL RECAP ENGINE ──────────────────────────────────────────────
+function buildRecap(arch: any) {
+ const players: any[] = arch.roster ? Object.values(arch.roster) : []
+ const teams: any[] = arch.teams ? Object.values(arch.teams) : []
+ const scores: Record<string, number[]> = arch.scores || {}
+ const course = arch.course || { pars: Array(18).fill(4), holes: [] }
+ const money = arch.money || { entryFee: 0, skinsAllocation: 0 }
+ const matchups: any[] = arch.matchups ? Object.values(arch.matchups) : []
 
-export default function LandingPage() {
- const { user, role: authRole, loading: authLoading } = useAuth()
- const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
- // Shared player access — the group code is the password on a read-only account
- const [showPlayerCode, setShowPlayerCode] = useState(false)
- const [playerCode, setPlayerCode] = useState('')
- const [playerErr, setPlayerErr] = useState('')
- const [playerBusy, setPlayerBusy] = useState(false)
- const [courseName, setCourseName] = useState('')
- const [tripName, setTripName] = useState('')
- const [currentDay, setCurrentDay] = useState('')
- const [isMock, setIsMock] = useState(false)
- const [activeMode, setActiveMode] = useState<string>('')
- const [archiving, setArchiving] = useState(false)
- const [archiveSuccess, setArchiveSuccess] = useState(false)
- const [demoLoading, setDemoLoading] = useState(false)
- const [showDemoModal, setShowDemoModal] = useState(false)
- const [toast, setToast] = useState('')
- const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
- // Blocked names are managed in the Master Dashboard, not hardcoded.
- const { isBlocked, blockedMessage } = useBlockedPlayers()
- const [scorerCanSeeAnalytics, setScorerCanSeeAnalytics] = useState(true)
- const [playerCanSeeAnalytics, setPlayerCanSeeAnalytics] = useState(false)
- const [globalRoster, setGlobalRoster] = useState<any[]>([])
- const [courseLibrary, setCourseLibrary] = useState<any[]>([])
- const [history, setHistory] = useState<any[]>([])
- const [modal, setModal] = useState<{
- title: string
- body: string
- warning?: string
- confirmLabel: string
- cancelLabel?: string
- danger?: boolean
- onConfirm: () => void
- onCancel?: () => void
- } | null>(null)
+ // ── HCP % AND NET SKINS SETTINGS ──────────────────────────────────
+ const handicapPercent: number = money.handicapPercent ?? arch.handicapPercent ?? 100
+ const netSkinsEnabled: boolean = money.netSkinsEnabled ?? arch.netSkinsEnabled ?? false
+ const skinsSplitGross: number = money.skinsSplitGross ?? arch.skinsSplitGross ?? 100
+ const skinsSplitNet: number = money.skinsSplitNet ?? arch.skinsSplitNet ?? 0
 
- const showModal = (opts: typeof modal) => setModal(opts)
- const closeModal = () => setModal(null)
+ // 9-hole support
+ const nineHole: boolean = !!course.nineHole
+ const nineHoleStart: string = course.nineHoleStart || 'front'
+ const holeOffset: number = nineHole && nineHoleStart === 'back' ? 9 : 0
+ const allPars: number[] = course.pars || Array(18).fill(4)
+ const pars: number[] = nineHole ? allPars.slice(holeOffset, holeOffset + 9) : allPars
+ const totalPar = pars.reduce((a, b) => a + b, 0)
 
+ // Active players — if no teams, all players are active
+ const activeIds = new Set<string>()
+ teams.forEach(t => (t.playerIds || []).forEach((id: string) => activeIds.add(id)))
+ const activePlayers = teams.length > 0
+ ? players.filter(p => activeIds.has(p.id))
+ : players
+ // A drawn card is a copy of another player's round — already in the pot
+ // under their name. Counting it again doubles it and ties out their skins.
+ const draws = arch.draws || {}
+ const skinsPlayers = activePlayers.filter((p:any) => !draws[p.id])
+ const fieldSize = skinsPlayers.length
 
- // Watch Firebase Auth — auto-login when authenticated
- useEffect(() => {
- if (authLoading) return
-  if (authRole === 'master') { setRole('admin'); return } // master → admin hub + dashboard button
-  if (authRole === 'scorer') { setRole('admin'); return } // scorer → admin hub
- // Fall back to session for guests
- const stored = sessionStorage.getItem('role')
- if (stored === 'player') setRole('player')
- }, [authRole, authLoading])
+ // Helper: get player's scored holes correctly for 9 or 18
+ const getScores = (playerId: string) => {
+ const s = scores[playerId] || Array(18).fill(0)
+ return nineHole ? s.slice(holeOffset, holeOffset + 9) : s
+ }
 
- useEffect(() => {
- // Firebase data
-    onValue(ref(db,'analyticsFlags'), snap => {
-      const d = snap.val() || {}
-      if (d.scorer_access !== undefined) setScorerCanSeeAnalytics(!!d.scorer_access)
-      if (d.player_access !== undefined) setPlayerCanSeeAnalytics(!!d.player_access)
+ // ── INDIVIDUAL LEADERBOARD ────────────────────────────────────────
+ const leaderboard = activePlayers.map(p => {
+ const s = getScores(p.id)
+ const f9 = nineHole
+ ? s.reduce((a: number, b: number) => a + (Number(b) || 0), 0)
+ : s.slice(0, 9).reduce((a: number, b: number) => a + (Number(b) || 0), 0)
+ const b9 = nineHole ? 0 : s.slice(9, 18).reduce((a: number, b: number) => a + (Number(b) || 0), 0)
+ const tot = f9 + b9
+ const toPar = tot > 0 ? tot - totalPar : null
+ const f9Par = nineHole ? totalPar : pars.slice(0, 9).reduce((a, b) => a + b, 0)
+ const b9Par = nineHole ? 0 : pars.slice(9, 18).reduce((a, b) => a + b, 0)
+ return { ...p, f9, b9, tot, toPar, f9ToPar: f9 > 0 ? f9 - f9Par : null, b9ToPar: b9 > 0 ? b9 - b9Par : null }
+ }).sort((a, b) => {
+ if (a.tot === 0 && b.tot > 0) return 1
+ if (b.tot === 0 && a.tot > 0) return -1
+ return a.tot - b.tot
+ })
+
+ const f9Winners = leaderboard.filter(p => p.f9 > 0).sort((a, b) => a.f9 - b.f9).slice(0, 3)
+ const b9Winners = leaderboard.filter(p => p.b9 > 0).sort((a, b) => a.b9 - b.b9).slice(0, 3)
+
+ // ── GROSS SKINS ───────────────────────────────────────────────────
+ const numHoles = nineHole ? 9 : 18
+ const skinsMap: (any | null)[] = Array(numHoles).fill(null)
+ const skinsCount: Record<string, number> = {}
+
+ for (let h = 0; h < numHoles; h++) {
+ const hIdx = holeOffset + h
+ const holeScores = skinsPlayers
+ .map(p => ({ id: p.id, name: p.name, s: (scores[p.id] || [])[hIdx] || 0 }))
+ .filter(x => x.s > 0)
+ if (holeScores.length > 0) {
+ const min = Math.min(...holeScores.map(x => x.s))
+ const winners = holeScores.filter(x => x.s === min)
+ if (winners.length === 1) {
+ skinsMap[h] = { ...winners[0], par: pars[h] }
+ skinsCount[winners[0].id] = (skinsCount[winners[0].id] || 0) + 1
+ }
+ }
+ }
+
+ // ── NET SKINS (GHIN METHOD) ────────────────────────────────────────
+ const netSkinsMap: (any | null)[] = Array(numHoles).fill(null)
+ const netSkinsCount: Record<string, number> = {}
+
+ if (netSkinsEnabled) {
+ // Calculate adjusted handicaps for all players using HCP%
+ const allAdjHcps = skinsPlayers.map((p:any) => Math.round((Number(p.handicap) || 0) * (handicapPercent / 100)))
+ const baseAdjHcp = Math.min(...allAdjHcps)
+
+ for (let h = 0; h < numHoles; h++) {
+ const hIdx = holeOffset + h
+ const hcpRating = Number(course.holes?.[hIdx]?.hcp) || (hIdx + 1)
+
+ const holeNetScores = skinsPlayers.map((p:any) => {
+ const grossScore = (scores[p.id] || [])[hIdx] || 0
+ if (!grossScore) return null
+ const adjHcp = Math.round((Number(p.handicap) || 0) * (handicapPercent / 100))
+ const diff = Math.max(0, adjHcp - baseAdjHcp)
+ let strokes = Math.floor(diff / 18)
+ if (hcpRating <= (diff % 18)) strokes++
+ return { id: p.id, name: p.name, net: grossScore - strokes, gross: grossScore }
+ }).filter(Boolean) as any[]
+
+ if (holeNetScores.length > 0) {
+ const min = Math.min(...holeNetScores.map(x => x.net))
+ const winners = holeNetScores.filter(x => x.net === min)
+ if (winners.length === 1) {
+ netSkinsMap[h] = { ...winners[0], par: pars[h] }
+ netSkinsCount[winners[0].id] = (netSkinsCount[winners[0].id] || 0) + 1
+ }
+ }
+ }
+ }
+
+ // ── SKINS POT SPLIT ───────────────────────────────────────────────
+ const skinsPot = fieldSize * (money.skinsAllocation || 0)
+ const grossSkinsPot = netSkinsEnabled ? Math.round(skinsPot * (skinsSplitGross / 100) * 100) / 100 : skinsPot
+ const netSkinsPot = netSkinsEnabled ? Math.round(skinsPot * (skinsSplitNet / 100) * 100) / 100 : 0
+
+ const totalSkinsWon = Object.values(skinsCount).reduce((a, b) => a + b, 0)
+ const totalNetSkinsWon = Object.values(netSkinsCount).reduce((a, b) => a + b, 0)
+
+ const perSkin = totalSkinsWon > 0 ? Math.round((grossSkinsPot / totalSkinsWon) * 100) / 100 : 0
+ const perNetSkin = totalNetSkinsWon > 0 ? Math.round((netSkinsPot / totalNetSkinsWon) * 100) / 100 : 0
+
+ const skinsLeaders = skinsPlayers
+ .filter(p => skinsCount[p.id] > 0)
+ .map(p => ({ name: p.name, count: skinsCount[p.id], winnings: Math.round(skinsCount[p.id] * perSkin * 100) / 100 }))
+ .sort((a, b) => b.count - a.count)
+
+ const netSkinsLeaders = activePlayers
+ .filter(p => netSkinsCount[p.id] > 0)
+ .map(p => ({ name: p.name, count: netSkinsCount[p.id], winnings: Math.round(netSkinsCount[p.id] * perNetSkin * 100) / 100 }))
+ .sort((a, b) => b.count - a.count)
+
+ // ── TEAM BEST BALL SCORES ──────────────────────────────────────────
+ const teamResults = teams.map(t => {
+ const pIds: string[] = t.playerIds || []
+ const holeAgg = pars.map((par, i) => {
+ const actualIdx = holeOffset + i
+ const pScores = pIds
+ .map(id => scores[id]?.[actualIdx] || 0)
+ .filter(s => s > 0)
+ .sort((a, b) => a - b)
+ if (pScores.length === 0) return 0
+ const take = par === 3 ? 3 : 2
+ return pScores.slice(0, take).reduce((a, b) => a + b, 0)
+ })
+ const f9 = holeAgg.slice(0, 9).reduce((a, b) => a + b, 0)
+ const b9 = holeAgg.slice(9, 18).reduce((a, b) => a + b, 0)
+ return { id: t.id, name: t.name, f9, b9, tot: f9 + b9 }
+ }).sort((a, b) => {
+ if (a.tot === 0) return 1
+ if (b.tot === 0) return -1
+ return a.tot - b.tot
+ })
+
+ // ── MATCH RESULTS (full payout engine) ──────────────────────────
+ // GHIN METHOD: Apply HCP% BEFORE stroke calculation
+ // Strokes come from lib/payouts. `pct` is the individual bet's handicap
+ // percentage — a matchup's own setting wins, falling back to the round's.
+ const getStrokes = (playerHcp: number, holeIdx: number, baseHcp: number, isGross: boolean, pct: number = handicapPercent) =>
+ sharedStrokes(playerHcp, holeIdx, baseHcp, pct, isGross, course.holes)
+
+ // Nassau nines (with auto-press) are settled by lib/payouts.
+ const runNassauNine = runNine
+
+ const matchResults = matchups.map(m => {
+ let pA: any[] = [], pB: any[] = []
+ if (m.type === 'PvP') {
+ pA = activePlayers.filter(p => p.name === m.sideA)
+ pB = activePlayers.filter(p => p.name === m.sideB)
+ } else if (m.type === '2v2') {
+ pA = activePlayers.filter(p => p.name === m.sideA || p.name === m.sideA2)
+ pB = activePlayers.filter(p => p.name === m.sideB || p.name === m.sideB2)
+ } else if (m.type === 'Wheel') {
+        // Wheels are settled by lib/payouts so History, Payouts and
+        // Analytics always agree — including press money and nassau format.
+        const w = settleWheel(m, buildCtx(arch))
+        if (!w) return null
+        const wp: string[] = (m.wheelPlayers || [])
+        const netWinnings: Record<string, number> = {}
+        wp.forEach(n => { netWinnings[n] = (w.netWinnings[n] || 0) + (w.pressWinnings[n] || 0) })
+        const wheelPairs = w.pairs.map((pr: any) => ({
+          playerA: pr.playerA, playerB: pr.playerB,
+          winner: (pr.net + pr.press) > 0 ? pr.playerA : (pr.net + pr.press) < 0 ? pr.playerB : 'tie',
+          amount: Math.abs(pr.net + pr.press), press: pr.press, format: pr.format,
+        }))
+        return { type:'Wheel', id:m.id, wheelPlayers:wp, wheelAmount:m.wheelAmount, scoringType:m.scoringType||'NET', sideA:'Wheel', sideB:'', winner:'', wheelPairs, netWinnings }
+ } else {
+ pA = activePlayers.filter(p => (teams.find(t => t.name === m.sideA)?.playerIds || []).includes(p.id))
+ pB = activePlayers.filter(p => (teams.find(t => t.name === m.sideB)?.playerIds || []).includes(p.id))
+ }
+ if (pA.length === 0 || pB.length === 0) return null
+ const isGross = m.scoringType === 'GROSS'
+ const betPct = betHandicapPercent(m, money)
+ const allHcps = isGross ? [0] : [...pA, ...pB].map(p => Number(p.handicap) || 0)
+ const baseHcp = Math.min(...allHcps)
+ const makeNetScores = (playerList: any[]) => pars.map((par, i) => {
+ const valid = playerList.map(p => { const g = scores[p.id]?.[holeOffset + i] || 0; return g > 0 ? g - getStrokes(Number(p.handicap)||0, holeOffset + i, baseHcp, isGross, betPct) : 0 }).filter(Boolean)
+ return valid.length > 0 ? Math.min(...valid) : 0
+ })
+ const sA = makeNetScores(pA)
+ const sB = makeNetScores(pB)
+ const nassau = Number(m.nassau) || 5
+ const press = Number(m.press) || 5
+ const autoPress = m.autoPress !== false && (m.type === 'PvP' || m.type === '2v2')
+ const f9 = runNassauNine(sA, sB, 0, 8, nassau, press, autoPress)
+ const b9 = runNassauNine(sA, sB, 9, 17, nassau, press, autoPress)
+ // Total 18 winner
+ let aWins18 = 0, bWins18 = 0
+ for (let i = 0; i < 18; i++) { if(sA[i]>0&&sB[i]>0) { if(sA[i]<sB[i]) aWins18++; else if(sB[i]<sA[i]) bWins18++ } }
+ const tot18Pay = aWins18 > bWins18 ? nassau : bWins18 > aWins18 ? -nassau : 0
+ const birdieA = pars.map((par,i) => { const bg = Math.min(...pA.map(p=>scores[p.id]?.[holeOffset+i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
+ const birdieB = pars.map((par,i) => { const bg = Math.min(...pB.map(p=>scores[p.id]?.[holeOffset+i]||99).filter(s=>s<99)); return bg < par ? (bg <= par-2 ? Number(m.eagle||0) : Number(m.birdie||0)) : 0 }).reduce((a,b)=>a+b,0)
+ const net = (f9.payA - f9.payB) + (b9.payA - b9.payB) + tot18Pay + birdieA - birdieB
+ const winner = net > 0 ? (m.type==='2v2'?`${m.sideA}+${m.sideA2||''}`:m.sideA) : net < 0 ? (m.type==='2v2'?`${m.sideB}+${m.sideB2||''}`:m.sideB) : 'TIE'
+ const sideALabel = m.type==='2v2' ? `${m.sideA} + ${m.sideA2}` : m.sideA
+ const sideBLabel = m.type==='2v2' ? `${m.sideB} + ${m.sideB2}` : m.sideB
+ // Individual raw scores for each player (for 2v2 display)
+ const pAScores = pA.map((p:any) => ({ id:p.id, name:p.name, handicap:p.handicap, scores: arch.scores?.[p.id] || Array(18).fill(0) }))
+ const pBScores = pB.map((p:any) => ({ id:p.id, name:p.name, handicap:p.handicap, scores: arch.scores?.[p.id] || Array(18).fill(0) }))
+ return { id: m.id, type: m.type, sideA: sideALabel, sideB: sideBLabel, sA, sB, pAScores, pBScores, f9, b9, tot18Pay, birdieA, birdieB, net, winner, nassau, press, autoPress, betPct, scoringType: m.scoringType||'NET', pars }
+ }).filter(Boolean)
+
+ return {
+ fieldSize, leaderboard, f9Winners, b9Winners,
+ skinsMap, skinsLeaders, totalSkinsWon, skinsPot: grossSkinsPot, perSkin,
+ netSkinsEnabled, netSkinsMap, netSkinsLeaders, totalNetSkinsWon, netSkinsPot, perNetSkin,
+ skinsSplitGross, skinsSplitNet, handicapPercent,
+ teamResults, matchResults, money, nineHole
+ }
+}
+
+// ── TRIP ROLL-UP ENGINE ────────────────────────────────────────────
+// Aggregates every archived day that shares a tripName into one
+// cumulative view. Net uses each day's own handicap %, and to-par uses
+// each day's own course par, so mixed-course trips compare fairly.
+function buildTripRollups(archives: any[]) {
+  const trips: Record<string, any[]> = {}
+  archives.forEach(a => {
+    const t = a._meta?.tripName
+    if (!t || a._meta?.mode === 'match') return
+    // A round with no scorecards is not a round. Empty shells archived by
+    // other code paths must never count toward a trip or its rankings.
+    if (!a.scores || Object.keys(a.scores).length === 0) return
+    if (!trips[t]) trips[t] = []
+    trips[t].push(a)
+  })
+
+  return Object.entries(trips).map(([tripName, days]) => {
+    const ordered = [...days].sort((x: any, y: any) =>
+      ((x._meta?.dayNumber || 0) - (y._meta?.dayNumber || 0)) || (Number(x.id) - Number(y.id))
+    )
+    const players: Record<string, any> = {}
+    const dayMeta: any[] = []
+
+    ordered.forEach((arch: any, di: number) => {
+      const recap = buildRecap(arch)
+      const hcpPct = arch.money?.handicapPercent ?? 100
+      const parTot = (arch.course?.pars || []).reduce((a: number, b: number) => a + b, 0)
+      dayMeta.push({
+        id: arch.id,
+        label: arch._meta?.dayLabel || ('Day ' + (di + 1)),
+        arch,
+        course: arch.course?.name || '—',
+        par: parTot,
+        when: Number(arch._meta?.playedAt || arch.id),
+        isFinal: !!arch._meta?.isFinal,
+      })
+
+      recap.leaderboard.forEach((p: any) => {
+        if (!p.tot) return
+        const k = p.name
+        if (!players[k]) players[k] = {
+          name: p.name, handicap: p.handicap, gross: 0, net: 0,
+          toPar: 0, played: 0, skins: 0, skinsWon: 0, byDay: {} as any,
+        }
+        const adj = Math.round((Number(p.handicap) || 0) * (hcpPct / 100))
+        const net = p.tot - adj
+        players[k].gross += p.tot
+        players[k].net += net
+        players[k].toPar += (p.tot - parTot)
+        players[k].played += 1
+        players[k].handicap = p.handicap
+        players[k].byDay[arch.id] = { gross: p.tot, net }
+      })
+
+      const addSkins = (list: any[]) => (list || []).forEach((s: any) => {
+        if (!players[s.name]) return
+        players[s.name].skins += (s.count || 0)
+        players[s.name].skinsWon += (s.winnings || 0)
+      })
+      addSkins(recap.skinsLeaders)
+      if (recap.netSkinsEnabled) addSkins(recap.netSkinsLeaders)
     })
- onValue(ref(db, 'tournament/course'), snap => {
- if (snap.val()?.name) setCourseName(snap.val().name)
- })
- onValue(ref(db, 'tournament/meta'), snap => {
- const m = snap.val() || {}
- setTripName(m.tripName || '')
- setCurrentDay(m.currentDay || '')
- setIsMock(!!m.isMock)
- setActiveMode(m.mode || '')
- })
- // Master data listeners
- onValue(ref(db, 'globalRoster'), snap => {
- if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
- else setGlobalRoster([])
- })
- onValue(ref(db, 'courseHistory'), snap => {
- if (snap.val()) setCourseLibrary(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
- else setCourseLibrary([])
- })
- onValue(ref(db, 'history'), snap => {
- if (snap.val()) {
- const items = Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})).sort((a:any,b:any)=>Number(b.id)-Number(a.id))
- setHistory(items)
- } else setHistory([])
- })
- }, [])
 
- const choosePlayer = () => { setPlayerErr(''); setPlayerCode(''); setShowPlayerCode(true) }
-
- const submitPlayerCode = async () => {
-   const code = playerCode.trim()
-   if (!code) return
-   setPlayerBusy(true); setPlayerErr('')
-   try {
-     await signInAsPlayer(code)
-     sessionStorage.setItem('role', 'player')
-     setRole('player')
-     setShowPlayerCode(false)
-   } catch {
-     setPlayerErr('That code is not right. Ask the group admin.')
-   } finally {
-     setPlayerBusy(false)
-   }
- }
-
-
- const archiveMatch = () => {
- showModal({
- title: 'Archive Match to History',
- body: 'This saves the current match to History and closes it. All scores, payouts and results will be preserved.',
- confirmLabel: 'Archive & Close',
- cancelLabel: 'Not yet',
- onConfirm: async () => {
- closeModal()
- setArchiving(true)
- try {
- const snap = await get(ref(db, 'tournament'))
- if (snap.exists()) {
- const data = snap.val()
- await set(ref(db, `history/${Date.now()}`), {
- ...data,
- _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:data.course?.name||'Quick Match' }
- })
- }
- await set(ref(db, 'tournament'), null)
- setArchiveSuccess(true)
- setActiveMode('')
- setTimeout(() => setArchiveSuccess(false), 3000)
- } catch(e) { }
- setArchiving(false)
- },
- onCancel: closeModal
- })
- }
-
-  // ── DEMO ──────────────────────────────────────────────────────────
-  const DEMO_HOLES = [
-    {par:4,hcp:7},{par:3,hcp:15},{par:5,hcp:3},{par:4,hcp:11},
-    {par:4,hcp:1},{par:3,hcp:17},{par:5,hcp:5},{par:4,hcp:9},
-    {par:4,hcp:13},{par:4,hcp:4},{par:3,hcp:16},{par:5,hcp:2},
-    {par:3,hcp:18},{par:4,hcp:10},{par:4,hcp:6},{par:5,hcp:8},
-    {par:3,hcp:14},{par:4,hcp:12}
-  ]
-  const DEMO_PLAYERS = [
-    {name:'TIGER WOODS',       handicap:0,  scores:[4,2,4,3,4,3,5,3,4,4,3,4,2,4,4,5,3,4]},
-    {name:'RORY MCILROY',      handicap:3,  scores:[4,3,5,4,4,3,5,4,4,4,3,5,3,4,4,5,3,4]},
-    {name:'JON RAHM',          handicap:2,  scores:[5,3,4,4,5,3,5,3,4,4,2,4,3,4,4,5,3,4]},
-    {name:'SCOTTIE SCHEFFLER', handicap:1,  scores:[4,2,4,3,4,3,4,4,4,4,3,4,3,4,4,5,3,4]},
-    {name:'PHIL MICKELSON',    handicap:5,  scores:[5,3,5,4,5,4,5,4,4,5,3,5,3,5,4,5,3,5]},
-    {name:'JUSTIN THOMAS',     handicap:4,  scores:[5,3,5,4,4,3,5,4,4,4,3,5,3,4,5,5,3,4]},
-    {name:'BROOKS KOEPKA',     handicap:3,  scores:[4,3,5,4,5,4,5,4,4,5,3,5,3,4,4,5,4,4]},
-    {name:'DUSTIN JOHNSON',    handicap:2,  scores:[4,3,4,4,5,3,5,4,4,4,3,5,3,4,4,5,3,4]},
-  ]
-
-  const loadDemo = async () => {
-    const metaSnap = await get(ref(db,'tournament/meta'))
-    const meta = metaSnap.val()
-    if (meta && !meta.isMock && (meta.mode || meta.tripName)) {
-      showModal({
-        title: '⚠️ Match In Progress',
-        body: 'You have a real match currently active. Archive it to History first, or load the demo which will replace it.',
-        warning: 'Choosing "Archive & Demo" will save the current match to History first.',
-        confirmLabel: 'Archive & Load Demo',
-        cancelLabel: 'Cancel — Keep My Match',
-        danger: true,
-        onConfirm: async () => {
-          closeModal()
-          const snap = await get(ref(db,'tournament'))
-          if (snap.exists()) {
-            await set(ref(db,`history/${Date.now()}`), {
-              ...snap.val(),
-              _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
-            })
-          }
-          setDemoLoading(true)
-          await runDemoLoad()
-        },
-        onCancel: closeModal
-      })
-      return
+    const rows = Object.values(players)
+    return {
+      tripName,
+      days: dayMeta,
+      rows,
+      complete: ordered.some((a: any) => a._meta?.isFinal),
+      latest: Math.max(...ordered.map((a: any) => Number(a._meta?.playedAt || a.id))),
     }
-    showModal({
-      title: 'Load Live Demo?',
-      body: 'Loads a sample match with 8 players, 4 teams, and all 4 match types fully scored — great for showing the app to someone new.',
-      confirmLabel: 'Load Demo',
-      cancelLabel: 'Cancel',
-      onConfirm: async () => { closeModal(); setDemoLoading(true); await runDemoLoad() },
-      onCancel: closeModal
-    })
-  }
+  }).sort((a, b) => b.latest - a.latest)
+}
 
-  const runDemoLoad = async () => {
-    setDemoLoading(true)
-    try {
-      await set(ref(db,'tournament'), null)
-      await set(ref(db,'tournament/meta'), {isMock:true, mode:'match', currentDay:'Demo Day', totalDays:1})
-      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map(h=>h.par)})
-      const pidMap: Record<string,string> = {}
-      for (const p of DEMO_PLAYERS) {
-        const pRef = push(ref(db,'tournament/roster'))
-        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
-        pidMap[p.name] = pRef.key!
-      }
-      for (const p of DEMO_PLAYERS) {
-        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
-      }
-      const teamDefs = [
-        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
-        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
-        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
-        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
-      ]
-      for (const t of teamDefs) {
-        const tRef = push(ref(db,'tournament/teams'))
-        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map(n=>pidMap[n])})
-      }
-      await set(ref(db,'tournament/format'), {
-        name:"PGA Demo Round",
-        par3:[{type:'net'},{type:'net'},{type:'net'}],
-        par4:[{type:'net'},{type:'net'}],
-        par5:[{type:'net'},{type:'net'}],
-      })
-      const m1 = push(ref(db,'tournament/matchups'))
-      await set(m1, {id:m1.key, type:'PvP', sideA:'TIGER WOODS', sideB:'RORY MCILROY', nassau:5, press:5, autoPress:true, birdie:2, eagle:5, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:5, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
-      const m2 = push(ref(db,'tournament/matchups'))
-      await set(m2, {id:m2.key, type:'2v2', sideA:'TIGER WOODS', sideA2:'RORY MCILROY', sideB:'JON RAHM', sideB2:'SCOTTIE SCHEFFLER', nassau:10, press:10, autoPress:true, birdie:3, eagle:6, scoringType:'NET'})
-      const m3 = push(ref(db,'tournament/matchups'))
-      await set(m3, {id:m3.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:false, birdie:0, eagle:0, scoringType:'NET'})
-      const m4 = push(ref(db,'tournament/matchups'))
-      await set(m4, {id:m4.key, type:'Wheel', wheelPlayers:['TIGER WOODS','JON RAHM','PHIL MICKELSON','BROOKS KOEPKA'], wheelAmount:10, wheelFormat:'nassau', wheelNassau:10, wheelPress:5, wheelAutoPress:true, scoringType:'NET'})
-      await set(ref(db,'tournament/money'), {entryFee:50, skinsAllocation:20, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
-      setDemoLoading(false)
-      showToast('🎮 Demo loaded! Tiger, Rory, Rahm & friends at Augusta.')
-    } catch(e) {
-      console.error(e)
-      setDemoLoading(false)
-      showModal({ title:'Demo Failed', body:'Could not load the demo — check your internet connection and try again.', confirmLabel:'OK', onConfirm:closeModal })
-    }
-  }
+function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any, onDeleteTrip: (t: any) => void, renderRound: (a: any) => any, canDelete: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [basis, setBasis] = useState<'net' | 'gross' | 'topar'>('net')
+  const [confirming, setConfirming] = useState(false)
+  const [typed, setTyped] = useState('')
 
-  const clearDemo = async () => {
-    await set(ref(db,'tournament'), null)
-    showToast('Demo cleared')
-  }
+  const full = trip.rows.filter((r: any) => r.played === trip.days.length)
+  const partial = trip.rows.filter((r: any) => r.played !== trip.days.length)
+  const key = basis === 'gross' ? 'gross' : basis === 'topar' ? 'toPar' : 'net'
+  const ranked = [...full].sort((a: any, b: any) => a[key] - b[key])
+  const champ = ranked[0]
+  const range = trip.days.length
+    ? [Math.min(...trip.days.map((d: any) => d.when)), Math.max(...trip.days.map((d: any) => d.when))]
+    : [0, 0]
+  const fmt = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const val = (r: any) => basis === 'topar'
+    ? (r.toPar === 0 ? 'E' : r.toPar > 0 ? '+' + r.toPar : String(r.toPar))
+    : r[key]
 
-  const runTournamentDemo = async () => {
-    setDemoLoading(true)
-    try {
-      await set(ref(db,'tournament'), null)
-      await set(ref(db,'tournament/meta'), {
-        isMock:true, mode:'tournament', tripName:'Augusta Invitational',
-        currentDay:'Day 1', totalDays:3
-      })
-      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map((h:any)=>h.par)})
-      const pidMap: Record<string,string> = {}
-      for (const p of DEMO_PLAYERS) {
-        const pRef = push(ref(db,'tournament/roster'))
-        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
-        pidMap[p.name] = pRef.key!
-      }
-      for (const p of DEMO_PLAYERS) {
-        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
-      }
-      const teamDefs = [
-        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
-        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
-        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
-        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
-      ]
-      for (const t of teamDefs) {
-        const tRef = push(ref(db,'tournament/teams'))
-        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map((n:string)=>pidMap[n])})
-      }
-      await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
-      const m1 = push(ref(db,'tournament/matchups'))
-      await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:10, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
-      const m2 = push(ref(db,'tournament/matchups'))
-      await set(m2, {id:m2.key, type:'TvT', sideA:'Team Phil', sideB:'Team Brooks', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
-      setDemoLoading(false)
-      showToast('🏆 Tournament demo loaded!')
-    } catch(e) {
-      console.error(e)
-      setDemoLoading(false)
-      showToast('Demo failed — check connection')
-    }
-  }
-
-
- // Show loading while Firebase Auth resolves
- if (authLoading) {
- return (
- <div className="min-h-screen bg-black flex items-center justify-center">
- <div className="text-zinc-700 text-sm font-medium">Loading...</div>
- </div>
- )
- }
-
- // ── ROLE SELECTION SCREEN ──────────────────────────────────────
- if (role === 'none') {
- return (
- <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 font-sans">
- <div className="w-full max-w-sm space-y-8">
-
- {/* Logo */}
- <div className="text-center">
- <h1 className="text-6xl font-black tracking-tighter leading-none mb-1">
- JF <span className="text-rose-500">TOURNAMENT</span>
- </h1>
- <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
- GOLF TOURNAMENT SCORING
- </p>
- <p className="text-zinc-700 text-[10px] font-medium normal-case mt-1">By Jared Friend</p>
- </div>
-
- {/* Role choice */}
- <div className="space-y-3">
- <p className="text-zinc-600 text-[10px] font-black tracking-[0.3em] text-center">WHO ARE YOU?</p>
-
- {showPlayerCode ? (
- <div className="w-full bg-zinc-900 border-2 border-emerald-500/40 p-6 rounded-[2rem] space-y-3">
-   <div>
-     <div className="text-xl font-black text-white">Enter group code</div>
-     <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
-       Ask the group admin if you do not have it
-     </div>
-   </div>
-   <input
-     type="password"
-     autoFocus
-     value={playerCode}
-     onChange={e => setPlayerCode(e.target.value)}
-     onKeyDown={e => { if (e.key === 'Enter') submitPlayerCode() }}
-     placeholder="Group code"
-     className="w-full bg-black border-2 border-zinc-700 focus:border-emerald-500 p-4 rounded-2xl font-black text-white outline-none transition-colors"
-   />
-   {playerErr && <p className="text-[11px] font-black text-rose-400">{playerErr}</p>}
-   <div className="flex gap-2">
-     <button
-       onClick={submitPlayerCode}
-       disabled={playerBusy || !playerCode.trim()}
-       className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 rounded-2xl font-black transition-colors"
-     >
-       {playerBusy ? 'Checking...' : 'Continue'}
-     </button>
-     <button
-       onClick={() => setShowPlayerCode(false)}
-       className="px-5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl font-black transition-colors"
-     >
-       Cancel
-     </button>
-   </div>
- </div>
- ) : (
- <button
- onClick={choosePlayer}
- className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
- >
- <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/30 transition-colors">
- <User size={28} className="text-emerald-400"/>
- </div>
- <div className="text-left">
- <div className="text-xl font-black text-white">I'm a Player</div>
- <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
- View scores, results & payouts
- </div>
- </div>
- <ChevronRight size={20} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
- </button>
- )}
- </div>
- <Link href="/login"
- className="w-full flex items-center gap-4 bg-zinc-800/40 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-5 rounded-[2rem] transition-all group">
- <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
- <Shield size={24} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
- </div>
- <div className="text-left flex-1">
- <div className="text-xl font-black text-zinc-400 group-hover:text-white">Admin Sign In</div>
- <div className="text-[10px] font-black text-zinc-600 tracking-widest normal-case mt-0.5">Sign in with email & password</div>
- </div>
- <ChevronRight size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
- </Link>
-
-
-
-
- <Link href="/guide"
- className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
- <BookOpen size={14} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
- <span className="font-black text-xs text-zinc-600 group-hover:text-emerald-400 transition-colors tracking-widest">
- EXPLORE HOW THIS WORKS
- </span>
- </Link>
- <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
- JF TOURNAMENT · {new Date().getFullYear()}
- 
- </p>
-
- </div>
-
- {/* In-app confirm modal — no popup blockers */}
- {modal && (
- <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/80 backdrop-blur-sm overflow-y-auto">
- <div className="w-full max-w-sm bg-zinc-900 rounded-[2rem] border border-zinc-700 shadow-2xl overflow-hidden">
- <div className="p-6 space-y-3">
- <h2 className="font-bold text-lg text-white">{modal.title}</h2>
- <p className="text-zinc-400 text-sm font-medium normal-case leading-relaxed">{modal.body}</p>
- {modal.warning && (
- <div className={`flex items-start gap-2 rounded-xl p-3 text-xs font-medium normal-case leading-relaxed ${
- modal.danger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
- }`}>
- <span className="flex-shrink-0">⚠️</span>
- <span>{modal.warning}</span>
- </div>
- )}
- </div>
- <div className="px-6 pb-6 flex flex-col gap-2">
- <button onClick={modal.onConfirm}
- className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-colors ${
- modal.danger ? 'bg-rose-500 hover:bg-rose-400 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
- }`}>
- {modal.confirmLabel}
- </button>
- {modal.cancelLabel && (
- <button onClick={modal.onCancel || closeModal}
- className="w-full py-3.5 rounded-2xl font-bold text-sm text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 transition-colors">
- {modal.cancelLabel}
- </button>
- )}
- </div>
- </div>
- </div>
- )}
-
- </div>
- )
- }
-
- // ── PLAYER HUB ─────────────────────────────────────────────────
- if (role === 'player') {
- const playerItems = [
- { title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
- { title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"},
- { title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"},
- { title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"},
- ...(playerCanSeeAnalytics ? [{ title:"Analytics", desc:"Stats, records & betting trends", path:"/master/analytics", icon:<BarChart3 className="text-purple-400"size={28}/>, color:"border-purple-800/20 hover:border-purple-600", accent:"text-purple-400"}] : []),
- ]
-
- return (
- <div className="min-h-screen bg-zinc-950 text-white font-sans">
- <div className="max-w-2xl mx-auto px-4 py-10">
-
- {/* Header */}
- <header className="mb-10 border-b-4 border-emerald-500 pb-6">
- <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
- </h1>
- <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
- {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
- {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-400">{tripName}</span></>}
- {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-400">{currentDay}</span></>}
- {isMock && <span className="text-amber-400">· DEMO</span>}
- </div>
- </header>
- {/* Demo banner - purple for pro golfer demo */}
- {isMock && (
- <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
- <div>
- <p className="text-purple-400 font-bold text-sm">🎮 Demo Active</p>
- <p className="text-zinc-500 text-xs font-medium normal-case">Tiger, Rory & friends at Augusta National</p>
- </div>
- <button onClick={clearDemo}
- className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 hover:border-rose-500 text-zinc-400 hover:text-rose-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
- <X size={12}/> Clear Demo
- </button>
- </div>
- )}
- {/* Old demo banner - keep for backward compat */}
- {false && isMock && (
- <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
- <div>
- <p className="text-amber-400 font-bold text-sm">Demo Mode</p>
- <p className="text-zinc-500 text-xs font-medium normal-case">Sample match — 1v1, 2v2, Team, Wheel</p>
- </div>
- <button onClick={clearDemo}
- className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 hover:border-rose-500 text-zinc-400 hover:text-rose-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
- <X size={12}/> Exit Demo
- </button>
- </div>
- )}
-
-
- {/* Player nav — uniform pill style */}
- <div className="space-y-3 mb-6">
- {playerItems.map(item => (
- <Link key={item.title} href={item.path}
- className={`group w-full bg-zinc-900/40 p-4 rounded-2xl border ${item.color} transition-all active:scale-[0.99] flex items-center gap-4`}>
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- {React.cloneElement(item.icon, { size: 20 })}
- </div>
- <div className="flex-1 min-w-0">
- <h2 className={`text-base font-bold leading-tight group-hover:${item.accent} transition-colors`}>{item.title}</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">{item.desc}</p>
- </div>
- <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:border-zinc-600 transition-all flex-shrink-0">
- <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
- </div>
- </Link>
- ))}
- </div>
-
- {/* Guide + Exit — uniform pill style */}
- <div className="space-y-3">
- <Link href="/guide"
- className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <BookOpen size={20} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
- </div>
- <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How This App Works</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Guide, tips & feature walkthrough</p>
- </div>
- <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:border-zinc-600 transition-all">
- <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
- </div>
- </Link>
- <button onClick={async () => {
- sessionStorage.removeItem('role')
- if (user) await signOut()
- setRole('none')
- }}
- className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
- <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
- <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
- </div>
- <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Exit</h2>
- <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Return to home screen</p>
- </div>
- </button>
- </div>
-
- {/* Demo type modal */}
- {showDemoModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
- <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
- <div className="text-center">
- <div className="text-3xl mb-2">🎮</div>
- <h2 className="font-black text-lg">Load Demo Round</h2>
- <p className="text-zinc-500 text-xs font-medium normal-case mt-1">8 pro golfers at Augusta National with all bet types pre-loaded.</p>
- </div>
- {isMock && (
- <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
- <p className="text-amber-400 text-xs font-semibold">⚠️ Demo already active</p>
- <button onClick={async () => { await clearDemo(); setShowDemoModal(false) }}
- className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
- </div>
- )}
- <div className="space-y-2">
- <button
- onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
- disabled={demoLoading || isMock}
- className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
- <div className="font-black">⚡ Quick Match Demo</div>
- <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
- <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
- </button>
- <button
- onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
- disabled={demoLoading || isMock}
- className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
- <div className="font-black">🏆 Tournament Demo</div>
- <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
- <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
- </button>
- </div>
- <button onClick={() => setShowDemoModal(false)}
- className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
- Cancel
- </button>
- </div>
- </div>
- )}
-
- </div>
- </div>
- )
- }
-
- // ── ADMIN HUB ──────────────────────────────────────────────────
-  // Grouped by what you are actually doing: play, start, keep, review.
-  const playItems = [
-    { title:"Live Scorer",    desc:"Enter hole-by-hole scores", path:"/scorer",  icon:<Target size={20} className="text-emerald-400"/>,   hover:"hover:border-emerald-500/60" },
-    { title:"Results",        desc:"Leaderboard & teams",       path:"/results", icon:<Trophy size={20} className="text-[#33CCFF]"/>,     hover:"hover:border-blue-400/60" },
-    { title:"Payouts",        desc:"Side bets & evidence",      path:"/payouts", icon:<DollarSign size={20} className="text-amber-400"/>, hover:"hover:border-amber-400/60" },
-  ]
-  const dataItems = [
-    { title:"Roster",  desc:"Permanent player list", path:"/roster",  icon:<Users size={20} className="text-emerald-400"/>, hover:"hover:border-emerald-600/60" },
-    { title:"Courses", desc:"Saved · scan cards",    path:"/courses", icon:<Flag size={20} className="text-teal-400"/>,     hover:"hover:border-teal-600/60" },
-  ]
-  const reviewItems = [
-    { title:"History", desc:"Past trips & rounds", path:"/history", icon:<Archive size={20} className="text-blue-400"/>, hover:"hover:border-blue-600/60" },
-    ...((authRole === 'master' || scorerCanSeeAnalytics) ? [
-    { title:"Analytics", desc:"Stats & betting trends", path:"/master/analytics", icon:<BarChart3 size={20} className="text-purple-400"/>, hover:"hover:border-purple-600/60" }] : []),
-  ]
-
-  // A round is live when there is a mode set and we are not in demo.
-  const liveRound = !isMock && !!activeMode
-  const liveLabel = activeMode === 'match' ? 'Quick match' : (tripName || 'Tournament')
-
-  const Tile = ({ item, wide = false }: { item:any, wide?:boolean }) => (
-    <Link href={item.path}
-      className={`group bg-zinc-900/40 border border-zinc-800 ${item.hover} rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${wide ? 'col-span-2' : ''}`}>
-      {item.icon}
-      <h2 className="text-[15px] font-bold leading-tight mt-1.5">{item.title}</h2>
-      <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">{item.desc}</p>
-    </Link>
-  )
-
-  const GroupLabel = ({ children }: { children:React.ReactNode }) => (
-    <p className="text-[9px] font-black text-zinc-600 tracking-[0.2em] mb-2">{children}</p>
-  )
-
-  const StartGroup = () => (
-    <div className="mb-5">
-      <GroupLabel>START A ROUND</GroupLabel>
-      <div className="grid grid-cols-2 gap-2.5">
-        <Link href="/setup"
-          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
-            activeMode && activeMode !== 'match' ? 'border-rose-500/60 bg-rose-950/10' : 'border-rose-500/25 hover:border-rose-500/70'}`}>
-          <ShieldAlert size={20} className="text-rose-400"/>
-          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Tournament</h2>
-          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Multi-day &amp; skins</p>
-        </Link>
-        <Link href="/match"
-          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
-            activeMode === 'match' ? 'border-amber-500/60 bg-amber-950/10' : 'border-amber-500/25 hover:border-amber-500/70'}`}>
-          <Zap size={20} className="text-amber-400"/>
-          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Quick match</h2>
-          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Casual · just bets</p>
-        </Link>
-        {!isMock ? (
-          <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
-            className="col-span-2 text-left bg-zinc-900/30 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl px-3.5 py-2.5 transition-all active:scale-[0.99] flex items-center gap-2.5 disabled:opacity-50">
-            <PlayCircle size={16} className="text-purple-400 flex-shrink-0"/>
-            <span className="text-[13px] font-bold text-purple-400">{demoLoading ? 'Loading demo…' : 'Demo round'}</span>
-            <span className="text-[11px] text-zinc-600 font-medium normal-case truncate">Tiger · Rory · Augusta</span>
-          </button>
-        ) : (
-          <div className="col-span-2 bg-purple-500/10 border border-purple-500/30 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-purple-400 font-black text-[13px]">Demo active</p>
-              <p className="text-zinc-500 text-[10px] font-medium normal-case truncate">Augusta National · 8 pros</p>
+  return (
+    <div className={`rounded-[2.5rem] border-2 overflow-hidden shadow-2xl transition-all ${open ? 'border-emerald-500/50' : 'border-emerald-500/20 hover:border-emerald-500/40'}`}>
+      <div className="p-5 sm:p-7 cursor-pointer bg-gradient-to-br from-emerald-950/40 to-zinc-900" onClick={() => setOpen(!open)}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-emerald-500/70 font-black text-[10px] tracking-widest mb-1">
+              <Trophy size={12}/> TRIP SUMMARY
+              {trip.complete && <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-md">COMPLETE</span>}
             </div>
-            <button onClick={clearDemo}
-              className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-[11px] font-black transition-all flex-shrink-0">
-              <X size={12}/> EXIT
-            </button>
+            <h2 className="text-xl sm:text-2xl font-black text-white leading-tight truncate">{trip.tripName}</h2>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <span className="text-[10px] font-black text-zinc-500 flex items-center gap-1">
+                <Calendar size={10}/> {fmt(range[0])} – {fmt(range[1])}
+              </span>
+              <span className="text-[10px] font-black text-zinc-500">{trip.days.length} DAYS</span>
+              <span className="text-[10px] font-black text-zinc-500 flex items-center gap-1">
+                <Users size={10}/> {trip.rows.length} PLAYERS
+              </span>
+            </div>
+          </div>
+          <div className="text-emerald-500 flex-shrink-0">{open ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</div>
+        </div>
+
+        {champ && (
+          <div className="mt-4 bg-black/40 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3">
+            <Medal size={22} className="text-amber-400 flex-shrink-0"/>
+            <div className="min-w-0">
+              <p className="text-[9px] font-black text-zinc-500 tracking-widest">
+                TRIP CHAMPION · {basis === 'net' ? 'NET' : basis === 'gross' ? 'GROSS' : 'TO PAR'}
+              </p>
+              <p className="font-black text-white text-lg truncate">{champ.name}</p>
+            </div>
+            <div className="ml-auto text-right flex-shrink-0">
+              <p className="text-2xl font-black text-emerald-400">{val(champ)}</p>
+              <p className="text-[9px] font-black text-zinc-600">{trip.days.length} ROUNDS</p>
+            </div>
           </div>
         )}
       </div>
+
+      {open && (
+        <div className="bg-black p-5 sm:p-7 space-y-5">
+          {/* basis toggle */}
+          <div className="flex gap-2">
+            {([['net','NET'],['gross','GROSS'],['topar','TO PAR']] as const).map(([v, lbl]) => (
+              <button key={v} onClick={() => setBasis(v as any)}
+                className={`flex-1 py-2 rounded-xl font-black text-[11px] tracking-wider transition-all border ${
+                  basis === v ? 'bg-emerald-500 border-emerald-400 text-black' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* cumulative table */}
+          <div>
+            <p className="text-[10px] font-black text-emerald-500 tracking-widest mb-2 flex items-center gap-1.5">
+              <Trophy size={12}/> CUMULATIVE LEADERBOARD
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[9px] font-black text-zinc-600 tracking-widest border-b border-zinc-800">
+                    <th className="text-left py-2 w-8">#</th>
+                    <th className="text-left py-2">PLAYER</th>
+                    {trip.days.map((d: any) => (
+                      <th key={d.id} className="text-right py-2 px-1 whitespace-nowrap">{d.label.replace('Day ', 'D')}</th>
+                    ))}
+                    <th className="text-right py-2 pl-2">TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((r: any, i: number) => (
+                    <tr key={r.name} className={`border-b border-zinc-900 ${i === 0 ? 'bg-emerald-500/5' : ''}`}>
+                      <td className="py-2.5"><RankBadge rank={i + 1}/></td>
+                      <td className="py-2.5 font-black text-white whitespace-nowrap">
+                        {r.name}
+                        <span className="text-zinc-600 text-[10px] font-bold ml-1.5">HCP {r.handicap ?? 0}</span>
+                      </td>
+                      {trip.days.map((d: any) => (
+                        <td key={d.id} className="text-right py-2.5 px-1 text-zinc-400 font-bold tabular-nums">
+                          {r.byDay[d.id] ? (basis === 'net' ? r.byDay[d.id].net : r.byDay[d.id].gross) : '—'}
+                        </td>
+                      ))}
+                      <td className={`text-right py-2.5 pl-2 font-black tabular-nums ${i === 0 ? 'text-emerald-400' : 'text-white'}`}>
+                        {val(r)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {partial.length > 0 && (
+              <p className="text-[10px] font-black text-amber-500/80 mt-3">
+                NOT RANKED — PLAYED FEWER THAN {trip.days.length} ROUNDS: {partial.map((p: any) => `${p.name} (${p.played})`).join(', ')}
+              </p>
+            )}
+          </div>
+
+          {/* day breakdown */}
+          <div>
+            <p className="text-[10px] font-black text-blue-400 tracking-widest mb-2 flex items-center gap-1.5">
+              <Flag size={12}/> ROUNDS
+            </p>
+            <div className="space-y-4">
+              {trip.days.map((d: any) => (
+                <div key={d.id}>{renderRound(d.arch)}</div>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[9px] font-black text-zinc-700 leading-relaxed">
+            NET USES EACH ROUND&apos;S OWN HANDICAP %. TO PAR USES EACH ROUND&apos;S OWN COURSE PAR,
+            SO ROUNDS ON DIFFERENT COURSES COMPARE FAIRLY. MONEY IS ON THE ANALYTICS PAGE.
+          </p>
+
+          {/* ── DELETE WHOLE TRIP ── */}
+          <div className="pt-2 border-t border-zinc-900">
+            {!canDelete ? null : !confirming ? (
+              <button
+                onClick={() => setConfirming(true)}
+                className="w-full flex items-center justify-center gap-2 text-rose-500/70 hover:text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 py-2.5 rounded-xl font-black text-[11px] tracking-wider transition-all">
+                <Trash2 size={12}/> DELETE ENTIRE TRIP ({trip.days.length} ROUND{trip.days.length > 1 ? 'S' : ''})
+              </button>
+            ) : (
+              <div className="border border-rose-500/40 bg-rose-500/10 rounded-2xl p-4 space-y-3">
+                <p className="text-[11px] font-black text-rose-400 leading-snug">
+                  THIS PERMANENTLY DELETES ALL {trip.days.length} ARCHIVED ROUND{trip.days.length > 1 ? 'S' : ''} IN THIS TRIP. IT CANNOT BE UNDONE.
+                </p>
+                <ul className="space-y-1">
+                  {trip.days.map((d: any) => (
+                    <li key={d.id} className="text-[10px] font-black text-zinc-400 flex items-center gap-2">
+                      <span className="text-rose-500">•</span> {d.label} — {d.course}
+                    </li>
+                  ))}
+                </ul>
+                <div>
+                  <label className="text-[9px] font-black text-zinc-500 tracking-widest block mb-1.5">
+                    TYPE <span className="text-white">{trip.tripName}</span> TO CONFIRM
+                  </label>
+                  <input
+                    value={typed}
+                    onChange={e => setTyped(e.target.value)}
+                    placeholder={trip.tripName}
+                    className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-xs transition-colors"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={typed.trim().toUpperCase() !== String(trip.tripName).trim().toUpperCase()}
+                    onClick={() => { onDeleteTrip(trip); setConfirming(false); setTyped('') }}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
+                    DELETE {trip.days.length} ROUND{trip.days.length > 1 ? 'S' : ''}
+                  </button>
+                  <button
+                    onClick={() => { setConfirming(false); setTyped('') }}
+                    className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-xs transition-colors">
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
+}
 
-  const PlayGroup = () => (
-    <div className="mb-5">
-      <GroupLabel>DURING PLAY</GroupLabel>
-      <div className="grid grid-cols-2 gap-2.5">
-        <Tile item={playItems[0]} wide={liveRound}/>
-        <Tile item={playItems[1]}/>
-        <Tile item={playItems[2]}/>
-      </div>
-    </div>
-  )
+// ── TO-PAR HELPER ──────────────────────────────────────────────────
+function ToParBadge({ diff }: { diff: number | null }) {
+ if (diff === null) return <span className="text-zinc-700">—</span>
+ if (diff === 0) return <span className="text-white font-black text-xs">E</span>
+ if (diff > 0) return <span className="text-rose-400 font-black text-xs">+{diff}</span>
+ return <span className="text-emerald-400 font-black text-xs">{diff}</span>
+}
 
+// ── RANK MEDAL ─────────────────────────────────────────────────────
+function RankBadge({ rank }: { rank: number }) {
+ if (rank === 1) return <span className="text-yellow-400 font-black text-sm">🥇</span>
+ if (rank === 2) return <span className="text-zinc-400 font-black text-sm">🥈</span>
+ if (rank === 3) return <span className="font-black text-sm">🥉</span>
+ return <span className="text-zinc-600 font-black text-xs w-5 text-center">{rank}</span>
+}
+
+export default function HistoryPage() {
+ const [archives, setArchives] = useState<any[]>([])
+ const { role } = useAuth()
+ const sessionRole = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null
+ // Players never get delete controls — master and scorer only.
+ const canDelete = (role === 'master' || role === 'scorer') && sessionRole !== 'player'
+ const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+ const [expandedId, setExpandedId] = useState<string | null>(null)
+ const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null)
+ const [exportingId, setExportingId] = useState<string | null>(null)
+ const [expandedWheelPairHistKey, setExpandedWheelPairHistKey] = useState<string | null>(null)
+ 
+ // ── ADD MATCHUPS STATE ──
+ const [addMatchupsTo, setAddMatchupsTo] = useState<string | null>(null)
+ const [newMatchType, setNewMatchType] = useState<'PvP' | '2v2' | 'Team' | 'Wheel'>('PvP')
+ const [newMatchData, setNewMatchData] = useState<any>({
+ sideA: '',
+ sideA2: '',
+ sideB: '',
+ sideB2: '',
+ nassau: 5,
+ press: 5,
+ birdie: 0,
+ eagle: 0,
+ autoPress: true,
+ scoringType: 'NET',
+ wheelPlayers: [],
+ wheelAmount: 10,
+ handicapPercent: 100,
+ netSkinsEnabled: false,
+ skinsSplitGross: 100,
+ skinsSplitNet: 0,
+ })
+
+ useEffect(() => {
+ onValue(ref(db, 'history'), snap => {
+ if (snap.val()) {
+ const data = Object.entries(snap.val())
+ .map(([key, value]: [string, any]) => ({ id: key, ...value }))
+ .sort((a, b) => Number(b.id) - Number(a.id))
+ setArchives(data)
+ } else {
+ setArchives([])
+ }
+ })
+ }, [])
+
+ const deleteHistory = (id: string) => {
+ if (!canDelete) return
+ set(ref(db, 'history/' + id), null)
+ setConfirmDeleteId(null)
+ }
+
+ // Deletes every archived round belonging to a trip. The roll-up card is
+ // derived, so removing a trip means removing its underlying day records.
+ const deleteTrip = (trip: any) => {
+ if (!canDelete) return
+ trip.days.forEach((d: any) => set(ref(db, 'history/' + d.id), null))
+ }
+
+ // ── SAVE NEW MATCHUP ──
+ const saveNewMatchup = () => {
+ if (!addMatchupsTo) return
+ 
+ // Validate inputs based on type
+ if (newMatchType === 'Wheel') {
+ if (!newMatchData.wheelPlayers || newMatchData.wheelPlayers.length < 2) {
+ alert('Wheel needs at least 2 players')
+ return
+ }
+ } else if (newMatchType === 'Team') {
+ if (!newMatchData.sideA || !newMatchData.sideB) {
+ alert('Please select Team A and Team B')
+ return
+ }
+ } else if (newMatchType === '2v2') {
+ if (!newMatchData.sideA || !newMatchData.sideA2 || !newMatchData.sideB || !newMatchData.sideB2) {
+ alert('For 2v2, please select 2 players per side')
+ return
+ }
+ } else {
+ if (!newMatchData.sideA || !newMatchData.sideB) {
+ alert('Please select Side A and Side B players')
+ return
+ }
+ }
+
+ const matchupToSave: any = {
+ type: newMatchType,
+ scoringType: newMatchData.scoringType || 'NET',
+ handicapPercent: newMatchData.handicapPercent || 100,
+ netSkinsEnabled: newMatchData.netSkinsEnabled || false,
+ skinsSplitGross: newMatchData.skinsSplitGross || 100,
+ skinsSplitNet: newMatchData.skinsSplitNet || 0,
+ }
+
+ if (newMatchType === 'Wheel') {
+ matchupToSave.wheelPlayers = newMatchData.wheelPlayers || []
+ matchupToSave.wheelAmount = Number(newMatchData.wheelAmount) || 10
+ } else if (newMatchType === 'Team') {
+ matchupToSave.sideA = newMatchData.sideA
+ matchupToSave.sideB = newMatchData.sideB
+ matchupToSave.nassau = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauF9 = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauB9 = Number(newMatchData.nassauB9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauOverall = Number(newMatchData.nassauOverall ?? newMatchData.nassau) || 5
+ matchupToSave.press = Number(newMatchData.press) || 5
+ matchupToSave.birdie = Number(newMatchData.birdie) || 0
+ matchupToSave.eagle = Number(newMatchData.eagle) || 0
+ matchupToSave.autoPress = newMatchData.autoPress !== false
+ } else if (newMatchType === '2v2') {
+ matchupToSave.sideA = newMatchData.sideA
+ matchupToSave.sideA2 = newMatchData.sideA2
+ matchupToSave.sideB = newMatchData.sideB
+ matchupToSave.sideB2 = newMatchData.sideB2
+ matchupToSave.nassau = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauF9 = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauB9 = Number(newMatchData.nassauB9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauOverall = Number(newMatchData.nassauOverall ?? newMatchData.nassau) || 5
+ matchupToSave.press = Number(newMatchData.press) || 5
+ matchupToSave.birdie = Number(newMatchData.birdie) || 0
+ matchupToSave.eagle = Number(newMatchData.eagle) || 0
+ matchupToSave.autoPress = newMatchData.autoPress !== false
+ } else {
+ // PvP - don't include sideA2/sideB2
+ matchupToSave.sideA = newMatchData.sideA
+ matchupToSave.sideB = newMatchData.sideB
+ matchupToSave.nassau = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauF9 = Number(newMatchData.nassauF9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauB9 = Number(newMatchData.nassauB9 ?? newMatchData.nassau) || 5
+ matchupToSave.nassauOverall = Number(newMatchData.nassauOverall ?? newMatchData.nassau) || 5
+ matchupToSave.press = Number(newMatchData.press) || 5
+ matchupToSave.birdie = Number(newMatchData.birdie) || 0
+ matchupToSave.eagle = Number(newMatchData.eagle) || 0
+ matchupToSave.autoPress = newMatchData.autoPress !== false
+ }
+
+ try {
+ console.log('Saving matchup:', matchupToSave)
+ console.log('To path:', `history/${addMatchupsTo}/matchups`)
+ push(ref(db, `history/${addMatchupsTo}/matchups`), matchupToSave)
+ // Reset modal
+ setAddMatchupsTo(null)
+ setNewMatchData({
+ sideA: '',
+ sideA2: '',
+ sideB: '',
+ sideB2: '',
+ nassau: 5,
+ press: 5,
+ birdie: 0,
+ eagle: 0,
+ autoPress: true,
+ scoringType: 'NET',
+ wheelPlayers: [],
+ wheelAmount: 10,
+ handicapPercent: 100,
+ netSkinsEnabled: false,
+ skinsSplitGross: 100,
+ skinsSplitNet: 0,
+ })
+ alert('Matchup saved!')
+ } catch (err) {
+ console.error('Error saving matchup:', err)
+ alert(`Failed to save matchup: ${err}`)
+ }
+ }
+
+ const exportPDF = (arch: any, recap: any, date: string) => {
+ setExportingId(arch.id)
+
+ const isMatch = arch._meta?.mode === 'match'
+ const courseTitle = arch.course?.name || 'JF Tournament Manager'
+  const subtitle = isMatch ? 'Quick Match' : `${arch._meta?.tripName || ''} · ${arch._meta?.dayLabel || ''}`.trim().replace(/^·\s*/, '')
+ const pars: number[] = arch.course?.pars || Array(18).fill(4)
+ const scores: Record<string, number[]> = arch.scores || {}
+
+ // Build hole-by-hole scorecard HTML for each match
+ const buildScorecardHTML = (m: any) => {
+ if (m.type === 'Wheel') {
+ const pairs = []
+ const wp = m.wheelPlayers || []
+ for (let a = 0; a < wp.length; a++) for (let b = a+1; b < wp.length; b++) pairs.push({a:wp[a],b:wp[b]})
+ return `<div class="pairs-grid">${pairs.map(p => `<div class="pair-pill">${p.a} <span class="vs">vs</span> ${p.b}</div>`).join('')}</div>`
+ }
+
+ const sA = m.sA || []
+ const sB = m.sB || []
+ const frontWinners = m.f9?.holeWinners || []
+ const backWinners = m.b9?.holeWinners || []
+
+ const scoreCell = (s: number, par: number) => {
+ if (!s) return '<td class="sc empty">—</td>'
+ const d = s - par
+ let cls = 'sc'
+ if (d <= -2) cls += ' eagle'
+ else if (d === -1) cls += ' birdie'
+ else if (d === 0) cls += ' par'
+ else if (d === 1) cls += ' bogey'
+ else cls += ' double'
+ return `<td class="${cls}">${s}</td>`
+ }
+
+ const nineTable = (start: number, label: string, winners: string[]) => {
+ const holes = Array.from({length:9}, (_,i) => start+i)
+ const totA = holes.reduce((acc,i) => acc+(sA[i]||0), 0)
+ const totB = holes.reduce((acc,i) => acc+(sB[i]||0), 0)
+ return `
+ <div class="nine-label">${label}</div>
+ <table class="scorecard">
+ <thead><tr>
+ <th class="player-col">Player</th>
+ ${holes.map(i => `<th>${i+1}<div class="par-sub">p${pars[i]}</div></th>`).join('')}
+ <th class="total-col">${start===0?'OUT':'IN'}</th>
+ </tr></thead>
+ <tbody>
+ <tr class="side-a">
+ <td class="player-name">${m.sideA}</td>
+ ${holes.map(i => scoreCell(sA[i], pars[i])).join('')}
+ <td class="total">${totA||'—'}</td>
+ </tr>
+ <tr class="side-b">
+ <td class="player-name">${m.sideB}</td>
+ ${holes.map(i => scoreCell(sB[i], pars[i])).join('')}
+ <td class="total">${totB||'—'}</td>
+ </tr>
+ <tr class="winners-row">
+ <td class="player-name" style="color:#555">Hole</td>
+ ${winners.map(w => `<td class="hole-winner ${w==='A'?'win-a':w==='B'?'win-b':w==='½'?'tie':''}">${w==='·'?'':w}</td>`).join('')}
+ <td></td>
+ </tr>
+ </tbody>
+ </table>`
+ }
+
+ const payoutRow = (label: string, pA: number, pB: number) =>
+ `<div class="payout-row"><span class="pl">${label}</span><span class="pa">$${pA}</span><span class="sep">·</span><span class="pb">$${pB}</span></div>`
+
+ const result = m.net === 0 ? 'EVEN' : m.net > 0
+ ? `${m.sideB} owes <strong>$${Math.abs(m.net)}</strong>`
+ : `${m.sideA} owes <strong>$${Math.abs(m.net)}</strong>`
+
+ return `
+ ${nineTable(0, 'FRONT 9', frontWinners)}
+ ${nineTable(9, 'BACK 9', backWinners)}
+ <div class="payout-block">
+ ${payoutRow('Front 9', m.f9?.payA||0, m.f9?.payB||0)}
+ ${payoutRow('Back 9', m.b9?.payA||0, m.b9?.payB||0)}
+ ${payoutRow('Birdies', m.birdieA||0, m.birdieB||0)}
+ <div class="match-result">Match Result: ${result}</div>
+ </div>`
+ }
+
+ const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>JF Tournament Manager Export</title>
+<style>
+@page { size: A4 portrait; margin: 10mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; font-size: 11px; max-width: 190mm; margin: 0 auto; }
+@media print { .no-print { display:none!important; } }
+.print-btn { background:#111; color:#fff; border:none; padding:8px 20px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; margin-bottom:14px; display:block; }
+.hdr { background:#111; color:#fff; border-radius:10px; padding:12px 16px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.hdr-brand { font-size:20px; font-weight:900; letter-spacing:-0.5px; }
+.hdr-brand span { color:#10b981; }
+.hdr-right { text-align:right; }
+.hdr-course { font-size:13px; font-weight:700; }
+.hdr-sub { font-size:10px; color:#9ca3af; margin-top:2px; }
+.section { margin-bottom:14px; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; page-break-inside:avoid; }
+.sh { padding:7px 12px; font-size:9px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; border-bottom:1px solid #e5e7eb; }
+.sh.g { background:#f0fdf4; color:#166534; }
+.sh.a { background:#fffbeb; color:#92400e; }
+.sh.b { background:#eff6ff; color:#1e40af; }
+table.lb { width:100%; border-collapse:collapse; }
+table.lb td { padding:5px 10px; border-bottom:1px solid #f3f4f6; font-size:11px; }
+table.lb tr:last-child td { border-bottom:none; }
+table.lb tr:nth-child(even) td { background:#f9fafb; }
+.sk-grid { display:grid; grid-template-columns:repeat(9,1fr); gap:4px; padding:8px 10px; }
+.sk { border:1px solid #e5e7eb; border-radius:5px; padding:3px 1px; text-align:center; }
+.sk.w { border-color:#10b981; background:#f0fdf4; }
+.sk-h { font-size:8px; color:#9ca3af; font-weight:600; }
+.sk-n { font-size:8px; color:#059669; font-weight:700; line-height:1.2; }
+table.st { width:100%; border-collapse:collapse; }
+table.st td { padding:4px 10px; border-bottom:1px solid #f3f4f6; font-size:11px; }
+.sc-hdr { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:#f9fafb; border-bottom:1px solid #e5e7eb; }
+.sc-a { color:#059669; font-weight:700; font-size:12px; }
+.sc-b { color:#2563eb; font-weight:700; font-size:12px; }
+.sc-sep { color:#9ca3af; margin:0 5px; font-size:10px; }
+.badges { display:flex; gap:4px; }
+.bdg { font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; }
+.bdg.net { background:#f0fdf4; color:#059669; }
+.bdg.gross { background:#fef2f2; color:#dc2626; }
+.bdg.t { background:#f3f4f6; color:#374151; }
+.nlbl { font-size:8px; font-weight:700; letter-spacing:.1em; color:#9ca3af; padding:5px 10px 2px; text-transform:uppercase; }
+table.sc { width:100%; border-collapse:collapse; table-layout:fixed; font-size:10px; }
+table.sc th { background:#f9fafb; text-align:center; padding:3px 1px; font-size:9px; color:#6b7280; font-weight:700; border-bottom:1px solid #e5e7eb; width:17px; }
+table.sc th.nc { text-align:left; padding-left:8px; width:90px; }
+table.sc th.tc { width:28px; }
+table.sc td { text-align:center; padding:3px 1px; border-bottom:1px solid #f9fafb; width:17px; color:#374151; font-weight:600; }
+table.sc td.nc { text-align:left; padding-left:8px; width:90px; font-weight:700; font-size:11px; }
+table.sc td.tc { width:28px; font-weight:700; font-size:12px; }
+.ra td.nc,.ra td.tc { color:#059669; }
+.rb td.nc,.rb td.tc { color:#2563eb; }
+.rw { background:#f9fafb; }
+.rw td { padding:2px 1px; font-size:9px; font-weight:700; }
+.wA { color:#059669; } .wB { color:#2563eb; } .wT { color:#9ca3af; }
+.pl { font-size:7px; color:#9ca3af; font-weight:400; display:block; }
+.sp { display:inline-block; background:#e5e7eb; border-radius:3px; width:15px; height:15px; line-height:15px; font-size:9px; }
+.sb { display:inline-block; border:1.5px solid #dc2626; border-radius:50%; width:15px; height:15px; line-height:12px; color:#dc2626; font-size:9px; }
+.se { display:inline-block; border:1.5px solid #d97706; border-radius:50%; outline:1.5px solid #d97706; outline-offset:1px; width:15px; height:15px; line-height:12px; color:#d97706; font-size:9px; }
+.sg { display:inline-block; border:1px solid #9ca3af; border-radius:2px; width:15px; height:15px; line-height:13px; color:#6b7280; font-size:9px; }
+.sd { display:inline-block; border:2px solid #9ca3af; border-radius:2px; width:15px; height:15px; line-height:11px; color:#6b7280; font-size:9px; }
+.em { color:#d1d5db; font-size:9px; }
+.pr { display:flex; gap:8px; padding:3px 10px; font-size:10px; border-bottom:1px solid #f9fafb; }
+.pr:last-child { border-bottom:none; }
+.pr .l { flex:1; color:#6b7280; }
+.pr .pa { color:#059669; font-weight:700; }
+.pr .s { color:#d1d5db; }
+.pr .pb { color:#2563eb; font-weight:700; }
+.mr { background:#f3f4f6; margin:5px 8px 8px; border-radius:6px; padding:6px 10px; display:flex; justify-content:space-between; }
+.mr .l { font-size:9px; color:#9ca3af; font-weight:600; }
+.mr .v { font-size:13px; font-weight:700; }
+.wp { display:flex; align-items:center; padding:4px 10px; border-bottom:1px solid #f9fafb; font-size:10px; gap:6px; }
+.wp .na { flex:1; font-weight:600; }
+.wp .na.w { color:#059669; }
+.wp .rs { color:#6b7280; min-width:36px; text-align:center; font-weight:600; font-size:9px; }
+.wp .nb { flex:1; font-weight:600; text-align:right; }
+.wp .nb.w { color:#059669; }
+.wp .am { min-width:32px; text-align:right; color:#059669; font-weight:700; }
+.wng { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; padding:7px 10px; }
+.wnc { border:1px solid #e5e7eb; border-radius:6px; padding:5px 4px; text-align:center; }
+.wnc.p { border-color:#10b981; background:#f0fdf4; }
+.wnc.n { border-color:#ef4444; background:#fef2f2; }
+.wnc .nm { font-size:9px; color:#6b7280; font-weight:600; }
+.wnc .am { font-size:12px; font-weight:700; }
+.wnc.p .am { color:#059669; }
+.wnc.n .am { color:#dc2626; }
+.wnc .am { color:#9ca3af; }
+table.tt { width:100%; border-collapse:collapse; }
+table.tt td { padding:5px 10px; border-bottom:1px solid #f3f4f6; font-size:11px; }
+table.tt tr:last-child td { border-bottom:none; }
+table.tt tr:nth-child(even) td { background:#f9fafb; }
+.ftr { text-align:center; color:#9ca3af; font-size:9px; margin-top:14px; padding-top:10px; border-top:1px solid #e5e7eb; }
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">⬇ Save / Print PDF</button>
+<div class="hdr"><div class="hdr-brand">JF <span>TOURNAMENT</span></div><div class="hdr-right"><div class="hdr-course">${courseTitle}</div><div class="hdr-sub">${subtitle ? subtitle+' · ' : ''}${date}</div></div></div>
+
+${recap.leaderboard.length > 0 ? '<div class="section"><div class="sh g">Leaderboard · '+recap.fieldSize+' Players</div><table class="lb">'+recap.leaderboard.map((p:any,i:number)=>{const tp=p.toPar===null?'—':p.toPar===0?'E':p.toPar>0?'+'+p.toPar:''+p.toPar;const tc=p.toPar===null||p.toPar===0?'#6b7280':p.toPar<0?'#059669':'#dc2626';const md=i===0?'🥇':i===1?'🥈':i===2?'🥉':''+(i+1);return '<tr><td style="width:28px">'+md+'</td><td><strong>'+p.name+'</strong> <span style="color:#9ca3af;font-size:10px">HCP '+(p.handicap??0)+'</span></td><td style="font-weight:700;text-align:right">'+(p.tot||'—')+'</td><td style="font-weight:700;color:'+tc+';text-align:right;width:36px">'+tp+'</td></tr>'}).join('')+'</table></div>' : ''}
+
+${recap.skinsLeaders.length > 0 ? '<div class="section"><div class="sh a">Skins · Pot $'+recap.skinsPot+' · $'+recap.perSkin+'/skin · '+recap.totalSkinsWon+' won</div><div class="sk-grid">'+recap.skinsMap.map((w:any,i:number)=>'<div class="sk '+(w?'w':'')+'"><div class="sk-h">H'+(i+1)+'</div>'+(w?'<div class="sk-n">'+w.name+'</div>':'<div style="font-size:8px;color:#e5e7eb">—</div>')+'</div>').join('')+'</div><table class="st">'+recap.skinsLeaders.map((p:any)=>'<tr><td style="font-weight:600">'+p.name+'</td><td style="color:#6b7280">'+p.count+' skin'+(p.count>1?'s':'')+'</td><td style="color:#059669;font-weight:700;text-align:right">$'+p.winnings+'</td></tr>').join('')+'</table></div>' : ''}
+
+${recap.matchResults.filter(Boolean).length > 0 ? (()=>{
+const sc=(s:number,par:number)=>{if(!s)return '<span class="em">—</span>';const d=s-par;if(d<=-2)return '<span class="se">'+s+'</span>';if(d===-1)return '<span class="sb">'+s+'</span>';if(d===0)return '<span class="sp">'+s+'</span>';if(d===1)return '<span class="sg">'+s+'</span>';return '<span class="sd">'+s+'</span>'}
+const nine=(m:any,start:number,lbl:string,ws:string[])=>{const hs=Array.from({length:9},(_,i)=>start+i);const tA=hs.reduce((acc,i)=>acc+(m.sA?.[i]||0),0);const tB=hs.reduce((acc,i)=>acc+(m.sB?.[i]||0),0);return '<div class="nlbl">'+lbl+'</div><table class="sc"><thead><tr><th class="nc">Player</th>'+hs.map(i=>'<th>'+( i+1)+'<span class="pl">p'+(pars[i]||4)+'</span></th>').join('')+'<th class="tc">'+(start===0?'OUT':'IN')+'</th></tr></thead><tbody><tr class="ra"><td class="nc">'+m.sideA+'</td>'+hs.map(i=>'<td>'+sc(m.sA?.[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tA||'—')+'</td></tr><tr class="rb"><td class="nc">'+m.sideB+'</td>'+hs.map(i=>'<td>'+sc(m.sB?.[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tB||'—')+'</td></tr><tr class="rw"><td class="nc" style="color:#9ca3af;font-size:9px">Hole</td>'+ws.map(w=>'<td class="'+(w==='A'?'wA':w==='B'?'wB':'wT')+'">'+(w==='·'||!w?'':w)+'</td>').join('')+'<td></td></tr></tbody></table>'}
+return '<div class="section"><div class="sh a">Match Results</div>'+recap.matchResults.filter(Boolean).map((m:any)=>{
+if(m.type==='Wheel'){
+// Build per-hole net scores for each wheel player
+const isGrossW = m.scoringType==='GROSS'
+const wp = m.wheelPlayers||[]
+const archRoster:any[] = arch.roster ? Object.values(arch.roster) : []
+const allWHcps = isGrossW?[0]:wp.map((name:string)=>{const p=archRoster.find((pl:any)=>pl.name===name);return Number(p?.handicap)||0})
+const baseWHcp = Math.min(...allWHcps)
+const getWStr = (name:string,i:number)=>{if(isGrossW)return 0;const p=archRoster.find((pl:any)=>pl.name===name);const hr=Number(arch.course?.holes?.[i]?.hcp)||(i+1);const diff=Math.max(0,(Number(p?.handicap)||0)-baseWHcp);let s=Math.floor(diff/18);if(hr<=(diff%18))s++;return s}
+const wNetScores:Record<string,number[]>={}
+wp.forEach((name:string)=>{const p=archRoster.find((pl:any)=>pl.name===name);if(!p)return;wNetScores[name]=(arch.scores?.[p.id]||Array(18).fill(0)).map((g:number,i:number)=>g>0?g-getWStr(name,i):0)})
+// Build scorecard for each pair
+const pairSCs = (m.wheelPairs||[]).map((pair:any)=>{
+const netA=wNetScores[pair.playerA]||Array(18).fill(0)
+const netB=wNetScores[pair.playerB]||Array(18).fill(0)
+const nineHtml=(start:number,lbl:string)=>{
+const hs=Array.from({length:9},(_,i)=>start+i)
+const tA=hs.reduce((acc,i)=>acc+(netA[i]||0),0)
+const tB=hs.reduce((acc,i)=>acc+(netB[i]||0),0)
+const winners=hs.map(i=>{const a=netA[i],b=netB[i];if(!a||!b)return '';return a<b?'A':b<a?'B':'½'})
+return '<div class="nlbl">'+lbl+'</div><table class="sc"><thead><tr><th class="nc">Player</th>'+hs.map(i=>'<th>'+(i+1)+'<span class="pl">p'+(pars[i]||4)+'</span></th>').join('')+'<th class="tc">'+(start===0?'OUT':'IN')+'</th></tr></thead><tbody><tr class="ra"><td class="nc">'+pair.playerA+'</td>'+hs.map(i=>'<td>'+sc(netA[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tA||'—')+'</td></tr><tr class="rb"><td class="nc">'+pair.playerB+'</td>'+hs.map(i=>'<td>'+sc(netB[i],pars[i]||4)+'</td>').join('')+'<td class="tc">'+(tB||'—')+'</td></tr><tr class="rw"><td class="nc" style="color:#9ca3af;font-size:9px">Hole</td>'+winners.map(w=>'<td class="'+(w==='A'?'wA':w==='B'?'wB':'wT')+'">'+( w||'')+'</td>').join('')+'<td></td></tr></tbody></table>'
+}
+const winStr=pair.winner==='tie'?'TIE':(pair.winner===pair.playerA?pair.playerA:pair.playerB)+' wins'
+const amtStr=pair.winner==='tie'?'EVEN':'$'+pair.amount
+return '<div style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:10px;overflow:hidden;page-break-inside:avoid"><div style="background:#faf5ff;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5e7eb"><div><span style="color:#7c3aed;font-weight:700">'+pair.playerA+'</span><span style="color:#9ca3af;margin:0 6px;font-size:10px">VS</span><span style="color:#7c3aed;font-weight:700">'+pair.playerB+'</span></div><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;font-weight:600;color:'+(pair.winner==='tie'?'#6b7280':'#059669')+'">'+winStr+'</span><span style="font-weight:700;color:#059669;font-size:11px">'+amtStr+'</span></div></div><div style="padding:2px 8px 0">'+nineHtml(0,'FRONT 9')+nineHtml(9,'BACK 9')+'</div></div>'
+}).join('')
+const ng=Object.entries(m.netWinnings||{}).map(([n,v]:any)=>'<div class="wnc '+(v>0?'p':v<0?'n':'')+'"><div class="nm">'+n+'</div><div class="am">'+(v===0?'EVEN':v>0?'+$'+v:'-$'+Math.abs(v))+'</div></div>').join('')
+return '<div style="border-bottom:1px solid #e5e7eb;padding-bottom:4px"><div class="sc-hdr"><span style="color:#7c3aed;font-weight:700;font-size:12px">WHEEL BET</span><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">$'+m.wheelAmount+'/pair · '+wp.join(' · ')+'</span></div></div><div style="padding:8px 10px">'+pairSCs+'</div><div style="padding:4px 10px 0"><div style="font-size:9px;font-weight:700;letter-spacing:.1em;color:#6b21a8;margin-bottom:6px;text-transform:uppercase">Net Per Player</div><div class="wng">'+ng+'</div></div></div>'
+}
+const res=m.net===0?'EVEN':m.net>0?m.sideB+' owes $'+Math.abs(m.net):m.sideA+' owes $'+Math.abs(m.net)
+return '<div style="border-bottom:1px solid #e5e7eb"><div class="sc-hdr"><div><span class="sc-a">'+m.sideA+'</span><span class="sc-sep">VS</span><span class="sc-b">'+(m.sideB||'')+'</span></div><div class="badges"><span class="bdg '+(m.scoringType==='GROSS'?'gross':'net')+'">'+(m.scoringType||'NET')+'</span><span class="bdg t">'+m.type+'</span></div></div><div style="padding:4px 8px 0">'+nine(m,0,'FRONT 9',m.f9?.holeWinners||[])+nine(m,9,'BACK 9',m.b9?.holeWinners||[])+'</div><div style="padding:2px 0"><div class="pr"><span class="l">Front 9</span><span class="pa">$'+(m.f9?.payA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.f9?.payB||0)+'</span></div><div class="pr"><span class="l">Back 9</span><span class="pa">$'+(m.b9?.payA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.b9?.payB||0)+'</span></div><div class="pr"><span class="l">Birdies</span><span class="pa">$'+(m.birdieA||0)+'</span><span class="s">·</span><span class="pb">$'+(m.birdieB||0)+'</span></div></div><div class="mr"><span class="l">MATCH RESULT</span><span class="v">'+res+'</span></div></div>'
+}).join('')+'</div>'
+})() : ''}
+
+${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div class="sh b">Team Standings</div><table class="tt">'+recap.teamResults.filter((t:any)=>t.tot>0).map((t:any,i:number)=>{const md=i===0?'🥇':i===1?'🥈':i===2?'🥉':''+(i+1);return '<tr><td style="width:28px">'+md+'</td><td style="font-weight:600">'+t.name+'</td><td style="color:#6b7280">F9: '+t.f9+' &nbsp; B9: '+t.b9+'</td><td style="font-weight:700;color:#2563eb;text-align:right">'+t.tot+'</td></tr>'}).join('')+'</table></div>':''}
+
+<div class="ftr">Generated by JF Tournament Manager · ${new Date().toLocaleDateString()}</div>
+</body>
+</html>`
+
+ const win = window.open('', '_blank')
+ if (win) {
+ win.document.write(html)
+ win.document.close()
+ }
+ setExportingId(null)
+ }
+
+
+ // Rounds that do not belong to a trip render on their own below.
+ const standaloneArchives = archives.filter((a: any) => !a._meta?.tripName || a._meta?.mode === 'match')
+
+ const renderRoundCard = (arch: any) => {
+ const recap = buildRecap(arch)
+ const isExpanded = expandedId === arch.id
+ const date = new Date(Number(arch._meta?.playedAt || arch.id)).toLocaleDateString('en-US', {
+ weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+ })
+ const topSkin = recap.skinsLeaders[0]
+ const f9Win = recap.f9Winners[0]
+ const b9Win = recap.b9Winners[0]
 
  return (
- <div className="min-h-screen bg-zinc-950 text-white font-sans">
- <div className="max-w-2xl mx-auto px-4 py-10">
+ <div key={arch.id} className={`rounded-[2.5rem] border-2 overflow-hidden shadow-2xl transition-all ${isExpanded ? 'border-blue-500/50' : 'border-zinc-800 hover:border-zinc-700'}`}>
 
- {/* Header */}
- <header className="mb-10 border-b-4 border-emerald-500 pb-6">
- <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
- </h1>
- <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
- {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
- {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-400">{tripName}</span></>}
- {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-400">{currentDay}</span></>}
- {isMock && <span className="text-amber-400">· DEMO</span>}
- <span className="text-zinc-700">·</span>
- <span className="text-rose-500 flex items-center gap-1"><ShieldAlert size={10}/> ADMIN</span>
- {authRole === 'master' && (
- <Link href="/master" className="ml-auto flex items-center gap-1 text-emerald-500 hover:text-emerald-400 transition-colors">
- <Shield size={11}/> MASTER
- </Link>
+ {/* ── COLLAPSED SUMMARY CARD ── */}
+ <div
+ className="p-5 sm:p-7 cursor-pointer bg-zinc-900"
+ onClick={() => setExpandedId(isExpanded ? null : arch.id)}
+ >
+ {/* Top row: date + course + expand */}
+ <div className="flex items-start justify-between gap-4 mb-4">
+ <div>
+ <div className="flex items-center gap-2 text-zinc-500 font-black text-[10px] tracking-widest mb-1">
+ <Calendar size={12}/> {date}
+ </div>
+ <div className="flex items-center gap-2 flex-wrap mb-1">
+ {(arch._meta?.mode === 'match' || arch.meta?.mode === 'match') && (
+ <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-lg text-[10px] font-black">
+ ⚡ QUICK MATCH
+ </span>
+ )}
+ {arch._meta?.tripName && arch._meta?.mode !== 'match' && (
+ <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-lg text-[10px] font-black">
+ {arch._meta.tripName}
+ </span>
+ )}
+ {arch._meta?.dayLabel && arch._meta?.mode !== 'match' && (
+ <span className="bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-lg text-[10px] font-black">
+ {arch._meta.dayLabel}
+ </span>
  )}
  </div>
- </header>
-
-             {/* Live round banner — the "you are here" */}
-            {liveRound && (
-              <Link href={activeMode === 'match' ? '/match' : '/setup'}
-                className="w-full bg-emerald-500/10 border-2 border-emerald-500/40 hover:border-emerald-500 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3 transition-all active:scale-[0.99] block">
-                <Trophy size={18} className="text-emerald-400 flex-shrink-0"/>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-emerald-400 truncate">
-                    {liveLabel}{currentDay ? ` · ${currentDay}` : ''}
-                  </p>
-                  <p className="text-[11px] text-emerald-600/80 font-medium normal-case truncate">
-                    {courseName || 'Tap to continue'} · in progress
-                  </p>
-                </div>
-                <ChevronRight size={16} className="text-emerald-500 flex-shrink-0"/>
-              </Link>
-            )}
-
-            {/* Mid-round, the scorer matters more than starting something new */}
-            {liveRound ? <><PlayGroup/><StartGroup/></> : <><StartGroup/><PlayGroup/></>}
-
-            <div className="mb-5">
-              <GroupLabel>YOUR DATA</GroupLabel>
-              <div className="grid grid-cols-2 gap-2.5">
-                {dataItems.map(item => <Tile key={item.title} item={item}/>)}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <GroupLabel>REVIEW</GroupLabel>
-              <div className="grid grid-cols-2 gap-2.5">
-                {reviewItems.map(item => <Tile key={item.title} item={item}/>)}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5 mb-6">
-              <Link href="/guide"
-                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
-                <BookOpen size={13}/> How it works
-              </Link>
-              <button onClick={async () => {
-                sessionStorage.removeItem('role')
-                if (user) await signOut()
-                setRole('none')
-              }}
-                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
-                <RefreshCw size={13}/> Exit
-              </button>
-            </div>
-
-{/* Demo type modal */}
- {showDemoModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
- <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
- <div className="text-center">
- <div className="text-3xl mb-2">🎮</div>
- <h2 className="font-black text-lg">Load Demo Round</h2>
- <p className="text-zinc-500 text-xs font-medium normal-case mt-1">8 pro golfers at Augusta National with all bet types pre-loaded.</p>
+ <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
+ {arch.course?.name || 'TOURNAMENT RECAP'}
+ </h2>
+ <div className="flex items-center gap-3 mt-1">
+ <span className="text-[10px] font-black text-zinc-500 flex items-center gap-1">
+ <Users size={10}/> {recap.fieldSize} PLAYERS
+ </span>
+ {arch.course?.pars && (
+ <span className="text-[10px] font-black text-zinc-600">
+ PAR {(() => { const ap = arch.course.pars || []; const nh = arch.course.nineHole; const ns = arch.course.nineHoleStart; const off = nh && ns === 'back' ? 9 : 0; return nh ? ap.slice(off, off+9).reduce((a:number,b:number)=>a+b,0) : ap.reduce((a:number,b:number)=>a+b,0) })()}
+ </span>
+ )}
  </div>
- {isMock && (
- <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
- <p className="text-amber-400 text-xs font-semibold">⚠️ Demo already active</p>
- <button onClick={async () => { await clearDemo(); setShowDemoModal(false) }}
- className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
+ </div>
+ <div className={`flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+ <ChevronDown size={20} className="text-zinc-500"/>
+ </div>
+ </div>
+
+ {/* Quick stats row */}
+ <div className="grid grid-cols-3 gap-2 sm:gap-3">
+ <div className="bg-black/60 rounded-2xl p-3">
+ <div className="text-[9px] font-black text-zinc-600 tracking-widest mb-1 flex items-center gap-1">
+ <Trophy size={9}/> F9 LOW
+ </div>
+ <div className="font-black text-sm text-white truncate">{f9Win?.name || '—'}</div>
+ {f9Win && <div className="text-[10px] font-black text-emerald-400">{f9Win.f9}</div>}
+ </div>
+ <div className="bg-black/60 rounded-2xl p-3">
+ <div className="text-[9px] font-black text-zinc-600 tracking-widest mb-1 flex items-center gap-1">
+ <Trophy size={9}/> B9 LOW
+ </div>
+ <div className="font-black text-sm text-white truncate">{b9Win?.name || '—'}</div>
+ {b9Win && <div className="text-[10px] font-black text-emerald-400">{b9Win.b9}</div>}
+ </div>
+ <div className="bg-black/60 rounded-2xl p-3">
+ <div className="text-[9px] font-black text-zinc-600 tracking-widest mb-1 flex items-center gap-1">
+ <Zap size={9}/> TOP SKIN
+ </div>
+ <div className="font-black text-sm text-white truncate">{topSkin?.name || '—'}</div>
+ {topSkin && <div className="text-[10px] font-black text-emerald-400">${topSkin.winnings}</div>}
+ </div>
+ </div>
+ </div>
+
+ {/* ── EXPANDED FULL DASHBOARD ── */}
+ {isExpanded && (
+ <div className="bg-black border-t-2 border-zinc-800">
+
+ {/* ── SECTION: INDIVIDUAL LEADERBOARD ── */}
+ <Section title="Full Leaderboard"icon={<Trophy size={14}/>} color="text-yellow-400">
+ <div className="overflow-x-auto rounded-2xl border border-zinc-800">
+ <table className="w-full text-center">
+ <thead className="bg-zinc-950">
+ <tr>
+ <th className="py-3 px-3 text-left text-[10px] text-zinc-600 font-black w-8">#</th>
+ <th className="py-3 px-4 text-left text-[10px] text-zinc-600 font-black">PLAYER</th>
+ <th className="py-3 px-3 text-[10px] text-zinc-600 font-black">F9</th>
+ <th className="py-3 px-3 text-[10px] text-zinc-600 font-black">B9</th>
+ <th className="py-3 px-3 text-[10px] text-zinc-600 font-black">TOT</th>
+ <th className="py-3 px-3 text-[10px] text-zinc-600 font-black">+/-</th>
+ </tr>
+ </thead>
+ <tbody>
+ {recap.leaderboard.filter(p => p.tot > 0).map((p, i) => (
+ <tr key={p.id} className={`border-t border-zinc-900 ${i === 0 ? 'bg-yellow-500/5' : ''}`}>
+ <td className="py-3 px-3 text-left"><RankBadge rank={i + 1}/></td>
+ <td className="py-3 px-4 text-left font-black text-sm text-white">{p.name}</td>
+ <td className="py-3 px-3 font-black text-sm">{p.f9}</td>
+ <td className="py-3 px-3 font-black text-sm">{p.b9}</td>
+ <td className="py-3 px-3 font-black text-base text-white">{p.tot}</td>
+ <td className="py-3 px-3"><ToParBadge diff={p.toPar}/></td>
+ </tr>
+ ))}
+ </tbody>
+ </table>
+ </div>
+ </Section>
+
+ {/* ── SECTION: HCP % BADGE ── */}
+ {recap.handicapPercent !== undefined && recap.handicapPercent !== 100 && (
+ <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 px-4 py-2 rounded-xl">
+ <Target size={13} className="text-amber-400"/>
+ <span className="text-amber-400 font-black text-xs">{recap.handicapPercent}% OF HCP</span>
+ {recap.netSkinsEnabled && (
+ <span className="text-zinc-500 font-black text-xs ml-2">· NET SKINS ON · {recap.skinsSplitGross}% GROSS / {recap.skinsSplitNet}% NET</span>
+ )}
  </div>
  )}
+
+ {/* ── SECTION: GROSS SKINS ── */}
+ {recap.totalSkinsWon > 0 && (
+ <Section title={`${recap.netSkinsEnabled ? 'Gross ' : ''}Skins · ${recap.totalSkinsWon} Won · $${recap.perSkin}/Skin`} icon={<Zap size={14}/>} color="text-emerald-400">
+ {/* Hole grid */}
+ <div className="grid grid-cols-9 gap-1.5 mb-4">
+ {recap.skinsMap.slice(0, Math.min(9, recap.skinsMap.length)).map((winner, i) => (
+ <div key={i} className={`rounded-xl p-2 text-center border ${winner ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800 bg-black/40'}`}>
+ <div className="text-[9px] text-zinc-600 font-black">{i + 1}</div>
+ <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-800'}`}>
+ {winner ? winner.name.split(' ')[0] : '—'}
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="grid grid-cols-9 gap-1.5 mb-5">
+ {!recap.nineHole && recap.skinsMap.slice(9, 18).map((winner, i) => (
+ <div key={i + 9} className={`rounded-xl p-2 text-center border ${winner ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-800 bg-black/40'}`}>
+ <div className="text-[9px] text-zinc-600 font-black">{i + 10}</div>
+ <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-emerald-400' : 'text-zinc-800'}`}>
+ {winner ? winner.name.split(' ')[0] : '—'}
+ </div>
+ </div>
+ ))}
+ </div>
+ {/* Skins payout table */}
  <div className="space-y-2">
+ {recap.skinsLeaders.map(p => (
+ <div key={p.name} className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
+ <div className="flex items-center gap-3">
+ <Zap size={14} className="text-emerald-500"/>
+ <span className="font-black text-sm text-white">{p.name}</span>
+ </div>
+ <div className="flex items-center gap-4 text-xs font-black">
+ <span className="text-zinc-500">{p.count} skin{p.count > 1 ? 's' : ''}</span>
+ <span className="text-emerald-400 text-base">${Number.isInteger(p.winnings) ? p.winnings : p.winnings.toFixed(2)}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="mt-3 flex justify-between items-center text-[10px] font-black text-zinc-600 px-1">
+ <span>GROSS SKINS POT</span>
+ <span className="text-zinc-400">${recap.skinsPot}</span>
+ </div>
+ </Section>
+ )}
+
+ {/* ── SECTION: NET SKINS ── */}
+ {recap.netSkinsEnabled && recap.totalNetSkinsWon > 0 && (
+ <Section title={`Net Skins · ${recap.totalNetSkinsWon} Won · $${recap.perNetSkin}/Skin`} icon={<Target size={14}/>} color="text-blue-400">
+ {/* Hole grid */}
+ <div className="grid grid-cols-9 gap-1.5 mb-4">
+ {recap.netSkinsMap.slice(0, Math.min(9, recap.netSkinsMap.length)).map((winner, i) => (
+ <div key={i} className={`rounded-xl p-2 text-center border ${winner ? 'border-blue-500/50 bg-blue-500/10' : 'border-zinc-800 bg-black/40'}`}>
+ <div className="text-[9px] text-zinc-600 font-black">{i + 1}</div>
+ <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-blue-400' : 'text-zinc-800'}`}>
+ {winner ? winner.name.split(' ')[0] : '—'}
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="grid grid-cols-9 gap-1.5 mb-5">
+ {!recap.nineHole && recap.netSkinsMap.slice(9, 18).map((winner, i) => (
+ <div key={i + 9} className={`rounded-xl p-2 text-center border ${winner ? 'border-blue-500/50 bg-blue-500/10' : 'border-zinc-800 bg-black/40'}`}>
+ <div className="text-[9px] text-zinc-600 font-black">{i + 10}</div>
+ <div className={`text-[9px] font-black mt-0.5 leading-tight ${winner ? 'text-blue-400' : 'text-zinc-800'}`}>
+ {winner ? winner.name.split(' ')[0] : '—'}
+ </div>
+ </div>
+ ))}
+ </div>
+ {/* Net skins payout table */}
+ <div className="space-y-2">
+ {recap.netSkinsLeaders.map(p => (
+ <div key={p.name} className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
+ <div className="flex items-center gap-3">
+ <Target size={14} className="text-blue-500"/>
+ <span className="font-black text-sm text-white">{p.name}</span>
+ </div>
+ <div className="flex items-center gap-4 text-xs font-black">
+ <span className="text-zinc-500">{p.count} skin{p.count > 1 ? 's' : ''}</span>
+ <span className="text-blue-400 text-base">${Number.isInteger(p.winnings) ? p.winnings : p.winnings.toFixed(2)}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="mt-3 flex justify-between items-center text-[10px] font-black text-zinc-600 px-1">
+ <span>NET SKINS POT</span>
+ <span className="text-zinc-400">${recap.netSkinsPot}</span>
+ </div>
+ </Section>
+ )}
+
+ {/* ── SECTION: TEAM RESULTS ── */}
+ {recap.teamResults.filter(t => t.tot > 0).length > 0 && (
+ <Section title="Team Best Ball"icon={<Users size={14}/>} color="text-blue-400">
+ <div className="space-y-2">
+ {recap.teamResults.filter(t => t.tot > 0).map((t, i) => (
+ <div key={t.id} className={`flex items-center justify-between p-4 rounded-2xl border ${i === 0 ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-800 bg-zinc-900/40'}`}>
+ <div className="flex items-center gap-3">
+ {i === 0 && <Trophy size={16} className="text-yellow-400"/>}
+ {i === 1 && <Medal size={16} className="text-zinc-400"/>}
+ {i > 1 && <span className="w-4 text-center text-zinc-600 font-black text-xs">{i+1}</span>}
+ <span className="font-black text-white">{t.name}</span>
+ </div>
+ <div className="flex items-center gap-4 text-sm font-black">
+ <span className="text-zinc-500">{t.f9} / {t.b9}</span>
+ <span className={`text-lg ${i === 0 ? 'text-blue-300' : 'text-zinc-400'}`}>{t.tot}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ </Section>
+ )}
+
+ {/* ── SECTION: MATCH RESULTS ── */}
+ {recap.matchResults.length > 0 && (
+ <Section title="Match Results"icon={<Sword size={14}/>} color="text-amber-400">
+ <div className="space-y-3">
+ {recap.matchResults.map((m: any, i: number) => {
+ const matchKey = `${arch.id}-match-${i}`
+ const isOpen = expandedMatchKey === matchKey
+ const isWheel = m.type === 'Wheel'
+ return (
+ <div key={i} className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
+ {/* Match pill — tap to expand */}
+ <button onClick={() => setExpandedMatchKey(isOpen ? null : matchKey)}
+ className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/40 transition-colors">
+ <div className="flex items-center gap-2 flex-wrap">
+ <span className={`text-[9px] font-black px-2 py-0.5 rounded ${m.scoringType==='GROSS'?'bg-rose-500/20 text-rose-400':'bg-emerald-500/20 text-emerald-400'}`}>{m.scoringType}</span>
+ <span className="text-[9px] font-black text-zinc-600">{m.type}</span>
+ {!isWheel && <span className={`font-black text-xs ${m.winner==='TIE'?'text-zinc-400':'text-amber-400'}`}>{m.winner==='TIE'?'TIE':`${m.winner} WINS`}</span>}
+ {!isWheel && m.net !== 0 && <span className="text-zinc-600 text-[9px] font-black">${Math.abs(m.net)}</span>}
+ </div>
+ <div className="flex items-center gap-2">
+ <span className="text-[9px] font-black text-zinc-600">{isOpen?'▲ HIDE':'▼ DETAILS'}</span>
+ </div>
+ </button>
+
+ {/* Match summary row */}
+ <div className="px-4 pb-3 flex items-center justify-between">
+ <span className={`font-black text-sm truncate ${!isWheel&&m.net>0?'text-emerald-400':'text-zinc-400'}`}>{m.sideA}</span>
+ {!isWheel && <span className="text-zinc-600 font-black text-xs mx-3">VS</span>}
+ {!isWheel && <span className={`font-black text-sm truncate text-right ${m.net<0?'text-emerald-400':'text-zinc-400'}`}>{m.sideB}</span>}
+ {isWheel && <span className="text-purple-400 text-[10px] font-black">WHEEL · {(m.wheelPlayers||[]).join(' · ')}</span>}
+ </div>
+
+ {/* Expanded scorecard */}
+ {isOpen && !isWheel && (
+ <div className="border-t border-zinc-800 bg-black/30">
+ {/* F9 and B9 mini scorecards */}
+ {[{start:0,label:'FRONT 9',nine:m.f9},{start:9,label:'BACK 9',nine:m.b9}].map(({start,label,nine}) => (
+ <div key={label} className="overflow-x-auto">
+ <div className="px-4 py-2 bg-zinc-900/50 border-b border-zinc-800">
+ <span className="text-[9px] font-black text-zinc-500 tracking-widest">{label}</span>
+ {nine.totalPresses > 0 && <span className="ml-2 text-[9px] font-black text-yellow-400">⚡ {nine.totalPresses}× PRESS</span>}
+ </div>
+ <table className="w-full text-center"style={{minWidth:'480px'}}>
+ <thead>
+ <tr className="bg-zinc-950">
+ <th className="py-1.5 px-3 text-left text-[9px] text-zinc-600 font-black w-24">SIDE</th>
+ {Array.from({length:9},(_,i)=>start+i).map(i => (
+ <th key={i} className="py-1.5 w-8">
+ <div className="text-[9px] text-zinc-500 font-black">{i+1}</div>
+ <div className="text-[8px] text-zinc-700 font-black">p{m.pars?.[i]||4}</div>
+ </th>
+ ))}
+ <th className="py-1.5 px-2 text-[9px] text-blue-400 font-black">{start===0?'OUT':'IN'}</th>
+ </tr>
+ </thead>
+ <tbody>
+ {m.type === '2v2' ? (
+ <>
+ {/* Side A — individual players */}
+ {(m.pAScores||[{label:m.sideA,scores:m.sA}]).map((player:any) => {
+ const sc = player.scores || []
+ const nineScores = sc.slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={player.id||player.label} className="border-t border-zinc-900">
+ <td className="py-2 px-3 text-left">
+ <div className="text-emerald-400 font-bold text-[11px] truncate">{player.name||player.label}</div>
+ {player.handicap!==undefined && <div className="text-zinc-600 text-[9px]">HCP {player.handicap}</div>}
+ </td>
+ {nineScores.map((s:number,i:number) => {
+ const par = m.pars?.[start+i]||4; const diff = s>0?s-par:null
+ let cls = 'w-6 h-6 rounded flex items-center justify-center mx-auto text-[9px] font-black '
+ if(diff===null)cls+='text-zinc-700'
+ else if(diff<=-2)cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1)cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0)cls+='bg-zinc-800 text-white'
+ else if(diff===1)cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className="py-2 px-2 font-black text-sm text-emerald-400">{total||'—'}</td>
+ </tr>
+ )
+ })}
+ <tr className="border-t-2 border-emerald-900/50 bg-emerald-950/20">
+ <td className="py-1.5 px-3 text-emerald-300 font-black text-[9px] tracking-widest">BEST BALL</td>
+ {(m.sA||[]).slice(start,start+9).map((s:number,i:number) => (
+ <td key={i} className="py-1 text-center text-[10px] font-black text-emerald-300">{s||'—'}</td>
+ ))}
+ <td className="py-1.5 px-2 font-black text-sm text-emerald-300">{(m.sA||[]).slice(start,start+9).reduce((a:number,b:number)=>a+(b||0),0)||'—'}</td>
+ </tr>
+ {/* Side B — individual players */}
+ {(m.pBScores||[{label:m.sideB,scores:m.sB}]).map((player:any) => {
+ const sc = player.scores || []
+ const nineScores = sc.slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={player.id||player.label} className="border-t border-zinc-900 bg-white/[0.01]">
+ <td className="py-2 px-3 text-left">
+ <div className="text-blue-400 font-bold text-[11px] truncate">{player.name||player.label}</div>
+ {player.handicap!==undefined && <div className="text-zinc-600 text-[9px]">HCP {player.handicap}</div>}
+ </td>
+ {nineScores.map((s:number,i:number) => {
+ const par = m.pars?.[start+i]||4; const diff = s>0?s-par:null
+ let cls = 'w-6 h-6 rounded flex items-center justify-center mx-auto text-[9px] font-black '
+ if(diff===null)cls+='text-zinc-700'
+ else if(diff<=-2)cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1)cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0)cls+='bg-zinc-800 text-white'
+ else if(diff===1)cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className="py-2 px-2 font-black text-sm text-blue-400">{total||'—'}</td>
+ </tr>
+ )
+ })}
+ <tr className="border-t-2 border-blue-900/50 bg-blue-950/20">
+ <td className="py-1.5 px-3 text-blue-300 font-black text-[9px] tracking-widest">BEST BALL</td>
+ {(m.sB||[]).slice(start,start+9).map((s:number,i:number) => (
+ <td key={i} className="py-1 text-center text-[10px] font-black text-blue-300">{s||'—'}</td>
+ ))}
+ <td className="py-1.5 px-2 font-black text-sm text-blue-300">{(m.sB||[]).slice(start,start+9).reduce((a:number,b:number)=>a+(b||0),0)||'—'}</td>
+ </tr>
+ </>
+ ) : (
+ <>
+ {[{label:m.sideA,scores:m.sA,color:'text-emerald-400'},{label:m.sideB,scores:m.sB,color:'text-blue-400'}].map(side => {
+ const nineScores = (side.scores||[]).slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={side.label} className="border-t border-zinc-900">
+ <td className={`py-2 px-3 text-left font-black text-[9px] truncate ${side.color}`}>{side.label}</td>
+ {nineScores.map((s:number,i:number) => {
+ const par = m.pars?.[start+i]||4
+ const diff = s>0 ? s-par : null
+ let cls = 'w-6 h-6 rounded flex items-center justify-center mx-auto text-[9px] font-black '
+ if (diff===null) cls+='text-zinc-700'
+ else if (diff<=-2) cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if (diff===-1) cls+='rounded-full border border-red-500 text-red-400'
+ else if (diff===0) cls+='bg-zinc-800 text-white'
+ else if (diff===1) cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className={`py-2 px-2 font-black text-sm ${side.color}`}>{total||'—'}</td>
+ </tr>
+ )
+ })}
+ </>
+ )}
+ {/* Hole winners */}
+ <tr className="border-t border-zinc-800 bg-zinc-900/40">
+ <td className="py-1.5 px-3 text-[9px] font-black text-zinc-600 text-left">HOLE</td>
+ {(nine.holeWinners||[]).map((w:string, i:number) => (
+ <td key={i} className="py-1 text-center">
+ <span className={`text-[9px] font-black ${w==='A'?'text-emerald-400':w==='B'?'text-blue-400':w==='½'?'text-zinc-500':'text-zinc-800'}`}>{w==='·'?'':w}</span>
+ </td>
+ ))}
+ <td/>
+ </tr>
+ </tbody>
+ </table>
+ </div>
+ ))}
+ {/* Payout breakdown */}
+ <div className="p-4 grid grid-cols-3 gap-2 border-t border-zinc-800">
+ {[
+ {label:'FRONT 9',payA:m.f9?.payA||0,payB:m.f9?.payB||0},
+ {label:'BACK 9',payA:m.b9?.payA||0,payB:m.b9?.payB||0},
+ {label:'BIRDIES',payA:m.birdieA||0,payB:m.birdieB||0},
+ ].map(row => (
+ <div key={row.label} className="bg-black rounded-xl p-2 text-center">
+ <div className="text-zinc-600 text-[8px] font-black mb-1">{row.label}</div>
+ <div className="text-[9px] font-black">
+ <span className="text-emerald-400">${row.payA}</span>
+ <span className="text-zinc-700 mx-1">·</span>
+ <span className="text-blue-400">${row.payB}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="px-4 pb-4 flex items-center justify-between bg-zinc-900/40 mx-4 mb-4 rounded-2xl p-3">
+ <span className="text-zinc-500 text-[9px] font-black">MATCH RESULT</span>
+ <span className={`font-black text-base ${m.net===0?'text-zinc-500':m.net>0?'text-emerald-400':'text-blue-400'}`}>
+ {m.net===0?'EVEN':m.net>0?`${m.sideB} OWES $${Math.abs(m.net)}`:`${m.sideA} OWES $${Math.abs(m.net)}`}
+ </span>
+ </div>
+ </div>
+ )}
+
+ {/* Wheel expanded */}
+ {isOpen && isWheel && (
+ <div className="border-t border-zinc-800 p-4 bg-black/20 space-y-3">
+ <p className="text-[9px] font-semibold text-zinc-500 tracking-widest">
+ WHEEL · {m.scoringType||'NET'} · ${m.wheelAmount}/PAIR · {(m.wheelPlayers||[]).join(' · ')}
+ </p>
+ {/* Pair results — tappable for scorecard */}
+ <div className="space-y-1.5">
+ {(m.wheelPairs||[]).map((pair: any, pi: number) => {
+ const pairKey = `${arch.id}-wheel-${pi}`
+ const isPairOpen = expandedWheelPairHistKey === pairKey
+ // Build per-hole net scores for this pair from archived data
+ const isGross = m.scoringType === 'GROSS'
+ const archRosterInline:any[] = arch.roster ? Object.values(arch.roster) : []
+ const pAObj = archRosterInline.find((p:any) => p.name === pair.playerA)
+ const pBObj = archRosterInline.find((p:any) => p.name === pair.playerB)
+ const allHcps = isGross ? [0] : [pAObj,pBObj].filter(Boolean).map((p:any)=>Number(p.handicap)||0)
+ const baseHcp = allHcps.length ? Math.min(...allHcps) : 0
+ const getStr = (hcp: number, i: number) => {
+ if (isGross) return 0
+ const hr = Number(arch.course?.holes?.[i]?.hcp) || (i+1)
+ const diff = Math.max(0, hcp - baseHcp)
+ let s = Math.floor(diff/18); if (hr <= (diff%18)) s++; return s
+ }
+ const makeNet = (p: any) => {
+ if (!p) return Array(18).fill(0)
+ const g = (arch.scores?.[p.id]) || Array(18).fill(0)
+ return g.map((sc:number,i:number) => sc>0 ? sc - getStr(Number(p.handicap)||0, i) : 0)
+ }
+ const netA = makeNet(pAObj)
+ const netB = makeNet(pBObj)
+
+ return (
+ <div key={pi} className={`rounded-2xl border overflow-hidden transition-all ${
+ isPairOpen ? 'border-purple-500/50' :
+ pair.winner==='tie'?'border-zinc-800':'border-emerald-500/20'
+ }`}>
+ {/* Pair pill */}
  <button
- onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
- disabled={demoLoading || isMock}
- className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
- <div className="font-black">⚡ Quick Match Demo</div>
- <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
- <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
+ onClick={() => setExpandedWheelPairHistKey(isPairOpen ? null : pairKey)}
+ className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors ${
+ isPairOpen?'bg-purple-950/20':pair.winner==='tie'?'bg-zinc-900 hover:bg-zinc-800':'bg-emerald-950/20 hover:bg-emerald-950/30'
+ }`}>
+ <span className={`font-semibold text-sm ${pair.winner===pair.playerA?'text-emerald-400':'text-zinc-400'}`}>{pair.playerA}</span>
+ <div className="text-center">
+ <div className={`text-xs font-semibold ${pair.winner==='tie'?'text-zinc-500':'text-emerald-400'}`}>
+ {pair.winner==='tie'?'TIE':`${pair.aWins}–${pair.bWins}`}
+ </div>
+ {pair.winner!=='tie' && <div className="text-[9px] text-zinc-600">${pair.amount}</div>}
+ </div>
+ <div className="flex items-center gap-2">
+ <span className={`font-semibold text-sm ${pair.winner===pair.playerB?'text-emerald-400':'text-zinc-400'}`}>{pair.playerB}</span>
+ <span className="text-[9px] text-purple-400 ml-1">{isPairOpen?'▲':'▼'}</span>
+ </div>
+ </button>
+ {/* Expanded scorecard */}
+ {isPairOpen && (
+ <div className="border-t border-zinc-800 bg-black/30 overflow-x-auto">
+ {[{start:0,label:'FRONT 9'},{start:9,label:'BACK 9'}].map(({start,label}) => (
+ <div key={label}>
+ <div className="px-4 py-1.5 bg-zinc-900/60 border-b border-zinc-800">
+ <span className="text-[9px] font-semibold text-zinc-500 tracking-widest">{label}</span>
+ </div>
+ <table className="w-full text-center" style={{minWidth:'480px',tableLayout:'fixed' as any}}>
+ <thead>
+ <tr className="bg-zinc-950">
+ <th className="py-2 px-2 text-left text-[9px] text-zinc-600 font-semibold" style={{width:'90px'}}>Player</th>
+ {Array.from({length:9},(_,i)=>start+i).map(i=>(
+ <th key={i} className="py-2 text-[9px] text-zinc-500 font-semibold" style={{width:'18px'}}>
+ <div>{i+1}</div><div className="text-[8px] text-zinc-700">p{(arch.course?.pars?.[i])||4}</div>
+ </th>
+ ))}
+ <th className="py-2 text-[9px] font-semibold text-blue-400" style={{width:'28px'}}>{start===0?'OUT':'IN'}</th>
+ </tr>
+ </thead>
+ <tbody>
+ {[
+ {name:pair.playerA,net:netA,color:'text-emerald-400'},
+ {name:pair.playerB,net:netB,color:'text-blue-400'}
+ ].map(side => {
+ const nineScores = side.net.slice(start,start+9)
+ const total = nineScores.reduce((a:number,b:number)=>a+(b||0),0)
+ return (
+ <tr key={side.name} className="border-t border-zinc-900">
+ <td className={`py-2 px-2 text-left font-semibold text-[10px] truncate ${side.color}`}>{side.name}</td>
+ {nineScores.map((s:number,i:number) => {
+ const par = (arch.course?.pars?.[start+i]) || 4
+ const diff = s>0?s-par:null
+ let cls = 'w-5 h-5 rounded flex items-center justify-center mx-auto text-[9px] font-semibold '
+ if(diff===null) cls+='text-zinc-700'
+ else if(diff<=-2) cls+='rounded-full border border-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-black text-yellow-300'
+ else if(diff===-1) cls+='rounded-full border border-red-500 text-red-400'
+ else if(diff===0) cls+='bg-zinc-800 text-white'
+ else if(diff===1) cls+='border border-zinc-600 text-zinc-400'
+ else cls+='border-2 border-zinc-600 text-zinc-500'
+ return <td key={i} className="py-1"><div className={cls}>{s||'—'}</div></td>
+ })}
+ <td className={`py-2 font-bold text-sm ${side.color}`}>{total||'—'}</td>
+ </tr>
+ )
+ })}
+ {/* Hole winner row */}
+ <tr className="border-t border-zinc-800 bg-zinc-900/40">
+ <td className="py-1.5 px-2 text-[9px] font-semibold text-zinc-600 text-left">Hole</td>
+ {Array.from({length:9},(_,i)=>start+i).map(i => {
+ const na = netA[i], nb = netB[i]
+ const w = na>0&&nb>0 ? na<nb?'A':nb<na?'B':'½' : null
+ return (
+ <td key={i} className="py-1 text-center">
+ <span className={`text-[9px] font-semibold ${w==='A'?'text-emerald-400':w==='B'?'text-blue-400':w==='½'?'text-zinc-500':'text-zinc-800'}`}>
+ {w||'·'}
+ </span>
+ </td>
+ )
+ })}
+ <td/>
+ </tr>
+ </tbody>
+ </table>
+ </div>
+ ))}
+ </div>
+ )}
+ </div>
+ )
+ })}
+ </div>
+ {/* Net per player */}
+ {m.netWinnings && Object.keys(m.netWinnings).length > 0 && (
+ <div>
+ <p className="text-[9px] font-semibold text-zinc-600 tracking-widest mb-2">NET PER PLAYER</p>
+ <div className="grid grid-cols-2 gap-2">
+ {Object.entries(m.netWinnings).map(([name, net]: [string, any]) => (
+ <div key={name} className={`rounded-xl p-3 border text-center ${
+ net>0?'border-emerald-500/30 bg-emerald-950/20':
+ net<0?'border-rose-500/30 bg-rose-950/20':
+ 'border-zinc-800 bg-zinc-900'
+ }`}>
+ <div className="text-zinc-400 text-xs font-semibold mb-0.5">{name}</div>
+ <div className={`font-bold text-base ${net>0?'text-emerald-400':net<0?'text-rose-400':'text-zinc-500'}`}>
+ {net===0?'EVEN':net>0?`+$${net}`:`-$${Math.abs(net)}`}
+ </div>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
+ </div>
+ )}
+ </div>
+ )
+ })}
+ </div>
+ </Section>
+ )}
+
+ {/* ── FOOTER: EXPORT + DELETE + ADD MATCHUP ── */}
+ <div className="px-5 py-4 border-t border-zinc-900 flex items-center justify-between gap-3">
+ <p className="text-[9px] text-zinc-600 font-medium">{date}</p>
+ <div className="flex items-center gap-2">
+ <button
+ onClick={() => setAddMatchupsTo(arch.id)}
+ className="flex items-center gap-1.5 bg-purple-900/40 hover:bg-purple-900/60 border border-purple-600/30 hover:border-purple-500 text-purple-300 hover:text-purple-200 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+ >
+ <Plus size={13}/> Add Matchup
  </button>
  <button
- onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
- disabled={demoLoading || isMock}
- className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
- <div className="font-black">🏆 Tournament Demo</div>
- <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
- <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ onClick={() => exportPDF(arch, recap, date)}
+ disabled={exportingId === arch.id}
+ className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-emerald-500 text-zinc-400 hover:text-emerald-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+ >
+ {exportingId === arch.id
+ ? <><Loader2 size={13} className="animate-spin text-emerald-400"/> Exporting...</>
+ : <><FileDown size={13}/> Export PDF</>
+ }
+ </button>
+ {canDelete && (confirmDeleteId === arch.id ? (
+ <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/40 rounded-xl px-3 py-1.5">
+ <span className="text-[10px] font-black text-rose-400">DELETE THIS ROUND?</span>
+ <button onClick={() => deleteHistory(arch.id)}
+ className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg text-[10px] font-black">YES, DELETE</button>
+ <button onClick={() => setConfirmDeleteId(null)}
+ className="text-zinc-500 hover:text-zinc-300 px-2 py-1 text-[10px] font-black">CANCEL</button>
+ </div>
+ ) : (
+ <button
+ onClick={() => setConfirmDeleteId(arch.id)}
+ className="text-zinc-700 hover:text-rose-500 transition-colors flex items-center gap-1.5 text-xs font-semibold px-2 py-2"
+ >
+ <Trash2 size={13}/> Delete
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* ── ADD MATCHUPS MODAL ── */}
+ {addMatchupsTo === arch.id && (
+ <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+ <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+ <div className="p-6 border-b border-zinc-800">
+ <h2 className="text-xl font-black text-white">Add Matchup</h2>
+ <p className="text-[9px] text-zinc-500 mt-1 tracking-widest">{date}</p>
+ </div>
+ <div className="p-6 space-y-4">
+ {/* Match type selector */}
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">TYPE</label>
+ <div className="grid grid-cols-2 gap-2 mt-2">
+ {(['PvP', '2v2', 'Team', 'Wheel'] as const).map(type => (
+ <button
+ key={type}
+ onClick={() => {
+ setNewMatchType(type as any)
+ setNewMatchData({...newMatchData, wheelPlayers: []})
+ }}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${
+ newMatchType === type
+ ? 'bg-amber-500 text-black'
+ : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+ }`}
+ >
+ {type}
+ </button>
+ ))}
+ </div>
+ </div>
+
+ {/* Handicap % Selector */}
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-3">
+ <div className="flex items-center justify-between">
+ <label className="text-xs font-black text-zinc-400 tracking-widest">HANDICAP %</label>
+ <span className="text-sm font-black text-emerald-400">{newMatchData.handicapPercent || 100}% Reduced</span>
+ </div>
+ 
+ {/* Quick buttons */}
+ <div className="grid grid-cols-5 gap-1">
+ {[100, 90, 80, 75, 50].map(pct => (
+ <button
+ key={pct}
+ onClick={() => setNewMatchData({...newMatchData, handicapPercent: pct})}
+ className={`py-1.5 rounded-lg font-black text-[10px] transition-all ${
+ (newMatchData.handicapPercent || 100) === pct
+ ? 'bg-emerald-500 text-black'
+ : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+ }`}
+ >
+ {pct}%
+ </button>
+ ))}
+ </div>
+
+ {/* Slider */}
+ <input
+ type="range"
+ min="0"
+ max="100"
+ step="5"
+ value={newMatchData.handicapPercent || 100}
+ onChange={(e) => setNewMatchData({...newMatchData, handicapPercent: Number(e.target.value)})}
+ className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+ />
+ </div>
+
+ {/* Skins Type: GROSS / NET / BOTH */}
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest block mb-2">SKINS TYPE</label>
+ <div className="grid grid-cols-3 gap-2">
+ {[
+ {label:'GROSS', g:100, n:0, net:false},
+ {label:'NET', g:0, n:100, net:true},
+ {label:'BOTH', g:50, n:50, net:true},
+ ].map(opt => {
+ const isActive = opt.label==='GROSS'
+ ? (!newMatchData.netSkinsEnabled || newMatchData.skinsSplitNet===0)
+ : opt.label==='NET'
+ ? (newMatchData.netSkinsEnabled && newMatchData.skinsSplitGross===0)
+ : (newMatchData.netSkinsEnabled && newMatchData.skinsSplitGross>0 && newMatchData.skinsSplitNet>0)
+ return (
+ <button key={opt.label}
+ onClick={() => setNewMatchData({...newMatchData, netSkinsEnabled:opt.net, skinsSplitGross:opt.g, skinsSplitNet:opt.n})}
+ className={`py-2.5 rounded-xl font-black text-xs transition-all ${isActive?'bg-emerald-500 text-black':'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'}`}>
+ {opt.label}
+ </button>
+ )
+ })}
+ </div>
+ </div>
+
+ {/* Split selector — only when BOTH */}
+ {newMatchData.netSkinsEnabled && newMatchData.skinsSplitGross > 0 && newMatchData.skinsSplitNet > 0 && (
+ <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 space-y-2">
+ <label className="text-xs font-black text-zinc-400 tracking-widest block">SKINS SPLIT</label>
+ <div className="grid grid-cols-2 gap-2">
+ {[{g:70,n:30,label:'70/30'},{g:60,n:40,label:'60/40'},{g:50,n:50,label:'50/50'},{g:40,n:60,label:'40/60'}].map(preset => (
+ <button key={preset.label}
+ onClick={() => setNewMatchData({...newMatchData, skinsSplitGross: preset.g, skinsSplitNet: preset.n})}
+ className={`py-2 rounded-lg font-black text-[10px] transition-all ${
+ (newMatchData.skinsSplitGross || 100) === preset.g && (newMatchData.skinsSplitNet || 0) === preset.n
+ ? 'bg-amber-500 text-black' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+ }`}>
+ <div>{preset.label}</div>
+ <div className="text-[8px] opacity-75">Gross/Net</div>
+ </button>
+ ))}
+ </div>
+ </div>
+ )}
+
+ {/* Player selectors */}
+ <div className="space-y-3">
+ {/* TEAM type — select teams instead of players */}
+ {newMatchType === 'Team' && (
+ <>
+ <div>
+ <label className="text-xs font-black text-emerald-400 tracking-widest">TEAM A</label>
+ <select
+ value={newMatchData.sideA}
+ onChange={(e) => setNewMatchData({...newMatchData, sideA: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select team</option>
+ {recap.teamResults.map(t => (
+ <option key={t.id} value={t.name}>{t.name}</option>
+ ))}
+ </select>
+ </div>
+ <div>
+ <label className="text-xs font-black text-blue-400 tracking-widest">TEAM B</label>
+ <select
+ value={newMatchData.sideB}
+ onChange={(e) => setNewMatchData({...newMatchData, sideB: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select team</option>
+ {recap.teamResults.map(t => (
+ <option key={t.id} value={t.name}>{t.name}</option>
+ ))}
+ </select>
+ </div>
+ </>
+ )}
+
+ {/* WHEEL type — select multiple players */}
+ {newMatchType === 'Wheel' && (
+ <>
+ <div>
+ <label className="text-xs font-black text-purple-400 tracking-widest">PLAYERS IN WHEEL</label>
+ <div className="mt-2 space-y-2 bg-zinc-800 p-3 rounded-xl max-h-40 overflow-y-auto">
+ {recap.leaderboard.map(p => (
+ <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+ <input
+ type="checkbox"
+ checked={newMatchData.wheelPlayers?.includes(p.name) || false}
+ onChange={(e) => {
+ if (e.target.checked) {
+ setNewMatchData({...newMatchData, wheelPlayers: [...(newMatchData.wheelPlayers || []), p.name]})
+ } else {
+ setNewMatchData({...newMatchData, wheelPlayers: (newMatchData.wheelPlayers || []).filter((n: string) => n !== p.name)})
+ }
+ }}
+ className="w-4 h-4"
+ />
+ <span className="text-xs text-white">{p.name}</span>
+ </label>
+ ))}
+ </div>
+ <p className="text-[9px] text-zinc-500 mt-1">{newMatchData.wheelPlayers?.length || 0} selected</p>
+ </div>
+ <div>
+ <label className="text-xs font-black text-purple-400 tracking-widest">AMOUNT PER PAIR</label>
+ <input
+ type="number"
+ value={newMatchData.wheelAmount}
+ onChange={(e) => setNewMatchData({...newMatchData, wheelAmount: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ />
+ </div>
+ </>
+ )}
+
+ {/* PvP and 2v2 — select players */}
+ {(newMatchType === 'PvP' || newMatchType === '2v2') && (
+ <>
+ {/* Side A */}
+ <div>
+ <label className="text-xs font-black text-emerald-400 tracking-widest">SIDE A</label>
+ <select
+ value={newMatchData.sideA}
+ onChange={(e) => setNewMatchData({...newMatchData, sideA: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select player</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+
+ {/* Side A2 (2v2 only) */}
+ {newMatchType === '2v2' && (
+ <div>
+ <label className="text-xs font-black text-emerald-400 tracking-widest">SIDE A PARTNER</label>
+ <select
+ value={newMatchData.sideA2}
+ onChange={(e) => setNewMatchData({...newMatchData, sideA2: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select partner</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+ )}
+
+ {/* Side B */}
+ <div>
+ <label className="text-xs font-black text-blue-400 tracking-widest">SIDE B</label>
+ <select
+ value={newMatchData.sideB}
+ onChange={(e) => setNewMatchData({...newMatchData, sideB: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select player</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+
+ {/* Side B2 (2v2 only) */}
+ {newMatchType === '2v2' && (
+ <div>
+ <label className="text-xs font-black text-blue-400 tracking-widest">SIDE B PARTNER</label>
+ <select
+ value={newMatchData.sideB2}
+ onChange={(e) => setNewMatchData({...newMatchData, sideB2: e.target.value})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-3 py-2 rounded-xl text-xs font-semibold"
+ >
+ <option value="">Select partner</option>
+ {recap.leaderboard.map(p => (
+ <option key={p.id} value={p.name}>{p.name}</option>
+ ))}
+ </select>
+ </div>
+ )}
+ </>
+ )}
+ </div>
+
+ {/* Match amounts — not needed for Wheel */}
+ {newMatchType !== 'Wheel' && (
+ <div className="grid grid-cols-3 gap-2">
+ {([['nassauF9','FRONT 9'],['nassauB9','BACK 9'],['nassauOverall','OVERALL']] as const).map(([k,lbl]) => (
+ <div key={k}>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">{lbl}</label>
+ <input
+ type="number"
+ value={(newMatchData as any)[k] ?? newMatchData.nassau ?? 5}
+ onChange={(e) => setNewMatchData({...newMatchData, [k]: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
+ />
+ </div>
+ ))}
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">PRESS</label>
+ <input
+ type="number"
+ value={newMatchData.press}
+ onChange={(e) => setNewMatchData({...newMatchData, press: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
+ />
+ </div>
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest">BIRDIE</label>
+ <input
+ type="number"
+ value={newMatchData.birdie}
+ onChange={(e) => setNewMatchData({...newMatchData, birdie: Number(e.target.value)})}
+ className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold"
+ />
+ </div>
+ </div>
+ )}
+
+ {/* Scoring type */}
+ {newMatchType !== 'Wheel' && (
+ <div>
+ <label className="text-xs font-black text-zinc-400 tracking-widest mb-2 block">SCORING</label>
+ <div className="grid grid-cols-2 gap-2">
+ {(['NET', 'GROSS'] as const).map(type => (
+ <button
+ key={type}
+ onClick={() => setNewMatchData({...newMatchData, scoringType: type})}
+ className={`py-2 rounded-xl font-black text-xs transition-all ${
+ newMatchData.scoringType === type
+ ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500'
+ : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700'
+ }`}
+ >
+ {type}
+ </button>
+ ))}
+ </div>
+ </div>
+ )}
+
+ {/* Auto-press toggle — PvP and 2v2 only */}
+ {(newMatchType === 'PvP' || newMatchType === '2v2') && (
+ <div className="flex items-center justify-between bg-zinc-800 px-3 py-2 rounded-xl">
+ <span className="text-xs font-black text-zinc-400">Auto-Press</span>
+ <button
+ onClick={() => setNewMatchData({...newMatchData, autoPress: !newMatchData.autoPress})}
+ className={`w-10 h-6 rounded-full flex items-center px-1 transition-all ${
+ newMatchData.autoPress
+ ? 'bg-emerald-500'
+ : 'bg-zinc-700'
+ }`}
+ >
+ <div className={`w-4 h-4 rounded-full bg-white transition-transform ${newMatchData.autoPress ? 'translate-x-4' : ''}`} />
  </button>
  </div>
- <button onClick={() => setShowDemoModal(false)}
- className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
+ )}
+ </div>
+
+ {/* Modal footer */}
+ <div className="px-6 py-4 border-t border-zinc-800 flex gap-2">
+ <button
+ onClick={() => setAddMatchupsTo(null)}
+ className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-4 py-2 rounded-xl font-semibold text-xs transition-all"
+ >
  Cancel
  </button>
+ <button
+ onClick={saveNewMatchup}
+ className="flex-1 bg-amber-500 hover:bg-amber-600 text-black px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-1.5"
+ >
+ <Check size={13}/> Save
+ </button>
+ </div>
  </div>
  </div>
  )}
+ </div>
+ )}
+ </div>
+ )
+ }
 
+return (
+ <div className="min-h-screen bg-black text-white p-4 sm:p-6 font-sans">
+ <Link href="/"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
+ <ArrowLeft size={18}/> HUB
+ </Link>
+
+ <div className="max-w-5xl mx-auto">
+ <div className="flex items-center gap-4 mb-10">
+ <Archive size={36} className="text-blue-400"/>
+ <div>
+ <h1 className="text-4xl font-black tracking-tight">History</h1>
+ <p className="text-zinc-600 text-[10px] font-black tracking-widest mt-0.5">{archives.length} ARCHIVED RECORD{archives.length !== 1 ? 'S' : ''}</p>
+ </div>
+ </div>
+
+ {archives.length === 0 && (
+ <div className="text-center py-24 border-2 border-dashed border-zinc-800 rounded-[2.5rem]">
+ <Archive size={48} className="mx-auto mb-4 text-zinc-800"/>
+ <p className="text-zinc-600 font-black text-lg">NO HISTORY YET</p>
+ <p className="text-zinc-700 text-xs font-black mt-2 tracking-widest normal-case">
+ Use Admin → Archive to History after each round
+ </p>
+ </div>
+ )}
+
+        {/* One chronological timeline: trips and standalone rounds interleaved,
+            newest first. A trip is dated by its most recent round. */}
+        <div className="space-y-4 pb-12">
+          {[
+            ...buildTripRollups(archives).map((t: any) => ({ kind: 'trip', when: t.latest, key: 'trip:' + t.tripName, data: t })),
+            ...standaloneArchives.map((a: any) => ({ kind: 'round', when: Number(a._meta?.playedAt || a.id), key: 'round:' + a.id, data: a })),
+          ]
+            .sort((a, b) => b.when - a.when)
+            .map(item => item.kind === 'trip'
+              ? <TripRollup key={item.key} trip={item.data} onDeleteTrip={deleteTrip} renderRound={renderRoundCard} canDelete={canDelete}/>
+              : <div key={item.key}>{renderRoundCard(item.data)}</div>
+            )}
+        </div>
  </div>
  </div>
  )
+}
 
-
+// ── SECTION WRAPPER ───────────────────────────────────────────────
+function Section({ title, icon, color, children }: {
+ title: string
+ icon: React.ReactNode
+ color: string
+ children: React.ReactNode
+}) {
+ return (
+ <div className="border-t border-zinc-900 px-5 sm:px-7 py-5">
+ <h3 className={`font-black text-xs tracking-widest flex items-center gap-2 mb-4 ${color}`}>
+ {icon} {title}
+ </h3>
+ {children}
+ </div>
+ )
 }
