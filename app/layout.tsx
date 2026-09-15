@@ -6,13 +6,13 @@ import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 
 export const metadata: Metadata = {
-  title: 'Blitz Board',
+  title: 'JF Tournament Manager',
   description: 'Golf tournament scoring — live scorer, payouts, skins',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Blitz Board',
+    title: 'JF Tournament Manager',
   },
   icons: {
     icon: [
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#10b981',
+  themeColor: '#3b82f6',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -45,7 +45,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-        <meta name="apple-mobile-web-app-title" content="Blitz Board"/>
+        <meta name="apple-mobile-web-app-title" content="JF Tournament Manager"/>
         <link rel="apple-touch-icon" href="/icon-180.png"/>
         <script
           dangerouslySetInnerHTML={{
@@ -125,10 +125,10 @@ export default function RootLayout({
             boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
           }}
         >
-          <img src="/icon-192.png" alt="Blitz Board" style={{width:'44px',height:'44px',borderRadius:'10px',flexShrink:0}}/>
+          <img src="/icon-192.png" alt="JF Tournament Manager" style={{width:'44px',height:'44px',borderRadius:'10px',flexShrink:0}}/>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:'14px',color:'#fff',letterSpacing:'0.01em'}}>
-              Install Blitz Board
+              Install JF Tournament
             </div>
             <div style={{fontSize:'11px',color:'#71717a',fontWeight:500,marginTop:'2px'}}>
               Add to home screen

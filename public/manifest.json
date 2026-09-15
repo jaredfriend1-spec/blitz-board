@@ -1,11 +1,11 @@
 {
-  "name": "Blitz Board",
-  "short_name": "Blitz Board",
+  "name": "JF Tournament Manager",
+  "short_name": "JF Tournament",
   "description": "Golf tournament scoring — live scorer, payouts, skins",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#10b981",
+  "theme_color": "#3b82f6",
   "orientation": "portrait-primary",
   "icons": [
     {

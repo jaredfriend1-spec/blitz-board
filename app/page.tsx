@@ -327,7 +327,7 @@ export default function LandingPage() {
  <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-4 max-h-[85vh] overflow-y-auto"
  onClick={e => e.stopPropagation()}>
  <div>
- <p className="font-black text-lg text-white">Blitz Board</p>
+ <p className="font-black text-lg text-white">JF Tournament Manager</p>
  <p className="text-[11px] font-black text-zinc-500 tracking-widest mt-0.5">
  © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
  </p>
@@ -335,7 +335,7 @@ export default function LandingPage() {
 
  <div className="space-y-3 text-[12px] text-zinc-400 font-medium normal-case leading-relaxed">
  <p>
- Blitz Board is an original software application designed, built and owned by
+ JF Tournament Manager is an original software application designed, built and owned by
  Jared Friend — including its source code, database design, scoring and payout
  engines, interface and visual design.
  </p>
@@ -392,10 +392,10 @@ export default function LandingPage() {
  {/* Logo */}
  <div className="text-center">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-1">
- BLITZ <span className="text-emerald-500">BOARD</span>
+ JF <span className="text-blue-500">TOURNAMENT</span>
  </h1>
  <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
- GOLF TOURNAMENT SCORING
+ TOURNAMENT MANAGER
  </p>
  <p className="text-zinc-700 text-[10px] font-medium normal-case mt-1">By Jared Friend</p>
  </div>
@@ -475,7 +475,7 @@ export default function LandingPage() {
  className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
  <BookOpen size={14} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
  <span className="font-black text-xs text-zinc-600 group-hover:text-emerald-400 transition-colors tracking-widest">
- EXPLORE HOW BLITZ BOARD WORKS
+ EXPLORE HOW THIS WORKS
  </span>
  </Link>
  <button onClick={() => setShowLegal(true)}
@@ -541,7 +541,7 @@ export default function LandingPage() {
  {/* Header */}
  <header className="mb-10 border-b-4 border-emerald-500 pb-6">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- BLITZ <span className="text-emerald-500 text-4xl">BOARD</span>
+ JF <span className="text-blue-500 text-4xl">TOURNAMENT</span>
  </h1>
  <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
  {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
@@ -770,7 +770,7 @@ export default function LandingPage() {
  {/* Header */}
  <header className="mb-10 border-b-4 border-emerald-500 pb-6">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- BLITZ <span className="text-emerald-500 text-4xl">BOARD</span>
+ JF <span className="text-blue-500 text-4xl">TOURNAMENT</span>
  </h1>
  <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
  {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
