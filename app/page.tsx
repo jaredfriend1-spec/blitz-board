@@ -605,7 +605,7 @@ export default function LandingPage() {
  <BookOpen size={20} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
  </div>
  <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How Blitz Board Works</h2>
+ <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How This App Works</h2>
  <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Guide, tips & feature walkthrough</p>
  </div>
  <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:border-zinc-600 transition-all">
