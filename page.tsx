@@ -33,7 +33,6 @@ export default function LandingPage() {
  const [archiveSuccess, setArchiveSuccess] = useState(false)
  const [demoLoading, setDemoLoading] = useState(false)
  const [showDemoModal, setShowDemoModal] = useState(false)
- const [showLegal, setShowLegal] = useState(false)
  const [toast, setToast] = useState('')
  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
  // Blocked names are managed in the Master Dashboard, not hardcoded.
@@ -76,9 +75,7 @@ export default function LandingPage() {
       if (d.player_access !== undefined) setPlayerCanSeeAnalytics(!!d.player_access)
     })
  onValue(ref(db, 'tournament/course'), snap => {
- // Clear when the course goes away, or the header keeps the old name after a
- // demo is exited or the tournament is cleared.
- setCourseName(snap.val()?.name || '')
+ if (snap.val()?.name) setCourseName(snap.val().name)
  })
  onValue(ref(db, 'tournament/meta'), snap => {
  const m = snap.val() || {}
@@ -259,8 +256,6 @@ export default function LandingPage() {
 
   const clearDemo = async () => {
     await set(ref(db,'tournament'), null)
-    // Reset the header immediately rather than waiting for the listener.
-    setCourseName(''); setTripName(''); setCurrentDay(''); setIsMock(false); setActiveMode('')
     showToast('Demo cleared')
   }
 
@@ -281,18 +276,6 @@ export default function LandingPage() {
       }
       for (const p of DEMO_PLAYERS) {
         await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
-      }
-
-      // Dustin Johnson sits this one out and takes Brooks Koepka's card so the
-      // draw feature has something to demonstrate. DJ is excluded from skins.
-      const drawSrc = DEMO_PLAYERS.find((p:any)=>p.name==='BROOKS KOEPKA')
-      const djId = pidMap['DUSTIN JOHNSON']
-      const brooksId = pidMap['BROOKS KOEPKA']
-      if (drawSrc && djId && brooksId) {
-        await set(ref(db,`tournament/scores/${djId}`), drawSrc.scores)
-        await set(ref(db,'tournament/draws'), {
-          [djId]: { source: brooksId, setAt: Date.now() },
-        })
       }
       const teamDefs = [
         {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
@@ -319,61 +302,6 @@ export default function LandingPage() {
   }
 
 
- // Ownership notice — defined once so every screen can render it.
- const LegalModal = () => !showLegal ? null : (
-
- <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
- onClick={() => setShowLegal(false)}>
- <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-4 max-h-[85vh] overflow-y-auto"
- onClick={e => e.stopPropagation()}>
- <div>
- <p className="font-black text-lg text-white">JF Tournament Manager</p>
- <p className="text-[11px] font-black text-zinc-500 tracking-widest mt-0.5">
- © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
- </p>
- </div>
-
- <div className="space-y-3 text-[12px] text-zinc-400 font-medium normal-case leading-relaxed">
- <p>
- JF Tournament Manager is an original software application designed, built and owned by
- Jared Friend — including its source code, database design, scoring and payout
- engines, interface and visual design.
- </p>
- <p>
- Game formats, scorecards and spreadsheets that existed before the app remain
- the property of whoever created them, and they are free to keep using them.
- Ownership of the application is separate and rests with its author.
- </p>
- <p>
- Access is a personal licence to use the app as provided. It can be changed or
- ended at any time, and it does not transfer any ownership.
- </p>
- <p>
- The application may not be copied, modified, distributed, published or
- rebuilt, in whole or in part, without the owner&apos;s prior written consent.
- </p>
- <p>
- Data entered by users — scores, handicaps and related records — remains the
- property of those users. The software that stores, calculates and presents
- that data does not.
- </p>
- </div>
-
- <div className="border-t border-zinc-900 pt-3">
- <p className="text-[10px] text-zinc-600 font-medium normal-case leading-relaxed">
- All rights not expressly granted are reserved. Enquiries regarding use or licensing should be directed to the owner.
- </p>
- </div>
-
- <button onClick={() => setShowLegal(false)}
- className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-2xl font-black text-sm transition-colors">
- CLOSE
- </button>
- </div>
- </div>
- 
- )
-
  // Show loading while Firebase Auth resolves
  if (authLoading) {
  return (
@@ -395,7 +323,7 @@ export default function LandingPage() {
  JF <span className="text-rose-500">TOURNAMENT</span>
  </h1>
  <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
- TOURNAMENT MANAGER
+ GOLF TOURNAMENT SCORING
  </p>
  <p className="text-zinc-700 text-[10px] font-medium normal-case mt-1">By Jared Friend</p>
  </div>
@@ -478,10 +406,10 @@ export default function LandingPage() {
  EXPLORE HOW THIS WORKS
  </span>
  </Link>
- <button onClick={() => setShowLegal(true)}
- className="w-full text-center text-[9px] text-zinc-700 hover:text-zinc-500 font-black tracking-widest transition-colors py-2">
- © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
- </button>
+ <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
+ JF TOURNAMENT · {new Date().getFullYear()}
+ 
+ </p>
 
  </div>
 
@@ -519,7 +447,6 @@ export default function LandingPage() {
  </div>
  )}
 
- <LegalModal/>
  </div>
  )
  }
@@ -671,7 +598,6 @@ export default function LandingPage() {
  )}
 
  </div>
- <LegalModal/>
  </div>
  )
  }
@@ -697,7 +623,7 @@ export default function LandingPage() {
   const liveRound = !isMock && !!activeMode
   const liveLabel = activeMode === 'match' ? 'Quick match' : (tripName || 'Tournament')
 
-  const Tile = ({ item, wide = false }: { item:any, wide?:boolean, key?:any }) => (
+  const Tile = ({ item, wide = false }: { item:any, wide?:boolean }) => (
     <Link href={item.path}
       className={`group bg-zinc-900/40 border border-zinc-800 ${item.hover} rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${wide ? 'col-span-2' : ''}`}>
       {item.icon}
@@ -706,7 +632,7 @@ export default function LandingPage() {
     </Link>
   )
 
-  const GroupLabel = ({ children }: { children?:React.ReactNode }) => (
+  const GroupLabel = ({ children }: { children:React.ReactNode }) => (
     <p className="text-[9px] font-black text-zinc-600 tracking-[0.2em] mb-2">{children}</p>
   )
 
@@ -878,7 +804,6 @@ export default function LandingPage() {
  </div>
  )}
 
- <LegalModal/>
  </div>
  </div>
  )
