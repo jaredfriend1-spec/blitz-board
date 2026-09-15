@@ -349,18 +349,19 @@ export default function LandingPage() {
  ended at any time, and it does not transfer any ownership.
  </p>
  <p>
- Please don&apos;t copy, modify, distribute or rebuild the application without
- permission. Just ask — the answer is usually yes.
+ The application may not be copied, modified, distributed, published or
+ rebuilt, in whole or in part, without the owner&apos;s prior written consent.
  </p>
- <p className="text-zinc-500">
- Scores, handicaps and everything you enter stay yours. The software that
- stores and calculates them stays mine.
+ <p>
+ Data entered by users — scores, handicaps and related records — remains the
+ property of those users. The software that stores, calculates and presents
+ that data does not.
  </p>
  </div>
 
  <div className="border-t border-zinc-900 pt-3">
  <p className="text-[10px] text-zinc-600 font-medium normal-case leading-relaxed">
- Questions about use or licensing: contact the owner directly.
+ All rights not expressly granted are reserved. Enquiries regarding use or licensing should be directed to the owner.
  </p>
  </div>
 
