@@ -54,7 +54,7 @@ export function useBlockedPlayers() {
     const label = hit
       ? hit.name.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
       : name
-    return `⛔ ${label} cannot be added to Blitz Board`
+    return `⛔ ${label} cannot be added`
   }
 
   return { blocked, isBlocked, blockedMessage }

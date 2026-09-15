@@ -53,7 +53,7 @@ export default function GuidePage() {
           <ArrowLeft size={20}/>
         </Link>
         <div>
-          <h1 className="font-black text-sm tracking-tight">HOW BLITZ BOARD WORKS</h1>
+          <h1 className="font-black text-sm tracking-tight">HOW THIS APP WORKS</h1>
           <p className="text-zinc-600 text-[10px] font-medium">Guide & feature walkthrough</p>
         </div>
       </div>
@@ -62,7 +62,7 @@ export default function GuidePage() {
 
         {/* Intro */}
         <div className="bg-gradient-to-br from-emerald-500/10 to-zinc-900/60 border border-emerald-500/20 rounded-2xl p-5">
-          <h2 className="font-black text-xl mb-1">BLITZ <span className="text-emerald-400">BOARD</span></h2>
+          <h2 className="font-black text-xl mb-1">JF <span className="text-rose-500">TOURNAMENT</span></h2>
           <p className="text-zinc-400 text-sm font-medium normal-case leading-relaxed">
             A full golf match scoring and betting platform. Track scores hole-by-hole, calculate Nassau payouts automatically, manage skins, run tournaments, and keep history of every round your group has ever played.
           </p>

@@ -54,11 +54,43 @@ export default function MasterPage() {
  const [blockedBusy, setBlockedBusy] = useState(false)
  const [blockedErr, setBlockedErr] = useState<string | null>(null)
 
+ // ── REMOTE APP CONTROL ──
+ // A publicly-readable flag in this database that the other deployment
+ // checks before it renders. Keeping it here means it is controlled from
+ // the dashboard you are already signed into — there is no way to lock
+ // yourself out, because this app never reads it.
+ const [remote, setRemote] = useState<any>({ enabled: true, message: '' })
+ const [remoteDraft, setRemoteDraft] = useState('')
+ const [remoteBusy, setRemoteBusy] = useState(false)
+ const [remoteErr, setRemoteErr] = useState<string | null>(null)
+
  // Blocked names live in the database so they can be changed without a deploy.
  useEffect(() => {
    const unsub = onValue(ref(db, 'blockedPlayers'), snap => setBlockedPlayers(normalizeBlocked(snap.val())))
    return () => unsub()
  }, [])
+
+ useEffect(() => {
+   const unsub = onValue(ref(db, 'publicStatus/legacyApp'), snap => {
+     const v = snap.val() || {}
+     setRemote({ enabled: v.enabled !== false, message: v.message || '' })
+     setRemoteDraft(v.message || '')
+   }, () => setRemoteErr('Could not read the current status.'))
+   return () => unsub()
+ }, [])
+
+ const saveRemote = async (enabled: boolean, message: string) => {
+   setRemoteBusy(true); setRemoteErr(null)
+   try {
+     await set(ref(db, 'publicStatus/legacyApp'), {
+       enabled, message: message.trim() || null, updatedAt: Date.now(),
+     })
+   } catch (e: any) {
+     setRemoteErr(/permission/i.test(String(e?.message || e))
+       ? 'Permission denied — only a master admin can change this.'
+       : String(e?.message || e))
+   } finally { setRemoteBusy(false) }
+ }
 
  const addBlocked = async () => {
    const name = newBlockedName.trim()
@@ -208,7 +240,7 @@ export default function MasterPage() {
           <Shield size={20} className="text-emerald-400"/>
           <div>
             <h1 className="font-black text-sm text-white">MASTER ADMIN</h1>
-            <p className="text-zinc-600 text-[10px] font-medium">Blitz Board Command Center</p>
+            <p className="text-zinc-600 text-[10px] font-medium">Command Center</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -743,7 +775,66 @@ export default function MasterPage() {
  </div>
  </Section>
 
-         <Section title="App Settings" icon={<Settings size={16}/>} defaultOpen={false}>
+<Section title={`🔌 Other App — ${remote.enabled ? 'ONLINE' : 'OFFLINE'}`} icon={<Activity size={16}/>} defaultOpen={false}>
+ <div className="space-y-4">
+ <p className="text-[11px] text-zinc-500 font-medium normal-case leading-relaxed">
+ Controls whether the other deployment serves its app. Switching it off shows
+ your message instead of the hub. This app is unaffected either way.
+ </p>
+
+ {remoteErr && (
+ <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-3 py-2 text-[11px] font-black">
+ {remoteErr}
+ </div>
+ )}
+
+ <div className={`rounded-2xl border-2 p-4 ${remote.enabled ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-rose-500/40 bg-rose-500/5'}`}>
+ <div className="flex items-center justify-between gap-3">
+ <div className="min-w-0">
+ <p className={`font-black text-sm ${remote.enabled ? 'text-emerald-400' : 'text-rose-400'}`}>
+ {remote.enabled ? 'Running normally' : 'Switched off'}
+ </p>
+ <p className="text-[10px] text-zinc-600 font-medium normal-case mt-0.5">
+ {remote.enabled ? 'Anyone with the link can use it' : 'Visitors see your message'}
+ </p>
+ </div>
+ <button
+ onClick={() => saveRemote(!remote.enabled, remoteDraft)}
+ disabled={remoteBusy}
+ className={`px-4 py-2.5 rounded-xl font-black text-xs flex-shrink-0 transition-colors ${
+ remote.enabled
+ ? 'bg-rose-600 hover:bg-rose-500 text-white'
+ : 'bg-emerald-500 hover:bg-emerald-400 text-black'} disabled:opacity-50`}>
+ {remoteBusy ? '…' : remote.enabled ? 'SWITCH OFF' : 'SWITCH ON'}
+ </button>
+ </div>
+ </div>
+
+ <div>
+ <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">
+ MESSAGE SHOWN WHEN OFF
+ </label>
+ <textarea
+ value={remoteDraft}
+ onChange={e => setRemoteDraft(e.target.value)}
+ rows={2}
+ placeholder="This app is no longer available."
+ className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-medium text-white outline-none text-xs transition-colors normal-case resize-none"/>
+ <button
+ onClick={() => saveRemote(remote.enabled, remoteDraft)}
+ disabled={remoteBusy || remoteDraft === remote.message}
+ className="mt-2 w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 py-2.5 rounded-xl font-black text-xs transition-colors">
+ SAVE MESSAGE
+ </button>
+ <p className="text-[10px] text-zinc-700 font-medium normal-case mt-2 leading-snug">
+ Leave blank and they will see a plain notice. The message can be changed
+ while the app is off — it updates for anyone looking at it.
+ </p>
+ </div>
+ </div>
+ </Section>
+
+                  <Section title="App Settings" icon={<Settings size={16}/>} defaultOpen={false}>
           <div className="p-4 space-y-4">
 
 

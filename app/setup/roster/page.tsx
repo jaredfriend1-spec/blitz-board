@@ -320,7 +320,7 @@ export default function LandingPage() {
  {/* Logo */}
  <div className="text-center">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-1">
- BLITZ <span className="text-emerald-500">BOARD</span>
+ JF <span className="text-rose-500">TOURNAMENT</span>
  </h1>
  <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
  GOLF TOURNAMENT SCORING
@@ -403,11 +403,11 @@ export default function LandingPage() {
  className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
  <BookOpen size={14} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
  <span className="font-black text-xs text-zinc-600 group-hover:text-emerald-400 transition-colors tracking-widest">
- EXPLORE HOW BLITZ BOARD WORKS
+ EXPLORE HOW THIS WORKS
  </span>
  </Link>
  <p className="text-center text-[9px] text-zinc-700 font-black tracking-widest">
- BLITZ BOARD · {new Date().getFullYear()}
+ JF TOURNAMENT · {new Date().getFullYear()}
  
  </p>
 
@@ -468,7 +468,7 @@ export default function LandingPage() {
  {/* Header */}
  <header className="mb-10 border-b-4 border-emerald-500 pb-6">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- BLITZ <span className="text-emerald-500 text-4xl">BOARD</span>
+ JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
  </h1>
  <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
  {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
@@ -532,7 +532,7 @@ export default function LandingPage() {
  <BookOpen size={20} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
  </div>
  <div className="flex-1 min-w-0">
- <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How Blitz Board Works</h2>
+ <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How This App Works</h2>
  <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Guide, tips & feature walkthrough</p>
  </div>
  <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:border-zinc-600 transition-all">
@@ -696,7 +696,7 @@ export default function LandingPage() {
  {/* Header */}
  <header className="mb-10 border-b-4 border-emerald-500 pb-6">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- BLITZ <span className="text-emerald-500 text-4xl">BOARD</span>
+ JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
  </h1>
  <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
  {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}

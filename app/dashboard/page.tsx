@@ -22,7 +22,7 @@ export default function BigBoard() {
     <div className="min-h-screen bg-black text-white p-8 md:p-12 font-sans uppercase tracking-tight">
       <Link href="/" className="mb-8 inline-flex items-center gap-2 text-emerald-500 font-black italic opacity-50 hover:opacity-100"><ChevronLeft size={20} /> Back to Hub</Link>
       <header className="flex justify-between items-end mb-12 border-b-4 border-emerald-500 pb-6">
-        <h1 className="text-6xl font-black italic text-emerald-500 tracking-tighter">BLITZ BOARD</h1>
+        <h1 className="text-6xl font-black italic text-emerald-500 tracking-tighter">JF TOURNAMENT</h1>
         <div className="text-right flex items-center gap-4 text-zinc-600 font-bold text-xl"><Flag size={24} className="text-emerald-500" /> ROLLING ROAD</div>
       </header>
       <div className="bg-zinc-900/30 rounded-[2rem] border-2 border-zinc-800 overflow-hidden">

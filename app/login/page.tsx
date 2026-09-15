@@ -63,7 +63,7 @@ export default function LoginPage() {
             <Shield size={28} className="text-emerald-400"/>
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight">
-            BLITZ<span className="text-emerald-400">BOARD</span>
+            JF <span className="text-rose-500">TOURNAMENT</span>
           </h1>
           <p className="text-zinc-600 text-xs font-medium normal-case mt-1">Admin Sign In</p>
         </div>

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────
-// BLITZ BOARD — SHARED PAYOUT ENGINE
+// JF TOURNAMENT MANAGER — SHARED PAYOUT ENGINE
 //
 // Single source of truth for every dollar the app settles. Imported by
 // app/history, app/payouts and app/master/analytics so they can never

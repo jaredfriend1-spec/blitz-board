@@ -15,6 +15,6 @@ export const BLITZ_TEAMS = [
 ];
 
 export const tournamentSettings = { 
-  name: "Blitz Board", 
+  name: "JF Tournament Manager", 
   date: "04/28/26" 
 };

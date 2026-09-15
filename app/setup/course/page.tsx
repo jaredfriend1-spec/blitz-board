@@ -24,7 +24,7 @@ export default function CourseSetup() {
 
   const saveCourse = () => {
     localStorage.setItem('tournament-course', JSON.stringify(config));
-    alert("✅ COURSE UPDATED: Pars are now locked for the Blitz.");
+    alert("✅ COURSE UPDATED: Pars are now locked for this round.");
   };
 
   const handleParChange = (index: number, value: string) => {
@@ -55,7 +55,7 @@ export default function CourseSetup() {
                 className="bg-transparent text-5xl font-black italic text-emerald-500 outline-none border-b-2 border-transparent focus:border-emerald-500/30 w-full uppercase tracking-tighter"
                 placeholder="COURSE NAME"
               />
-              <p className="text-[10px] text-zinc-600 font-black mt-2 tracking-[.4em] italic uppercase">Rolling Road Blitz Specifications</p>
+              <p className="text-[10px] text-zinc-600 font-black mt-2 tracking-[.4em] italic uppercase">Course Specifications</p>
             </div>
           </header>
 
