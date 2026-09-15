@@ -335,30 +335,26 @@ export default function LandingPage() {
 
  <div className="space-y-3 text-[12px] text-zinc-400 font-medium normal-case leading-relaxed">
  <p>
- Blitz Board is an original software application conceived, designed, built and
- owned solely by Jared Friend. This includes its source code, database design,
- scoring and payout engines, user interface, visual design and all supporting
- materials.
+ Blitz Board is an original software application designed, built and owned by
+ Jared Friend — including its source code, database design, scoring and payout
+ engines, interface and visual design.
  </p>
  <p>
- No other person or party holds any ownership interest in this application.
- Providing scorecards, spreadsheets, game formats, feedback, feature requests or
- testing does not create any claim to the software, in whole or in part.
+ Game formats, scorecards and spreadsheets that existed before the app remain
+ the property of whoever created them, and they are free to keep using them.
+ Ownership of the application is separate and rests with its author.
  </p>
  <p>
- Access is a personal, non-exclusive, non-transferable licence to use the
- application as provided. It grants no right of ownership, may be modified or
- withdrawn at any time at the owner&apos;s sole discretion, and ends when the owner
- says it ends.
+ Access is a personal licence to use the app as provided. It can be changed or
+ ended at any time, and it does not transfer any ownership.
  </p>
  <p>
- The application may not be copied, modified, distributed, published, sold,
- sublicensed, reverse-engineered, or used to create a competing or derivative
- product, in whole or in part, without the owner&apos;s express written consent.
+ Please don&apos;t copy, modify, distribute or rebuild the application without
+ permission. Just ask — the answer is usually yes.
  </p>
  <p className="text-zinc-500">
- Scores, handicaps and other information you enter remain yours. The software
- that stores, calculates and presents them does not.
+ Scores, handicaps and everything you enter stay yours. The software that
+ stores and calculates them stays mine.
  </p>
  </div>
 
