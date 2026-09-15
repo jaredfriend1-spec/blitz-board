@@ -1,723 +1,172 @@
 "use client"
-import { useState, useEffect } from 'react'
-import { db } from '@/lib/firebase'
-import { ref, set, get, onValue } from 'firebase/database'
-import {
- ArrowLeft, CheckCircle2, Circle, ChevronRight, Flag, Users,
- DollarSign, Sword, Loader2, Archive, Trash2, Play, ShieldAlert,
- Eraser, Calendar, Save, Layers, RotateCcw
-} from 'lucide-react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { signIn, resetPassword } from '@/lib/auth'
+import { Shield, Eye, EyeOff, Mail, Lock, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7','Day 8']
-const MAX_DAYS = DAY_LABELS.length
+export default function LoginPage() {
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  const [showReset, setShowReset] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
 
-export default function AdminWizard() {
- const [meta, setMeta] = useState<any>({})
- const [course, setCourse] = useState<any>(null)
- const [playerCount, setPlayerCount] = useState(0)
- const [teamCount, setTeamCount] = useState(0)
- const [teamsHavePlayers, setTeamsHavePlayers] = useState(false)
- const [moneySet, setMoneySet] = useState(false)
- const [formatName, setFormatName] = useState("Jeff's Blitz")
- const [formatCustom, setFormatCustom] = useState(false)
- const [matchupCount, setMatchupCount] = useState(0)
- const [hasAnyData, setHasAnyData] = useState(false)
- const [archivedDays, setArchivedDays] = useState<string[]>([])
+  const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) return setError('Please enter email and password')
+    setLoading(true)
+    setError('')
+    try {
+      const { role } = await signIn(email.trim(), password)
+      if (role === 'master') router.push('/')
+      else if (role === 'scorer') router.push('/')
+      else setError('Your account does not have access to this app.')
+    } catch (e: any) {
+      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+        setError('Incorrect email or password')
+      } else if (e.code === 'auth/user-not-found') {
+        setError('No account found with that email')
+      } else if (e.code === 'auth/too-many-requests') {
+        setError('Too many attempts. Try again later.')
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Invalid email address')
+      } else if (e.code === 'auth/network-request-failed') {
+        setError('Network error — check your connection')
+      } else {
+        setError(`Error: ${e.code || e.message || 'Unknown error'}`)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
- const [editingTrip, setEditingTrip] = useState(false)
- const [tripNameInput, setTripNameInput] = useState('')
- const [totalDaysInput, setTotalDaysInput] = useState(1)
- const [loading, setLoading] = useState(false)
- const [actionMsg, setActionMsg] = useState<string|null>(null)
- const [showDestructive, setShowDestructive] = useState(false)
- const [destructiveErr, setDestructiveErr] = useState<string | null>(null)
- const [abandonConfirm, setAbandonConfirm] = useState(false)
- const [abandonText, setAbandonText] = useState('')
- const [destructiveBusy, setDestructiveBusy] = useState(false)
- const [transitioningDay, setTransitioningDay] = useState(false)
+  const handleReset = async () => {
+    if (!resetEmail.trim()) return
+    try {
+      await resetPassword(resetEmail.trim())
+      setResetSent(true)
+    } catch {
+      setError('Could not send reset email. Check the address.')
+    }
+  }
 
- // ── CLOSE DAY FLOW ──
- const [showClose, setShowClose] = useState(false)
- const [closing, setClosing] = useState(false)
- const [closeStep, setCloseStep] = useState<string|null>(null)
- const [closeError, setCloseError] = useState<string|null>(null)
- const [closeDone, setCloseDone] = useState<any>(null)
- const [audit, setAudit] = useState<any>(null)
- const [playDate, setPlayDate] = useState('')
+  return (
+    <div className="min-h-screen bg-black flex items-start justify-center p-6 pt-16">
+      <div className="w-full max-w-sm">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl mb-4">
+            <Shield size={28} className="text-emerald-400"/>
+          </div>
+          <h1 className="text-3xl font-black text-white tracking-tight">
+            JF <span className="text-rose-500">TOURNAMENT</span>
+          </h1>
+          <p className="text-zinc-600 text-xs font-medium normal-case mt-1">Admin Sign In</p>
+        </div>
 
- useEffect(() => {
- onValue(ref(db,'tournament/meta'), snap => {
- const m = snap.val() || {}
- setMeta(m)
- setTripNameInput(m.tripName || '')
- setTotalDaysInput(m.totalDays || 1)
- })
- onValue(ref(db,'tournament/course'), snap => setCourse(snap.val()))
- onValue(ref(db,'tournament/roster'), snap => setPlayerCount(snap.val() ? Object.keys(snap.val()).length : 0))
- onValue(ref(db,'tournament/teams'), snap => {
- const t = snap.val()
- if (!t) { setTeamCount(0); setTeamsHavePlayers(false); return }
- const teams = Object.values(t) as any[]
- setTeamCount(teams.length)
- setTeamsHavePlayers(teams.some((tm:any) => (tm.playerIds||[]).length > 0))
- })
- onValue(ref(db,'tournament/money'), snap => setMoneySet(!!(snap.val()?.entryFee > 0)))
- onValue(ref(db,'tournament/format'), snap => {
- if (snap.val()) {
- setFormatCustom(snap.val().name !== "Jeff's Blitz")
- setFormatName(snap.val().name || "Jeff's Blitz")
- }
- })
- onValue(ref(db,'tournament/matchups'), snap => setMatchupCount(snap.val() ? Object.keys(snap.val()).length : 0))
- onValue(ref(db,'tournament'), snap => setHasAnyData(!!snap.val()))
- onValue(ref(db,'history'), snap => {
- if (!snap.val()) { setArchivedDays([]); return }
- const days: string[] = []
- Object.values(snap.val()).forEach((h:any) => { if (h._meta?.dayLabel) days.push(h._meta.dayLabel) })
- setArchivedDays(days)
- })
- }, [])
+        {!showReset ? (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            {/* Email */}
+            <div>
+              <label className="text-zinc-500 text-[10px] font-semibold tracking-widest block mb-2">EMAIL</label>
+              <div className="relative">
+                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"/>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleSignIn()}
+                  placeholder="you@email.com"
+                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 pl-9 pr-4 py-3.5 rounded-xl text-white text-sm font-medium outline-none transition-colors placeholder:text-zinc-700"
+                  autoComplete="email"
+                />
+              </div>
+            </div>
 
- const flash = (msg:string) => { setActionMsg(msg); setTimeout(()=>setActionMsg(null), 5000) }
+            {/* Password */}
+            <div>
+              <label className="text-zinc-500 text-[10px] font-semibold tracking-widest block mb-2">PASSWORD</label>
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"/>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleSignIn()}
+                  placeholder="••••••••"
+                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 pl-9 pr-10 py-3.5 rounded-xl text-white text-sm font-medium outline-none transition-colors placeholder:text-zinc-700"
+                  autoComplete="current-password"
+                />
+                <button onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
+                  {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+                </button>
+              </div>
+            </div>
 
- // Writes can be rejected by the database rules (for example when an admin
- // session has expired). Previously those failures were silent and the button
- // simply appeared to do nothing — surface them instead.
- const runDestructive = async (label: string, fn: () => Promise<void>) => {
-   setDestructiveErr(null); setDestructiveBusy(true)
-   try {
-     await fn()
-     flash(`✓ ${label}`)
-   } catch (e: any) {
-     const m = String(e?.message || e)
-     setDestructiveErr(/permission|PERMISSION_DENIED/i.test(m)
-       ? 'Permission denied. Your admin session may have expired — sign out, sign back in, and try again.'
-       : m)
-   } finally {
-     setDestructiveBusy(false)
-   }
- }
+            {/* Error */}
+            {error && (
+              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3">
+                <p className="text-rose-400 text-xs font-semibold">{error}</p>
+              </div>
+            )}
 
- const saveTripMeta = async () => {
- await set(ref(db,'tournament/meta'), {
- ...meta,
-  mode: 'tournament',
- tripName: tripNameInput.trim(),
- totalDays: totalDaysInput,
- currentDay: meta.currentDay || 'Day 1',
- isMock: false,
- })
- setEditingTrip(false)
- flash('✓ Trip setup saved.')
- }
+            {/* Sign in button */}
+            <button
+              onClick={handleSignIn}
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 rounded-xl font-black text-sm transition-colors">
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
 
- // Count how many holes each player actually has entered, so we never
- // archive a half-scored day without the operator knowing.
- const runAudit = async () => {
- const [rSnap, sSnap, cSnap] = await Promise.all([
- get(ref(db,'tournament/roster')),
- get(ref(db,'tournament/scores')),
- get(ref(db,'tournament/course')),
- ])
- const roster = rSnap.val() || {}
- const scores = sSnap.val() || {}
- const holes = (cSnap.val()?.pars || []).length || 18
- const partial: string[] = []
- let complete = 0
- Object.entries(roster).forEach(([pid, p]: any) => {
- const arr = scores[pid] || []
- const filled = arr.filter((v: any) => v != null && v > 0).length
- if (filled >= holes) complete++
- else partial.push(`${p.name} (${filled}/${holes})`)
- })
- return { complete, partial, total: Object.keys(roster).length, holes }
- }
+            {/* Forgot password */}
+            <button
+              onClick={() => { setShowReset(true); setResetEmail(email) }}
+              className="w-full text-zinc-600 hover:text-zinc-400 text-xs font-medium transition-colors py-1">
+              Forgot password?
+            </button>
+          </div>
+        ) : (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <button onClick={() => setShowReset(false)}
+              className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-400 text-xs font-semibold transition-colors mb-2">
+              <ArrowLeft size={14}/> Back
+            </button>
+            <h2 className="font-bold text-white">Reset Password</h2>
+            <p className="text-zinc-500 text-xs font-medium normal-case">
+              Enter your email and we'll send a reset link.
+            </p>
+            {!resetSent ? (
+              <>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  placeholder="you@email.com"
+                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-4 py-3.5 rounded-xl text-white text-sm font-medium outline-none transition-colors"
+                />
+                <button onClick={handleReset}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-xl font-black text-sm transition-colors">
+                  Send Reset Email
+                </button>
+              </>
+            ) : (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                <p className="text-emerald-400 text-sm font-semibold">✓ Reset email sent! Check your inbox.</p>
+              </div>
+            )}
+          </div>
+        )}
 
- const openClose = async () => {
- setCloseError(null); setCloseDone(null); setCloseStep(null)
- setShowClose(true)
- setAudit(null)
- const now = new Date()
- setPlayDate(new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,10))
- setAudit(await runAudit())
- }
-
- // mode 'next' = close this day and open the following one (adding it if needed)
- // mode 'end' = close this day and finish the tournament
- const closeDay = async (mode: 'next' | 'end') => {
- setClosing(true); setCloseError(null)
- try {
- const currentDay = meta.currentDay || 'Day 1'
- const idx = DAY_LABELS.indexOf(currentDay)
- const isFinal = mode === 'end'
-
- setCloseStep('Reading live tournament…')
- const snap = await get(ref(db,'tournament'))
- if (!snap.exists()) throw new Error('No live tournament found. Nothing to archive.')
- const payload = snap.val()
- const liveCards = Object.keys(payload.scores || {}).length
- if (liveCards === 0) throw new Error('No scorecards found. Refusing to archive an empty day.')
-
- const archiveId = Date.now()
- const record = {
- ...payload,
- _meta: {
- tripName: meta.tripName || 'Unnamed Trip',
- dayLabel: currentDay,
- dayNumber: idx + 1,
- totalDays: meta.totalDays || 1,
- archivedAt: archiveId,
- playedAt: playDate ? new Date(playDate + 'T12:00:00').getTime() : archiveId,
- isFinal,
- formatName: payload.format?.name || null,
- courseName: payload.course?.name || null,
- },
- }
-
- setCloseStep('Writing archive to History…')
- await set(ref(db, `history/${archiveId}`), record)
-
- // Read the archive back and prove it landed BEFORE deleting anything live.
- setCloseStep('Verifying archive…')
- const verify = (await get(ref(db, `history/${archiveId}`))).val()
- const savedCards = Object.keys(verify?.scores || {}).length
- if (!verify || savedCards !== liveCards || verify._meta?.dayLabel !== currentDay) {
- throw new Error(
- `ARCHIVE VERIFICATION FAILED — saved ${savedCards} of ${liveCards} scorecards. ` +
- `Nothing has been deleted. Your live scores are untouched. Try again.`
- )
- }
-
- setCloseStep('Verified. Clearing the day…')
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
-
- if (isFinal) {
- await set(ref(db,'tournament/meta'), {
- ...meta, mode:'tournament', isMock:false,
- status:'complete', completedAt: archiveId, currentDay: null,
- })
- setCloseDone({ mode:'end', day: currentDay, cards: savedCards })
- } else {
- const nextDay = DAY_LABELS[idx + 1]
- if (!nextDay) throw new Error(`No day slot beyond ${currentDay}.`)
- await set(ref(db,'tournament/meta'), {
- ...meta, mode:'tournament', isMock:false, status:'active',
- totalDays: Math.max(meta.totalDays || 1, idx + 2),
- currentDay: nextDay,
- })
- setCloseDone({ mode:'next', day: currentDay, next: nextDay, cards: savedCards })
- }
- setCloseStep(null)
- } catch (e:any) {
- setCloseError(e?.message || String(e))
- setCloseStep(null)
- } finally {
- setClosing(false)
- }
- }
-
- // Only reachable once a trip is marked complete.
- const startNewTournament = async () => {
- if (!confirm("Start a brand new tournament?\n\nKeeps roster and course. Clears trip, teams, matchups and scores.")) return
- setLoading(true)
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
- await set(ref(db,'tournament/teams'), null)
- await set(ref(db,'tournament/meta'), null)
- flash("✓ Ready for a fresh tournament.")
- setLoading(false)
- }
-
- const tripReady = !!(meta.tripName && meta.totalDays > 0)
- const courseReady = !!(course?.holes?.length === 18)
- const rosterReady = playerCount > 0 && teamCount > 0 && teamsHavePlayers
- const moneyReady = moneySet
- const matchupsReady = matchupCount > 0
- const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length
- const allComplete = tripReady && courseReady && rosterReady && moneyReady && matchupsReady
- const currentDayIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
- const tripComplete = meta.status === 'complete'
- const hasMoreDaysConfigured = (currentDayIdx + 1) < (meta.totalDays || 1)
- const canAddAnotherDay = (currentDayIdx + 1) < MAX_DAYS
- const canGoNextDay = tripReady && hasMoreDaysConfigured && !tripComplete
-
- return (
- <div className="min-h-screen bg-black text-white font-sans">
- <div className="sticky top-0 z-20 bg-black/95 backdrop-blur border-b border-zinc-900 px-4 py-3 flex items-center justify-between">
- <Link href="/setup" className="text-emerald-500 font-black flex items-center gap-2 text-sm hover:text-emerald-400 transition-colors">
- <ArrowLeft size={16}/> SETUP
- </Link>
- <span className="font-black text-sm tracking-widest text-zinc-400">TOURNAMENT WIZARD</span>
- <div className="w-20"/>
- </div>
-
- <div className="max-w-lg mx-auto px-4 py-8 space-y-3">
-
- <div className="flex items-center gap-3 mb-4">
- <ShieldAlert size={26} className="text-rose-500"/>
- <div>
- <h1 className="text-3xl font-black tracking-tight">Setup Checklist</h1>
- <p className="text-zinc-600 text-[10px] font-black tracking-widest normal-case">Complete all steps to unlock the scorer</p>
- </div>
- </div>
-
- {actionMsg && (
- <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 p-4 rounded-2xl text-sm font-black">
- {actionMsg}
- </div>
- )}
-
- {/* ── TRIP COMPLETE ── */}
- {tripComplete && (
- <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 p-5">
- <div className="flex items-center gap-2 mb-1">
- <CheckCircle2 size={18} className="text-emerald-400"/>
- <p className="text-sm font-black text-emerald-400">TRIP COMPLETE</p>
- </div>
- <p className="text-[11px] font-black text-zinc-500 mb-4">
- {(meta.tripName||'Tournament').toUpperCase()} · ALL {meta.totalDays} DAY{meta.totalDays>1?'S':''} ARCHIVED
- </p>
- <div className="flex gap-2">
- <Link href="/history" className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors">
- <Archive size={14}/> VIEW RESULTS
- </Link>
- <button onClick={startNewTournament} disabled={loading}
- className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors">
- {loading ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14}/>} NEW TOURNAMENT
- </button>
- </div>
- </div>
- )}
-
- {/* ── CLOSE DAY — TOP ── */}
- {hasAnyData && !tripComplete && (
- <div className="rounded-2xl border-2 border-blue-500/30 bg-blue-500/5 p-5">
- <div className="flex items-center justify-between mb-3">
- <p className="text-[10px] font-black tracking-widest text-zinc-500">
- {meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS
- </p>
- {meta.currentDay && (
- <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">
- {meta.currentDay}{meta.totalDays>1 && <span className="text-blue-600"> OF {meta.totalDays}</span>}
- </span>
- )}
- </div>
- <button
- onClick={openClose}
- disabled={loading}
- className="w-full py-3.5 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
- >
- <Archive size={13}/> CLOSE {(meta.currentDay||'DAY').toUpperCase()}
- </button>
- <p className="text-[9px] font-black text-zinc-600 text-center mt-2 tracking-wider">
- {hasMoreDaysConfigured
- ? `${DAY_LABELS[currentDayIdx+1]?.toUpperCase()} IS CONFIGURED AND READY`
- : 'LAST CONFIGURED DAY · YOU CAN END OR ADD A DAY'}
- </p>
- </div>
- )}
-
- {/* ── CLOSE DAY MODAL ── */}
- {showClose && (
- <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
- onClick={()=>{ if(!closing) { setShowClose(false); setCloseDone(null) } }}>
- <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
- onClick={e=>e.stopPropagation()}>
-
- {closeDone ? (
- <div className="space-y-4 text-center">
- <CheckCircle2 size={44} className="text-emerald-400 mx-auto"/>
- <div>
- <p className="font-black text-lg text-white">{closeDone.day} ARCHIVED</p>
- <p className="text-xs font-black text-zinc-500 mt-1">
- {closeDone.cards} scorecards saved to {(meta.tripName||'trip').toUpperCase()}
- </p>
- </div>
- {closeDone.mode === 'next' ? (
- <p className="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
- {closeDone.next?.toUpperCase()} IS NOW ACTIVE.<br/>
- <span className="text-zinc-500">Set up matchups, then go live.</span>
- </p>
- ) : (
- <p className="text-xs font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
- TOURNAMENT COMPLETE — all days are in History.
- </p>
- )}
- <button onClick={()=>{setShowClose(false); setCloseDone(null)}}
- className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-black text-sm">DONE</button>
- </div>
- ) : (
- <>
- <div>
- <p className="font-black text-lg text-white">Close {meta.currentDay}</p>
- <p className="text-[11px] font-black text-zinc-500 mt-0.5">
- {(meta.tripName||'').toUpperCase()} · DAY {currentDayIdx+1} OF {meta.totalDays}
- </p>
- </div>
-
- {/* Play date */}
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">DATE THIS ROUND WAS PLAYED</label>
- <input type="date" value={playDate} onChange={e=>setPlayDate(e.target.value)}
- className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-sm transition-colors"/>
- <p className="text-[9px] font-black text-zinc-700 mt-1">DEFAULTS TO TODAY — CHANGE IT IF YOU ARE CLOSING A ROUND THE NEXT MORNING.</p>
- </div>
-
- {/* Score audit */}
- {audit === null ? (
- <div className="flex items-center gap-2 text-zinc-500 text-xs font-black">
- <Loader2 size={14} className="animate-spin"/> CHECKING SCORECARDS…
- </div>
- ) : audit.partial.length === 0 ? (
- <div className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 rounded-xl p-3 text-xs font-black flex items-center gap-2">
- <CheckCircle2 size={14}/> ALL {audit.total} SCORECARDS COMPLETE ({audit.holes} HOLES)
- </div>
- ) : (
- <div className="border border-amber-500/40 bg-amber-500/10 text-amber-400 rounded-xl p-3 text-xs font-black space-y-1">
- <div className="flex items-center gap-2"><ShieldAlert size={14}/> {audit.partial.length} INCOMPLETE CARD{audit.partial.length>1?'S':''}</div>
- <ul className="text-[10px] text-amber-300/80 font-bold pl-5 list-disc">
- {audit.partial.slice(0,6).map((n:string)=><li key={n}>{n}</li>)}
- {audit.partial.length>6 && <li>+{audit.partial.length-6} more</li>}
- </ul>
- <p className="text-[10px] text-zinc-500 pt-1">You can still archive — payouts will use what is entered.</p>
- </div>
- )}
-
- {closeError && (
- <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-xs font-black">
- {closeError}
- </div>
- )}
-
- {closeStep && (
- <div className="flex items-center gap-2 text-blue-400 text-xs font-black">
- <Loader2 size={14} className="animate-spin"/> {closeStep.toUpperCase()}
- </div>
- )}
-
- {/* Choices */}
- <div className="space-y-2">
- {hasMoreDaysConfigured ? (
- <>
- <button onClick={()=>closeDay('next')} disabled={closing}
- className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
- <RotateCcw size={16}/> CLOSE &amp; START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
- </button>
- <button onClick={()=>closeDay('end')} disabled={closing}
- className="w-full bg-transparent hover:bg-zinc-900 border border-zinc-700 text-zinc-400 py-3 rounded-2xl font-black text-xs">
- END TOURNAMENT HERE INSTEAD
- </button>
- </>
- ) : (
- <>
- <p className="text-[10px] font-black text-zinc-500 tracking-wider">
- THIS IS THE LAST CONFIGURED DAY. WHAT NEXT?
- </p>
- <button onClick={()=>closeDay('end')} disabled={closing}
- className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 text-black py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
- <CheckCircle2 size={16}/> END TOURNAMENT
- </button>
- {canAddAnotherDay && (
- <button onClick={()=>closeDay('next')} disabled={closing}
- className="w-full bg-transparent hover:bg-zinc-900 border border-blue-500/40 text-blue-400 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2">
- <Calendar size={14}/> ADD {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}{' '}&amp; CONTINUE
- </button>
- )}
- </>
- )}
- <button onClick={()=>setShowClose(false)} disabled={closing}
- className="w-full text-zinc-600 hover:text-zinc-400 py-2 font-black text-xs">CANCEL</button>
- </div>
-
- <p className="text-[9px] font-black text-zinc-700 text-center leading-relaxed">
- THE ARCHIVE IS WRITTEN AND READ BACK BEFORE ANY LIVE DATA IS CLEARED.<br/>
- IF VERIFICATION FAILS, NOTHING IS DELETED.
- </p>
- </>
- )}
- </div>
- </div>
- )}
-
- {/* Progress */}
- <div className="bg-zinc-900 rounded-full h-2 overflow-hidden">
- <div className="h-full bg-emerald-500 transition-all duration-700" style={{width:`${(stepsComplete/5)*100}%`}}/>
- </div>
- <div className="flex justify-between text-[9px] font-black text-zinc-600 tracking-widest px-0.5">
- <span>SETUP PROGRESS</span><span>{stepsComplete} / 5 COMPLETE</span>
- </div>
-
- {/* ── STEP 1: TRIP ── */}
- <StepCard number={1} title="Trip Setup" icon={<Calendar size={18}/>}
- status={tripReady?'complete':'empty'}
- summary={tripReady?`${meta.tripName} · ${meta.totalDays} Day${meta.totalDays>1?'s':''}`:'No trip configured'}
- >
- {editingTrip ? (
- <div className="space-y-3">
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">TRIP NAME</label>
- <input value={tripNameInput} onChange={e=>setTripNameInput(e.target.value)}
- className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-base transition-colors"
- placeholder="E.G. CABO 2026"/>
- </div>
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">NUMBER OF DAYS</label>
- <div className="flex gap-2">
- {[1,2,3,4,5].map(n => (
- <button key={n} onClick={()=>setTotalDaysInput(n)}
- className={`w-11 h-11 rounded-xl font-black text-lg transition-all border-2 ${totalDaysInput===n?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
- {n}
- </button>
- ))}
- </div>
- </div>
- <div className="flex gap-2 pt-1">
- <button onClick={saveTripMeta} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-colors">
- <Save size={14}/> SAVE
- </button>
- <button onClick={()=>setEditingTrip(false)} className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-sm transition-colors">CANCEL</button>
- </div>
- </div>
- ) : tripReady ? (
- <div className="space-y-4">
- <div className="flex items-center justify-between">
- <div>
- <div className="text-white font-black">{meta.tripName}</div>
- <div className="text-zinc-500 text-[10px] font-black mt-0.5">{meta.totalDays} Day{meta.totalDays>1?'s':''}</div>
- </div>
- <button onClick={()=>setEditingTrip(true)} className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></button>
- </div>
- {meta.totalDays > 1 && (
- <div>
- <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TOURNAMENT DAYS</p>
- <div className="flex gap-2 flex-wrap">
- {Array.from({length:meta.totalDays},(_,i) => {
- const dayLabel = DAY_LABELS[i]
- const isArchived = archivedDays.includes(dayLabel)
- const isCurrent = meta.currentDay === dayLabel
- return (
- <div key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-xs ${
- isArchived?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':
- isCurrent?'border-blue-500/50 bg-blue-500/10 text-blue-400':
- 'border-zinc-800 bg-black text-zinc-600'}`}>
- {isArchived?<CheckCircle2 size={12}/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>:<Circle size={12}/>}
- {dayLabel}
- {isCurrent && <span className="text-[9px]">← NOW</span>}
- </div>
- )
- })}
- </div>
- </div>
- )}
- {canGoNextDay && (
- <button onClick={openClose} disabled={transitioningDay}
- className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2">
- {transitioningDay?<Loader2 size={14} className="animate-spin"/>:<RotateCcw size={14}/>}
- CLOSE {meta.currentDay?.toUpperCase()} · START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
- </span>
- <span className="text-[9px] text-blue-600">ARCHIVES + RESETS SCORES</span>
- </button>
- )}
- </div>
- ) : (
- <button onClick={()=>setEditingTrip(true)} className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Calendar size={14}/> SET UP TRIP</span><ChevronRight size={14}/>
- </button>
- )}
- </StepCard>
-
- {/* ── STEP 2: COURSE ── */}
- <StepCard number={2} title="Course Setup" icon={<Flag size={18}/>} status={courseReady?'complete':'empty'} summary={courseReady?`${course?.name} · Par ${(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)}`:'No course set'}>
- {courseReady ? (
- <div className="flex items-center justify-between">
- <div><div className="text-white font-black">{course?.name}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">Par {(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes</div></div>
- <Link href="/setup/settings" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/settings" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Flag size={14}/> SET UP COURSE</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
-
- {/* ── STEP 3: ROSTER ── */}
- <StepCard number={3} title="Roster & Teams" icon={<Users size={18}/>} status={rosterReady?'complete':'empty'} summary={playerCount>0?`${playerCount} players · ${teamCount} teams`:'No players yet'}>
- {rosterReady ? (
- <div className="flex items-center justify-between">
- <div><div className="text-white font-black">{playerCount} Players · {teamCount} Teams</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">All players assigned</div></div>
- <Link href="/setup/roster" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/roster" className="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Users size={14}/> BUILD ROSTER & TEAMS</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
-
- {/* ── STEP 4: MONEY ── */}
- <StepCard number={4} title="Money & Pots" icon={<DollarSign size={18}/>} status={moneyReady?'complete':'empty'} summary={moneyReady?'Entry fee configured':'Not configured'}>
- {moneyReady ? (
- <div className="flex items-center justify-between">
- <div className="text-white font-black text-sm">Entry fee configured</div>
- <Link href="/setup/money" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/money" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><DollarSign size={14}/> CONFIGURE MONEY</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
-
- {/* ── STEP 5: FORMAT ── */}
- <StepCard number={5} title="Team Scoring Format" icon={<Layers size={18}/>} status="complete" summary={formatCustom?formatName:"Jeff's Blitz (Default)"}>
- <div className="flex items-center justify-between">
- <div><div className="text-white font-black text-sm">{formatName}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">{formatCustom?'Custom format':'Default · Best 2 Net (Best 3 on Par 3)'}</div></div>
- <Link href="/setup/format" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">{formatCustom?'EDIT':'CONFIGURE'} <ChevronRight size={14}/></Link>
- </div>
- </StepCard>
-
- {/* ── STEP 6: MATCHUPS ── */}
- <StepCard number={6} title="Side Bets & Matches" icon={<Sword size={18}/>} status={matchupsReady?'complete':'empty'} summary={matchupsReady?`${matchupCount} match${matchupCount>1?'es':''} configured`:'No matches set up'}>
- {matchupsReady ? (
- <div className="flex items-center justify-between">
- <div className="text-white font-black text-sm">{matchupCount} match{matchupCount>1?'es':''} configured</div>
- <Link href="/setup/matchups" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/matchups" className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Sword size={14}/> SET UP MATCHES</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
-
- {/* ── GO LIVE ── */}
- <div className={`mt-4 rounded-[2rem] border-2 p-6 transition-all ${allComplete?'bg-emerald-950/40 border-emerald-500/60':'bg-zinc-900/40 border-zinc-800'}`}>
- <div className="flex items-center gap-3 mb-4">
- <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${allComplete?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-600'}`}>
- {allComplete?<Play size={14}/>:'7'}
- </div>
- <div>
- <h3 className={`font-black text-base ${allComplete?'text-emerald-400':'text-zinc-600'}`}>GO LIVE</h3>
- <p className="text-[10px] font-black text-zinc-600 tracking-wider">{allComplete?'All set · Ready to start scoring':'Complete steps 1–6 above'}</p>
- </div>
- </div>
- <Link href="/scorer" className={`w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-xl ${allComplete?'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20':'bg-zinc-800 text-zinc-600 pointer-events-none'}`}>
- <Play size={22}/> {meta.currentDay?`START ${meta.currentDay.toUpperCase()}`:'START TOURNAMENT'}
- </Link>
- </div>
-
- {/* ── RESET / ABANDON ── */}
- <div className="pt-4 border-t border-zinc-900">
- <button onClick={()=>setShowDestructive(!showDestructive)} className="w-full text-[9px] font-black text-zinc-700 hover:text-zinc-500 tracking-[0.3em] py-3 transition-colors">
- {showDestructive?'▲ HIDE':'▼ SHOW'} RESET &amp; ABANDON
- </button>
- {showDestructive && (
- <div className="space-y-2 pt-1">
-
- {destructiveErr && (
- <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-4 py-3 text-[11px] font-black leading-snug">
- {destructiveErr}
- </div>
- )}
-
- <button disabled={destructiveBusy}
- onClick={()=>{
- if(!confirm("Wipe scores only?\n\nTeams, matchups, course and trip settings all stay.")) return
- runDestructive('Scores wiped.', async()=>{ await set(ref(db,'tournament/scores'), null); await set(ref(db,'tournament/draws'), null) })
- }}
- className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>
- <span className="text-amber-800 text-[9px]">KEEPS TEAMS &amp; BETS</span>
- </button>
-
- <button disabled={destructiveBusy}
- onClick={()=>{
- if(!confirm("Reset the round?\n\nClears scores, teams, matchups and trip settings.\nKeeps the course and money settings so you can run it again.")) return
- runDestructive('Round reset. Course and money settings kept.', async()=>{
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/teams'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/meta'), null)
- })
- }}
- className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Trash2 size={12} className="inline mr-2"/>RESET ROUND</span>
- <span className="text-rose-900 text-[9px]">KEEPS COURSE</span>
- </button>
-
- {/* Abandon — the only action that clears the course and money too */}
- {!abandonConfirm ? (
- <button disabled={destructiveBusy}
- onClick={()=>{ setDestructiveErr(null); setAbandonText(''); setAbandonConfirm(true) }}
- className="w-full bg-rose-600/15 border border-rose-600/40 hover:border-rose-500 text-rose-400 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Trash2 size={12} className="inline mr-2"/>ABANDON SETUP</span>
- <span className="text-rose-700 text-[9px]">CLEARS EVERYTHING</span>
- </button>
- ) : (
- <div className="border border-rose-500/40 bg-rose-500/10 rounded-2xl p-4 space-y-3">
- <p className="text-[11px] font-black text-rose-400 leading-snug">
- THIS CLEARS THE ENTIRE TOURNAMENT — SCORES, TEAMS, MATCHUPS, ROSTER, COURSE,
- MONEY SETTINGS AND TRIP DETAILS. THE WIZARD STARTS FROM SCRATCH.
- </p>
- <p className="text-[10px] font-black text-zinc-500 leading-snug">
- Archived rounds in History, your saved courses and the permanent roster are not touched.
- </p>
- <div>
- <label className="text-[9px] font-black text-zinc-500 tracking-widest block mb-1.5">
- TYPE <span className="text-white">ABANDON</span> TO CONFIRM
- </label>
- <input value={abandonText} onChange={e=>setAbandonText(e.target.value)} placeholder="ABANDON"
- className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-xs transition-colors"/>
- </div>
- <div className="flex gap-2">
- <button
- disabled={destructiveBusy || abandonText.trim().toUpperCase() !== 'ABANDON'}
- onClick={()=>{
- runDestructive('Setup abandoned. Ready for a fresh tournament.', async()=>{
- await set(ref(db,'tournament'), null)
- setAbandonConfirm(false); setAbandonText('')
- })
- }}
- className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
- {destructiveBusy ? 'CLEARING...' : 'CLEAR EVERYTHING'}
- </button>
- <button onClick={()=>{ setAbandonConfirm(false); setAbandonText('') }}
- className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-xs transition-colors">
- CANCEL
- </button>
- </div>
- </div>
- )}
- </div>
- )}
- </div>
-
- <p className="text-center text-[9px] text-zinc-800 font-black tracking-widest pb-8">AUTHORIZED ACCESS ONLY · SENIOR MANAGEMENT CONSOLE</p>
- </div>
- </div>
- )
-}
-
-function StepCard({number,title,summary,status,icon,children}:{number:number;title:string;summary:string;status:'complete'|'empty'|'warning';icon:React.ReactNode;children:React.ReactNode}) {
- const isComplete=status==='complete',isWarning=status==='warning'
- return (
- <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${isComplete?'border-emerald-500/40 bg-zinc-950':isWarning?'border-amber-500/40 bg-zinc-950':'border-zinc-800 bg-zinc-950'}`}>
- <div className={`px-5 py-4 flex items-center gap-4 border-b ${isComplete?'border-emerald-500/20':isWarning?'border-amber-500/20':'border-zinc-800'}`}>
- <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${isComplete?'bg-emerald-500 text-black':isWarning?'bg-amber-500/30 text-amber-400':'bg-zinc-800 text-zinc-500'}`}>
- {isComplete?<CheckCircle2 size={16}/>:number}
- </div>
- <div className="flex-1 min-w-0">
- <div className={`font-black text-sm ${isComplete?'text-emerald-400':isWarning?'text-amber-400':'text-zinc-400'}`}>{title}</div>
- <div className="text-[10px] font-black text-zinc-600 tracking-wider truncate normal-case mt-0.5">{summary}</div>
- </div>
- <div className={`flex-shrink-0 ${isComplete?'text-emerald-500':isWarning?'text-amber-500':'text-zinc-700'}`}>{icon}</div>
- </div>
- <div className="px-5 py-4">{children}</div>
- </div>
- )
+        <Link href="/"
+          className="block text-center text-zinc-700 hover:text-zinc-500 text-xs font-medium mt-6 transition-colors">
+          ← Back to app
+        </Link>
+      </div>
+    </div>
+  )
 }

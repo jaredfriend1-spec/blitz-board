@@ -1,875 +1,887 @@
 "use client"
-import { useState, useEffect, useMemo } from 'react'
+
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthProvider'
-import { signOut, resetPassword } from '@/lib/auth'
-import { auth } from '@/lib/firebase'
+import { signInAsPlayer } from '@/lib/auth'
+import { signOut } from '@/lib/auth'
 import { db } from '@/lib/firebase'
-import { ref, onValue, set, push, remove, get } from 'firebase/database'
-import { normalizeBlocked, type BlockedEntry } from '@/lib/blocked'
-import Link from 'next/link'
+import { ref, onValue, set, get, push } from 'firebase/database'
+import { useBlockedPlayers } from '@/lib/blocked'
 import {
-  Shield, Users, BookOpen, History, Settings, BarChart3,
-  Trash2, Plus, Edit3, Check, X, ChevronDown, ChevronRight,
-  Database, Zap, DollarSign, Trophy, Flag, RefreshCw,
-  Lock, LogOut, Download, Archive, Target,
-  AlertTriangle, Activity, Clock, Hash, Mail, UserPlus, UserX, KeyRound
+ Shield, Zap, Users, BookOpen, ShieldAlert,
+ User, Lock, Eye, EyeOff, Archive, RefreshCw, PlayCircle, X,
+ Target, DollarSign, Trophy, History, Settings, BarChart3, Activity,
+ ChevronRight, Flag
 } from 'lucide-react'
+import Link from 'next/link'
 
 
-// ── SECTION WRAPPER ────────────────────────────────────────────────
-function Section({ title, icon, children, defaultOpen = false }: any) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden">
-      <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-800/40 transition-colors">
-        <div className="flex items-center gap-3">
-          <span className="text-emerald-400">{icon}</span>
-          <span className="font-bold text-sm text-white">{title}</span>
-        </div>
-        {open ? <ChevronDown size={16} className="text-zinc-500"/> : <ChevronRight size={16} className="text-zinc-500"/>}
-      </button>
-      {open && <div className="border-t border-zinc-800">{children}</div>}
-    </div>
-  )
-}
+export default function LandingPage() {
+ const { user, role: authRole, loading: authLoading } = useAuth()
+ const [role, setRole] = useState<'none' | 'player' | 'admin' | 'master'>('none')
+ // Shared player access — the group code is the password on a read-only account
+ const [showPlayerCode, setShowPlayerCode] = useState(false)
+ const [playerCode, setPlayerCode] = useState('')
+ const [playerErr, setPlayerErr] = useState('')
+ const [playerBusy, setPlayerBusy] = useState(false)
+ const [courseName, setCourseName] = useState('')
+ const [tripName, setTripName] = useState('')
+ const [currentDay, setCurrentDay] = useState('')
+ const [isMock, setIsMock] = useState(false)
+ const [activeMode, setActiveMode] = useState<string>('')
+ const [archiving, setArchiving] = useState(false)
+ const [archiveSuccess, setArchiveSuccess] = useState(false)
+ const [demoLoading, setDemoLoading] = useState(false)
+ const [showDemoModal, setShowDemoModal] = useState(false)
+ const [showLegal, setShowLegal] = useState(false)
+ const [toast, setToast] = useState('')
+ const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
+ // Blocked names are managed in the Master Dashboard, not hardcoded.
+ const { isBlocked, blockedMessage } = useBlockedPlayers()
+ const [scorerCanSeeAnalytics, setScorerCanSeeAnalytics] = useState(true)
+ const [playerCanSeeAnalytics, setPlayerCanSeeAnalytics] = useState(false)
+ const [globalRoster, setGlobalRoster] = useState<any[]>([])
+ const [courseLibrary, setCourseLibrary] = useState<any[]>([])
+ const [history, setHistory] = useState<any[]>([])
+ const [modal, setModal] = useState<{
+ title: string
+ body: string
+ warning?: string
+ confirmLabel: string
+ cancelLabel?: string
+ danger?: boolean
+ onConfirm: () => void
+ onCancel?: () => void
+ } | null>(null)
+
+ const showModal = (opts: typeof modal) => setModal(opts)
+ const closeModal = () => setModal(null)
 
 
-// Analytics lives at /master/analytics and is powered by lib/payouts.
-// The ~750-line dashboard that used to sit here was never rendered and
-// carried its own (incorrect) copy of the payout math. Removed.
-
-
-export default function MasterPage() {
-  const { user, role, loading } = useAuth()
-  const authed = role === 'master'
- 
-  // Data
-  const [history, setHistory] = useState<any[]>([])
-  const [globalRoster, setGlobalRoster] = useState<any[]>([])
-  const [courseLibrary, setCourseLibrary] = useState<any[]>([])
- const [blockedPlayers, setBlockedPlayers] = useState<BlockedEntry[]>([])
- const [newBlockedName, setNewBlockedName] = useState('')
- const [newBlockedNote, setNewBlockedNote] = useState('')
- const [blockedBusy, setBlockedBusy] = useState(false)
- const [blockedErr, setBlockedErr] = useState<string | null>(null)
-
- // ── REMOTE APP CONTROL ──
- // A publicly-readable flag in this database that the other deployment
- // checks before it renders. Keeping it here means it is controlled from
- // the dashboard you are already signed into — there is no way to lock
- // yourself out, because this app never reads it.
- const [remote, setRemote] = useState<any>({ enabled: true, message: '' })
- const [remoteDraft, setRemoteDraft] = useState('')
- const [remoteBusy, setRemoteBusy] = useState(false)
- const [remoteErr, setRemoteErr] = useState<string | null>(null)
-
- // Blocked names live in the database so they can be changed without a deploy.
+ // Watch Firebase Auth — auto-login when authenticated
  useEffect(() => {
-   const unsub = onValue(ref(db, 'blockedPlayers'), snap => setBlockedPlayers(normalizeBlocked(snap.val())))
-   return () => unsub()
- }, [])
+ if (authLoading) return
+  if (authRole === 'master') { setRole('admin'); return } // master → admin hub + dashboard button
+  if (authRole === 'scorer') { setRole('admin'); return } // scorer → admin hub
+ // Fall back to session for guests
+ const stored = sessionStorage.getItem('role')
+ if (stored === 'player') setRole('player')
+ }, [authRole, authLoading])
 
  useEffect(() => {
-   const unsub = onValue(ref(db, 'publicStatus/legacyApp'), snap => {
-     const v = snap.val() || {}
-     setRemote({ enabled: v.enabled !== false, message: v.message || '' })
-     setRemoteDraft(v.message || '')
-   }, () => setRemoteErr('Could not read the current status.'))
-   return () => unsub()
- }, [])
-
- const saveRemote = async (enabled: boolean, message: string) => {
-   setRemoteBusy(true); setRemoteErr(null)
-   try {
-     await set(ref(db, 'publicStatus/legacyApp'), {
-       enabled, message: message.trim() || null, updatedAt: Date.now(),
-     })
-   } catch (e: any) {
-     setRemoteErr(/permission/i.test(String(e?.message || e))
-       ? 'Permission denied — only a master admin can change this.'
-       : String(e?.message || e))
-   } finally { setRemoteBusy(false) }
- }
-
- const addBlocked = async () => {
-   const name = newBlockedName.trim()
-   if (!name) return
-   setBlockedBusy(true); setBlockedErr(null)
-   try {
-     await push(ref(db, 'blockedPlayers'), {
-       name: name.toUpperCase(),
-       note: newBlockedNote.trim() || null,
-       addedAt: Date.now(),
-     })
-     setNewBlockedName(''); setNewBlockedNote('')
-   } catch (e: any) {
-     setBlockedErr(/permission/i.test(String(e?.message||e))
-       ? 'Permission denied — only a master admin can change this list.'
-       : String(e?.message || e))
-   } finally { setBlockedBusy(false) }
- }
-
- const removeBlocked = async (id: string) => {
-   setBlockedErr(null)
-   try { await remove(ref(db, `blockedPlayers/${id}`)) }
-   catch (e: any) { setBlockedErr(String(e?.message || e)) }
- }
-
-  const [activeTournament, setActiveTournament] = useState<any>(null)
-  const [savedFormats, setSavedFormats] = useState<any[]>([])
-
-  // Edit states
-  // Analytics access control
-  const [scorerAccess, setScorerAccess] = useState(true)
-  const [playerAccess, setPlayerAccess] = useState(false)
-  const SECTIONS = [
-    {key:'money_board', label:'💰 Money Leaderboard'},
-    {key:'match_records', label:'⚡ Match Records'},
-    {key:'scoring_avgs', label:'🏌️ Scoring Averages'},
-    {key:'skins', label:'🦴 Skins Kings'},
-    {key:'h2h', label:'🥊 Head to Head'},
-    {key:'partnerships', label:'🤝 Best Partnerships'},
-    {key:'handicap', label:'📐 Handicap Analysis'},
-    {key:'integrity', label:'⚠️ Handicap Integrity'},
-    {key:'consistency', label:'🎯 Consistency Index'},
-    {key:'trends', label:'📈 Score Trends'},
-    {key:'records', label:'🏅 Round Records'},
-    {key:'betting', label:'🎰 Betting Stats'},
-  ]
-  const defaultSections = Object.fromEntries(SECTIONS.map(s => [s.key, true]))
-  const [scorerSections, setScorerSections] = useState<Record<string,boolean>>(defaultSections)
-  const [playerSections, setPlayerSections] = useState<Record<string,boolean>>(defaultSections)
-  const [analyticsTab, setAnalyticsTab] = useState<'who'|'what'>('who')
-
-  // User management state
-  const [dbUsers, setDbUsers] = useState<any[]>([])
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<'scorer'|'master'>('scorer')
-  const [inviting, setInviting] = useState(false)
-  const [resetSent, setResetSent] = useState<string|null>(null)
-  const [newUserUid, setNewUserUid] = useState('')
-  const [newUserEmail, setNewUserEmail] = useState('')
-  const [newUserRole, setNewUserRole] = useState<'scorer'|'master'>('scorer')
-
-  const [editingPlayer, setEditingPlayer] = useState<string|null>(null)
-  const [editName, setEditName] = useState('')
-  const [editHcp, setEditHcp] = useState(0)
-  const [newPlayerName, setNewPlayerName] = useState('')
-  const [newPlayerHcp, setNewPlayerHcp] = useState(0)
-  const [addingPlayer, setAddingPlayer] = useState(false)
-
-  const [editingCourse, setEditingCourse] = useState<string|null>(null)
-  const [newCourseName, setNewCourseName] = useState('')
-  const [addingCourse, setAddingCourse] = useState(false)
-
-
-  const [toast, setToast] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState<{id:string,label:string,path:string}|null>(null)
-
-  useEffect(() => {
-    if (!authed) return
+ // Firebase data
     onValue(ref(db,'analyticsFlags'), snap => {
       const d = snap.val() || {}
-      if (d.scorer_access !== undefined) setScorerAccess(!!d.scorer_access)
-      if (d.player_access !== undefined) setPlayerAccess(!!d.player_access)
-      if (d.scorer_sections) setScorerSections(d.scorer_sections)
-      if (d.player_sections) setPlayerSections(d.player_sections)
+      if (d.scorer_access !== undefined) setScorerCanSeeAnalytics(!!d.scorer_access)
+      if (d.player_access !== undefined) setPlayerCanSeeAnalytics(!!d.player_access)
     })
-    onValue(ref(db,'users'), snap => {
-      if (snap.val()) {
-        const items = Object.entries(snap.val()).map(([uid, data]: any) => ({ uid, ...data }))
-        setDbUsers(items)
-      } else setDbUsers([])
-    })
-    onValue(ref(db,'history'), snap => {
-      if (snap.val()) {
-        const items = Object.entries(snap.val())
-          .map(([k,v]:any) => ({ id:k, ...v }))
-          .sort((a,b) => Number(b.id) - Number(a.id))
-        setHistory(items)
-      } else setHistory([])
-    })
-    onValue(ref(db,'globalRoster'), snap => {
-      if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
-      else setGlobalRoster([])
-    })
-    onValue(ref(db,'courseHistory'), snap => {
-      if (snap.val()) setCourseLibrary(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
-      else setCourseLibrary([])
-    })
-    onValue(ref(db,'tournament'), snap => setActiveTournament(snap.val()))
-    onValue(ref(db,'savedFormats'), snap => {
-      if (snap.val()) setSavedFormats(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
-      else setSavedFormats([])
-    })
-  }, [authed])
+ onValue(ref(db, 'tournament/course'), snap => {
+ // Clear when the course goes away, or the header keeps the old name after a
+ // demo is exited or the tournament is cleared.
+ setCourseName(snap.val()?.name || '')
+ })
+ onValue(ref(db, 'tournament/meta'), snap => {
+ const m = snap.val() || {}
+ setTripName(m.tripName || '')
+ setCurrentDay(m.currentDay || '')
+ setIsMock(!!m.isMock)
+ setActiveMode(m.mode || '')
+ })
+ // Master data listeners
+ onValue(ref(db, 'globalRoster'), snap => {
+ if (snap.val()) setGlobalRoster(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
+ else setGlobalRoster([])
+ })
+ onValue(ref(db, 'courseHistory'), snap => {
+ if (snap.val()) setCourseLibrary(Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})))
+ else setCourseLibrary([])
+ })
+ onValue(ref(db, 'history'), snap => {
+ if (snap.val()) {
+ const items = Object.entries(snap.val()).map(([k,v]:any)=>({id:k,...v})).sort((a:any,b:any)=>Number(b.id)-Number(a.id))
+ setHistory(items)
+ } else setHistory([])
+ })
+ }, [])
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(()=>setToast(''),3000) }
+ const choosePlayer = () => { setPlayerErr(''); setPlayerCode(''); setShowPlayerCode(true) }
 
-  // ── LOGIN SCREEN ─────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-zinc-600 text-sm font-medium">Loading...</div>
-      </div>
-    )
+ const submitPlayerCode = async () => {
+   const code = playerCode.trim()
+   if (!code) return
+   setPlayerBusy(true); setPlayerErr('')
+   try {
+     await signInAsPlayer(code)
+     sessionStorage.setItem('role', 'player')
+     setRole('player')
+     setShowPlayerCode(false)
+   } catch {
+     setPlayerErr('That code is not right. Ask the group admin.')
+   } finally {
+     setPlayerBusy(false)
+   }
+ }
+
+
+ const archiveMatch = () => {
+ showModal({
+ title: 'Archive Match to History',
+ body: 'This saves the current match to History and closes it. All scores, payouts and results will be preserved.',
+ confirmLabel: 'Archive & Close',
+ cancelLabel: 'Not yet',
+ onConfirm: async () => {
+ closeModal()
+ setArchiving(true)
+ try {
+ const snap = await get(ref(db, 'tournament'))
+ if (snap.exists()) {
+ const data = snap.val()
+ await set(ref(db, `history/${Date.now()}`), {
+ ...data,
+ _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:data.course?.name||'Quick Match' }
+ })
+ }
+ await set(ref(db, 'tournament'), null)
+ setArchiveSuccess(true)
+ setActiveMode('')
+ setTimeout(() => setArchiveSuccess(false), 3000)
+ } catch(e) { }
+ setArchiving(false)
+ },
+ onCancel: closeModal
+ })
+ }
+
+  // ── DEMO ──────────────────────────────────────────────────────────
+  const DEMO_HOLES = [
+    {par:4,hcp:7},{par:3,hcp:15},{par:5,hcp:3},{par:4,hcp:11},
+    {par:4,hcp:1},{par:3,hcp:17},{par:5,hcp:5},{par:4,hcp:9},
+    {par:4,hcp:13},{par:4,hcp:4},{par:3,hcp:16},{par:5,hcp:2},
+    {par:3,hcp:18},{par:4,hcp:10},{par:4,hcp:6},{par:5,hcp:8},
+    {par:3,hcp:14},{par:4,hcp:12}
+  ]
+  const DEMO_PLAYERS = [
+    {name:'TIGER WOODS',       handicap:0,  scores:[4,2,4,3,4,3,5,3,4,4,3,4,2,4,4,5,3,4]},
+    {name:'RORY MCILROY',      handicap:3,  scores:[4,3,5,4,4,3,5,4,4,4,3,5,3,4,4,5,3,4]},
+    {name:'JON RAHM',          handicap:2,  scores:[5,3,4,4,5,3,5,3,4,4,2,4,3,4,4,5,3,4]},
+    {name:'SCOTTIE SCHEFFLER', handicap:1,  scores:[4,2,4,3,4,3,4,4,4,4,3,4,3,4,4,5,3,4]},
+    {name:'PHIL MICKELSON',    handicap:5,  scores:[5,3,5,4,5,4,5,4,4,5,3,5,3,5,4,5,3,5]},
+    {name:'JUSTIN THOMAS',     handicap:4,  scores:[5,3,5,4,4,3,5,4,4,4,3,5,3,4,5,5,3,4]},
+    {name:'BROOKS KOEPKA',     handicap:3,  scores:[4,3,5,4,5,4,5,4,4,5,3,5,3,4,4,5,4,4]},
+    {name:'DUSTIN JOHNSON',    handicap:2,  scores:[4,3,4,4,5,3,5,4,4,4,3,5,3,4,4,5,3,4]},
+  ]
+
+  const loadDemo = async () => {
+    const metaSnap = await get(ref(db,'tournament/meta'))
+    const meta = metaSnap.val()
+    if (meta && !meta.isMock && (meta.mode || meta.tripName)) {
+      showModal({
+        title: '⚠️ Match In Progress',
+        body: 'You have a real match currently active. Archive it to History first, or load the demo which will replace it.',
+        warning: 'Choosing "Archive & Demo" will save the current match to History first.',
+        confirmLabel: 'Archive & Load Demo',
+        cancelLabel: 'Cancel — Keep My Match',
+        danger: true,
+        onConfirm: async () => {
+          closeModal()
+          const snap = await get(ref(db,'tournament'))
+          if (snap.exists()) {
+            await set(ref(db,`history/${Date.now()}`), {
+              ...snap.val(),
+              _meta: { mode:'match', dayLabel:'Quick Match', archivedAt:Date.now(), courseName:snap.val().course?.name||'' }
+            })
+          }
+          setDemoLoading(true)
+          await runDemoLoad()
+        },
+        onCancel: closeModal
+      })
+      return
+    }
+    showModal({
+      title: 'Load Live Demo?',
+      body: 'Loads a sample match with 8 players, 4 teams, and all 4 match types fully scored — great for showing the app to someone new.',
+      confirmLabel: 'Load Demo',
+      cancelLabel: 'Cancel',
+      onConfirm: async () => { closeModal(); setDemoLoading(true); await runDemoLoad() },
+      onCancel: closeModal
+    })
   }
 
-  if (!authed) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-6">
-        <div className="text-center">
-          <Shield size={32} className="text-zinc-700 mx-auto mb-4"/>
-          <p className="text-zinc-500 font-semibold text-sm mb-4">Master Admin access required</p>
-          <Link href="/login"
-            className="bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-3 rounded-xl font-black text-sm transition-colors">
-            Sign In
-          </Link>
-        </div>
-      </div>
-    )
+  const runDemoLoad = async () => {
+    setDemoLoading(true)
+    try {
+      await set(ref(db,'tournament'), null)
+      await set(ref(db,'tournament/meta'), {isMock:true, mode:'match', currentDay:'Demo Day', totalDays:1})
+      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map(h=>h.par)})
+      const pidMap: Record<string,string> = {}
+      for (const p of DEMO_PLAYERS) {
+        const pRef = push(ref(db,'tournament/roster'))
+        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
+        pidMap[p.name] = pRef.key!
+      }
+      for (const p of DEMO_PLAYERS) {
+        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
+      }
+      const teamDefs = [
+        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
+        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
+        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
+        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
+      ]
+      for (const t of teamDefs) {
+        const tRef = push(ref(db,'tournament/teams'))
+        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map(n=>pidMap[n])})
+      }
+      await set(ref(db,'tournament/format'), {
+        name:"PGA Demo Round",
+        par3:[{type:'net'},{type:'net'},{type:'net'}],
+        par4:[{type:'net'},{type:'net'}],
+        par5:[{type:'net'},{type:'net'}],
+      })
+      const m1 = push(ref(db,'tournament/matchups'))
+      await set(m1, {id:m1.key, type:'PvP', sideA:'TIGER WOODS', sideB:'RORY MCILROY', nassau:5, press:5, autoPress:true, birdie:2, eagle:5, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:5, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      const m2 = push(ref(db,'tournament/matchups'))
+      await set(m2, {id:m2.key, type:'2v2', sideA:'TIGER WOODS', sideA2:'RORY MCILROY', sideB:'JON RAHM', sideB2:'SCOTTIE SCHEFFLER', nassau:10, press:10, autoPress:true, birdie:3, eagle:6, scoringType:'NET'})
+      const m3 = push(ref(db,'tournament/matchups'))
+      await set(m3, {id:m3.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:false, birdie:0, eagle:0, scoringType:'NET'})
+      const m4 = push(ref(db,'tournament/matchups'))
+      await set(m4, {id:m4.key, type:'Wheel', wheelPlayers:['TIGER WOODS','JON RAHM','PHIL MICKELSON','BROOKS KOEPKA'], wheelAmount:10, wheelFormat:'nassau', wheelNassau:10, wheelPress:5, wheelAutoPress:true, scoringType:'NET'})
+      await set(ref(db,'tournament/money'), {entryFee:50, skinsAllocation:20, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      setDemoLoading(false)
+      showToast('🎮 Demo loaded! Tiger, Rory, Rahm & friends at Augusta.')
+    } catch(e) {
+      console.error(e)
+      setDemoLoading(false)
+      showModal({ title:'Demo Failed', body:'Could not load the demo — check your internet connection and try again.', confirmLabel:'OK', onConfirm:closeModal })
+    }
   }
 
-  // ── MAIN DASHBOARD ───────────────────────────────────────────────
-  return (
-    <div className="min-h-screen bg-black text-white font-sans pb-20">
-      {/* Header */}
-      <div className="bg-zinc-950 border-b border-zinc-800 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <Shield size={20} className="text-emerald-400"/>
-          <div>
-            <h1 className="font-black text-sm text-white">MASTER ADMIN</h1>
-            <p className="text-zinc-600 text-[10px] font-medium">Command Center</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3">
-            <Link href="/master/analytics"
-              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 text-xs font-semibold transition-colors border border-emerald-500/30 px-3 py-1.5 rounded-xl">
-              <BarChart3 size={13}/> Analytics
-            </Link>
-            <Link href="/" className="text-zinc-600 hover:text-zinc-400 text-xs font-semibold transition-colors">
-              ← App
-            </Link>
-          </div>
+  const clearDemo = async () => {
+    await set(ref(db,'tournament'), null)
+    // Reset the header immediately rather than waiting for the listener.
+    setCourseName(''); setTripName(''); setCurrentDay(''); setIsMock(false); setActiveMode('')
+    showToast('Demo cleared')
+  }
 
-        </div>
-      </div>
+  const runTournamentDemo = async () => {
+    setDemoLoading(true)
+    try {
+      await set(ref(db,'tournament'), null)
+      await set(ref(db,'tournament/meta'), {
+        isMock:true, mode:'tournament', tripName:'Augusta Invitational',
+        currentDay:'Day 1', totalDays:3
+      })
+      await set(ref(db,'tournament/course'), {name:'Augusta National GC', holes:DEMO_HOLES, pars:DEMO_HOLES.map((h:any)=>h.par)})
+      const pidMap: Record<string,string> = {}
+      for (const p of DEMO_PLAYERS) {
+        const pRef = push(ref(db,'tournament/roster'))
+        await set(pRef, {id:pRef.key, name:p.name, handicap:p.handicap})
+        pidMap[p.name] = pRef.key!
+      }
+      for (const p of DEMO_PLAYERS) {
+        await set(ref(db,`tournament/scores/${pidMap[p.name]}`), p.scores)
+      }
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-black px-5 py-2.5 rounded-2xl font-bold text-sm shadow-xl">
-          {toast}
-        </div>
-      )}
+      // Dustin Johnson sits this one out and takes Brooks Koepka's card so the
+      // draw feature has something to demonstrate. DJ is excluded from skins.
+      const drawSrc = DEMO_PLAYERS.find((p:any)=>p.name==='BROOKS KOEPKA')
+      const djId = pidMap['DUSTIN JOHNSON']
+      const brooksId = pidMap['BROOKS KOEPKA']
+      if (drawSrc && djId && brooksId) {
+        await set(ref(db,`tournament/scores/${djId}`), drawSrc.scores)
+        await set(ref(db,'tournament/draws'), {
+          [djId]: { source: brooksId, setAt: Date.now() },
+        })
+      }
+      const teamDefs = [
+        {name:'Team Tiger',  players:['TIGER WOODS','RORY MCILROY']},
+        {name:'Team Rahm',   players:['JON RAHM','SCOTTIE SCHEFFLER']},
+        {name:'Team Phil',   players:['PHIL MICKELSON','JUSTIN THOMAS']},
+        {name:'Team Brooks', players:['BROOKS KOEPKA','DUSTIN JOHNSON']},
+      ]
+      for (const t of teamDefs) {
+        const tRef = push(ref(db,'tournament/teams'))
+        await set(tRef, {id:tRef.key, name:t.name, playerIds:t.players.map((n:string)=>pidMap[n])})
+      }
+      await set(ref(db,'tournament/money'), {entryFee:100, skinsAllocation:25, handicapPercent:80, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      const m1 = push(ref(db,'tournament/matchups'))
+      await set(m1, {id:m1.key, type:'TvT', sideA:'Team Tiger', sideB:'Team Rahm', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET', handicapPercent:80, doSkins:true, skinsAmount:10, netSkinsEnabled:true, skinsSplitGross:50, skinsSplitNet:50})
+      const m2 = push(ref(db,'tournament/matchups'))
+      await set(m2, {id:m2.key, type:'TvT', sideA:'Team Phil', sideB:'Team Brooks', nassau:20, press:10, autoPress:true, birdie:5, eagle:10, scoringType:'NET'})
+      setDemoLoading(false)
+      showToast('🏆 Tournament demo loaded!')
+    } catch(e) {
+      console.error(e)
+      setDemoLoading(false)
+      showToast('Demo failed — check connection')
+    }
+  }
 
-      {/* Confirm delete modal */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <AlertTriangle size={20} className="text-rose-400 flex-shrink-0"/>
-                <h2 className="font-bold text-white">Confirm Delete</h2>
-              </div>
-              <p className="text-zinc-400 text-sm font-medium normal-case">Delete <span className="text-white font-semibold">"{confirmDelete.label}"</span>? This cannot be undone.</p>
-            </div>
-            <div className="px-6 pb-6 flex gap-2">
-              <button onClick={() => setConfirmDelete(null)}
-                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-xl font-bold text-sm transition-colors">
-                Cancel
-              </button>
-              <button onClick={async () => {
-                await set(ref(db, confirmDelete.path), null)
-                showToast('Deleted')
-                setConfirmDelete(null)
-              }}
-                className="flex-1 bg-rose-500 hover:bg-rose-400 text-white py-3 rounded-xl font-bold text-sm transition-colors">
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+ // Ownership notice — defined once so every screen can render it.
+ const LegalModal = () => !showLegal ? null : (
 
-        {/* ── AT A GLANCE ── */}
-        
-
-        {/* ── PLAYER STATS ── */}
-        
-
-        {/* ── GLOBAL ROSTER ── */}
-        
-
-        {/* ── COURSE LIBRARY ── */}
-        <Section title={`Course Library (${courseLibrary.length})`} icon={<Flag size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-3">
-            {addingCourse ? (
-              <div className="flex gap-2">
-                <input value={newCourseName} onChange={e=>setNewCourseName(e.target.value)} placeholder="Course name" autoFocus
-                  className="flex-1 bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl font-semibold text-sm outline-none"/>
-                <button onClick={async()=>{
-                  if(!newCourseName.trim())return
-                  const r=push(ref(db,'courseHistory'))
-                  await set(r,{id:r.key,name:newCourseName.trim(),holes:Array.from({length:18},(_,i)=>({par:4,hcp:i+1})),pars:Array(18).fill(4)})
-                  setNewCourseName('');setAddingCourse(false);showToast('✓ Course added')
-                }} className="bg-emerald-500 text-black px-3 py-2.5 rounded-xl font-bold text-sm"><Check size={14}/></button>
-                <button onClick={()=>setAddingCourse(false)} className="text-zinc-600 px-2"><X size={14}/></button>
-              </div>
-            ) : (
-              <button onClick={()=>setAddingCourse(true)}
-                className="w-full flex items-center justify-center gap-2 border border-dashed border-zinc-700 hover:border-emerald-500 text-zinc-500 hover:text-emerald-400 py-2.5 rounded-xl font-semibold text-sm transition-all">
-                <Plus size={14}/> Add Course
-              </button>
-            )}
-            <div className="space-y-2">
-              {courseLibrary.map(c => (
-                <div key={c.id} className="flex items-center gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-                  <Flag size={13} className="text-zinc-600 flex-shrink-0"/>
-                  <span className="flex-1 font-semibold text-sm">{c.name}</span>
-                  <span className="text-zinc-600 text-xs">18 holes</span>
-                  <button onClick={()=>setConfirmDelete({id:c.id,label:c.name,path:`courseHistory/${c.id}`})}
-                    className="text-zinc-700 hover:text-rose-400 transition-colors"><Trash2 size={13}/></button>
-                </div>
-              ))}
-              {courseLibrary.length===0 && <p className="text-zinc-600 text-xs text-center py-2">No courses saved</p>}
-            </div>
-          </div>
-        </Section>
-
-        {/* ── ACTIVE MATCH ── */}
-        <Section title="Active Match" icon={<Activity size={16}/>} defaultOpen={false}>
-          <div className="p-4">
-            {activeTournament?.meta ? (
-              <div className="space-y-3">
-                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 text-xs font-semibold">COURSE</span>
-                    <span className="font-bold text-sm">{activeTournament.course?.name||'—'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 text-xs font-semibold">MODE</span>
-                    <span className="font-bold text-sm capitalize">{activeTournament.meta?.mode||'—'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 text-xs font-semibold">PLAYERS</span>
-                    <span className="font-bold text-sm">{activeTournament.roster?Object.keys(activeTournament.roster).length:0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 text-xs font-semibold">MATCHES</span>
-                    <span className="font-bold text-sm">{activeTournament.matchups?Object.keys(activeTournament.matchups).length:0}</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={async()=>{
-                    const snap = await get(ref(db,'tournament'))
-                    if(snap.exists()){
-                      await set(ref(db,`history/${Date.now()}`),{
-                        ...snap.val(),
-                        _meta:{mode:'match',dayLabel:'Quick Match',archivedAt:Date.now(),courseName:snap.val().course?.name||''}
-                      })
-                      await set(ref(db,'tournament'),null)
-                      showToast('✓ Archived to history')
-                    }
-                  }} className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 py-3 rounded-xl font-bold text-sm transition-colors">
-                    <Archive size={14}/> Archive
-                  </button>
-                  <button onClick={()=>setConfirmDelete({id:'active',label:'the active match',path:'tournament'})}
-                    className="flex items-center justify-center gap-2 bg-transparent hover:bg-rose-950/20 border border-zinc-700 hover:border-rose-500/50 text-zinc-500 hover:text-rose-400 py-3 rounded-xl font-bold text-sm transition-colors">
-                    <Trash2 size={14}/> Wipe
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-zinc-600 text-sm text-center py-4 font-medium">No active match</p>
-            )}
-          </div>
-        </Section>
-
-        {/* ── FULL HISTORY ── */}
-        <Section title={`Full History (${history.length})`} icon={<History size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-2">
-            {history.length === 0 && <p className="text-zinc-600 text-sm text-center py-4">No archived matches</p>}
-            {history.map(arch => {
-              const meta = arch._meta || {}
-              const date = new Date(Number(arch.id)).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-              const players = arch.roster ? Object.keys(arch.roster).length : 0
-              const course = arch.course?.name || meta.courseName || '—'
-              return (
-                <div key={arch.id} className="flex items-center gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{course}</div>
-                    <div className="text-zinc-600 text-xs font-medium normal-case">{date} · {players} players</div>
-                  </div>
-                  <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${meta.mode==='match'?'bg-amber-500/20 text-amber-400':'bg-blue-500/20 text-blue-400'}`}>
-                    {meta.mode==='match'?'MATCH':'TOURNAMENT'}
-                  </span>
-                  <button onClick={()=>setConfirmDelete({id:arch.id,label:course+' ('+date+')',path:`history/${arch.id}`})}
-                    className="text-zinc-700 hover:text-rose-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>
-                </div>
-              )
-            })}
-          </div>
-        </Section>
-
-        {/* ── ANALYTICS ACCESS ── */}
-        <Section title="📊 Analytics Access Control" icon={<BarChart3 size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-4">
-
-            {/* Tabs */}
-            <div className="flex bg-zinc-900 rounded-xl p-1 gap-1">
-              <button onClick={() => setAnalyticsTab('who')}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${analyticsTab==='who' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                👥 Who Can See
-              </button>
-              <button onClick={() => setAnalyticsTab('what')}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${analyticsTab==='what' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                👁️ What They See
-              </button>
-            </div>
-
-            {/* WHO CAN SEE */}
-            {analyticsTab === 'who' && (
-              <div className="space-y-3">
-                <p className="text-zinc-600 text-xs font-medium normal-case">Turn Analytics on or off for each role. Changes save instantly to Firebase.</p>
-
-                {/* Scorer */}
-                <div className={`border-2 rounded-xl overflow-hidden transition-colors ${scorerAccess ? 'border-blue-500/40' : 'border-zinc-800'}`}>
-                  <div className="flex items-center justify-between px-4 py-4 bg-zinc-950">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${scorerAccess ? 'bg-blue-500/20' : 'bg-zinc-800'}`}>
-                        <Shield size={18} className={scorerAccess ? 'text-blue-400' : 'text-zinc-600'}/>
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm">Scorer Admins</div>
-                        <div className="text-zinc-500 text-[10px] font-medium normal-case">Jeff and other scorers</div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setScorerAccess(v => !v)}
-                      className={`relative w-14 h-7 rounded-full transition-all ${scorerAccess ? 'bg-blue-500' : 'bg-zinc-700'}`}>
-                      <div className={`absolute top-1.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${scorerAccess ? 'translate-x-8' : 'translate-x-1.5'}`}/>
-                    </button>
-                  </div>
-                  <div className={`px-4 py-2 text-[11px] font-semibold ${scorerAccess ? 'bg-blue-500/10 text-blue-400' : 'bg-zinc-900 text-zinc-600'}`}>
-                    {scorerAccess ? '🟢 Scorers CAN see Analytics' : '🔴 Scorers CANNOT see Analytics'}
-                  </div>
-                  <div className="px-4 pb-3">
-                    <button
-                      onClick={async () => {
-                        try {
-                          await set(ref(db, 'analyticsFlags/scorer_access'), scorerAccess)
-                          showToast('✓ Scorer access saved!')
-                        } catch(e) { showToast('❌ Save failed') }
-                      }}
-                      className="w-full bg-blue-500 hover:bg-blue-400 text-white py-2.5 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-2">
-                      <Check size={13}/> Save Scorer Access
-                    </button>
-                  </div>
-                </div>
-
-                {/* Player */}
-                <div className={`border-2 rounded-xl overflow-hidden transition-colors ${playerAccess ? 'border-amber-500/40' : 'border-zinc-800'}`}>
-                  <div className="flex items-center justify-between px-4 py-4 bg-zinc-950">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${playerAccess ? 'bg-amber-500/20' : 'bg-zinc-800'}`}>
-                        <Users size={18} className={playerAccess ? 'text-amber-400' : 'text-zinc-600'}/>
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm">Players</div>
-                        <div className="text-zinc-500 text-[10px] font-medium normal-case">Anyone on the Player hub</div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setPlayerAccess(v => !v)}
-                      className={`relative w-14 h-7 rounded-full transition-all ${playerAccess ? 'bg-amber-500' : 'bg-zinc-700'}`}>
-                      <div className={`absolute top-1.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${playerAccess ? 'translate-x-8' : 'translate-x-1.5'}`}/>
-                    </button>
-                  </div>
-                  <div className={`px-4 py-2 text-[11px] font-semibold ${playerAccess ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-900 text-zinc-600'}`}>
-                    {playerAccess ? '🟢 Players CAN see Analytics' : '🔴 Players CANNOT see Analytics (default off)'}
-                  </div>
-                  <div className="px-4 pb-3">
-                    <button
-                      onClick={async () => {
-                        try {
-                          await set(ref(db, 'analyticsFlags/player_access'), playerAccess)
-                          showToast('✓ Player access saved!')
-                        } catch(e) { showToast('❌ Save failed') }
-                      }}
-                      className="w-full bg-amber-500 hover:bg-amber-400 text-black py-2.5 rounded-xl font-black text-xs transition-colors flex items-center justify-center gap-2">
-                      <Check size={13}/> Save Player Access
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* WHAT THEY SEE */}
-            {analyticsTab === 'what' && (
-              <div className="space-y-4">
-                <p className="text-zinc-600 text-xs font-medium normal-case">Tap sections to toggle. Save buttons are at the bottom of each list.</p>
-
-                {/* Scorer sections */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Shield size={12} className="text-blue-400"/>
-                    <p className="text-blue-400 text-[10px] font-black tracking-widest">SCORER VIEW</p>
-                  </div>
-                  <div className="space-y-1 mb-3">
-                    {SECTIONS.map(s => (
-                      <button key={s.key}
-                        onClick={() => {
-                          setScorerSections(prev => ({...prev, [s.key]: !prev[s.key]}))
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${scorerSections[s.key] ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-zinc-900/60 border border-zinc-800'}`}>
-                        <span className={`text-xs font-semibold ${scorerSections[s.key] ? 'text-white' : 'text-zinc-600'}`}>{s.label}</span>
-                        <div className={`w-4 h-4 rounded flex items-center justify-center ${scorerSections[s.key] ? 'bg-blue-500' : 'bg-zinc-700'}`}>
-                          {scorerSections[s.key] && <Check size={10} className="text-white"/>}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await set(ref(db, 'analyticsFlags/scorer_sections'), scorerSections)
-                        showToast('✓ Scorer view saved!')
-                      } catch(e) {
-                        showToast('❌ Save failed — check connection')
-                      }
-                    }}
-                    className="w-full bg-blue-500 hover:bg-blue-400 text-white py-3 rounded-xl font-black text-sm transition-colors flex items-center justify-center gap-2">
-                    <Check size={15}/> Save Scorer View
-                  </button>
-                </div>
-
-                {/* Player sections */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users size={12} className="text-amber-400"/>
-                    <p className="text-amber-400 text-[10px] font-black tracking-widest">PLAYER VIEW</p>
-                  </div>
-                  <div className="space-y-1 mb-3">
-                    {SECTIONS.map(s => (
-                      <button key={s.key}
-                        onClick={() => {
-                          setPlayerSections(prev => ({...prev, [s.key]: !prev[s.key]}))
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${playerSections[s.key] ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-zinc-900/60 border border-zinc-800'}`}>
-                        <span className={`text-xs font-semibold ${playerSections[s.key] ? 'text-white' : 'text-zinc-600'}`}>{s.label}</span>
-                        <div className={`w-4 h-4 rounded flex items-center justify-center ${playerSections[s.key] ? 'bg-amber-500' : 'bg-zinc-700'}`}>
-                          {playerSections[s.key] && <Check size={10} className="text-white"/>}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await set(ref(db, 'analyticsFlags/player_sections'), playerSections)
-                        showToast('✓ Player view saved!')
-                      } catch(e) {
-                        showToast('❌ Save failed — check connection')
-                      }
-                    }}
-                    className="w-full bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl font-black text-sm transition-colors flex items-center justify-center gap-2">
-                    <Check size={15}/> Save Player View
-                  </button>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </Section>
-
-        {/* ── USER MANAGEMENT ── */}
-        <Section title="👤 User Management" icon={<Users size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-4">
-
-            {/* Current users */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">ACTIVE ACCOUNTS</p>
-              <div className="space-y-2">
-                {dbUsers.map(u => (
-                  <div key={u.uid} className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${u.role === 'master' ? 'bg-emerald-500/20' : 'bg-blue-500/20'}`}>
-                          <Shield size={14} className={u.role === 'master' ? 'text-emerald-400' : 'text-blue-400'}/>
-                        </div>
-                        <div>
-                          <div className="font-semibold text-sm">{u.email || u.uid.slice(0,12)+'...'}</div>
-                          <div className={`text-[10px] font-bold uppercase tracking-wider ${u.role === 'master' ? 'text-emerald-400' : 'text-blue-400'}`}>{u.role}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {/* Change role */}
-                        <select
-                          value={u.role}
-                          onChange={async e => {
-                            await set(ref(db, `users/${u.uid}/role`), e.target.value)
-                            showToast('✓ Role updated')
-                          }}
-                          className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-semibold px-2 py-1 rounded-lg outline-none">
-                          <option value="scorer">Scorer</option>
-                          <option value="master">Master</option>
-                        </select>
-                        {/* Send reset */}
-                        <button
-                          onClick={async () => {
-                            if (!u.email) return showToast('No email on record')
-                            try {
-                              await resetPassword(u.email)
-                              setResetSent(u.uid)
-                              setTimeout(() => setResetSent(null), 3000)
-                              showToast(`✓ Reset email sent to ${u.email}`)
-                            } catch { showToast('Failed to send reset email') }
-                          }}
-                          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-amber-400 transition-colors"
-                          title="Send password reset">
-                          {resetSent === u.uid ? <Check size={14} className="text-emerald-400"/> : <KeyRound size={14}/>}
-                        </button>
-                        {/* Remove from app (delete from users node, not Firebase Auth) */}
-                        {u.role !== 'master' && (
-                          <button
-                            onClick={() => setConfirmDelete({id:u.uid, label:u.email||u.uid, path:`users/${u.uid}`})}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-700 hover:text-rose-400 transition-colors"
-                            title="Remove access">
-                            <UserX size={14}/>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Add new user */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">ADD NEW ADMIN USER</p>
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-                  <p className="text-amber-400 text-[10px] font-semibold tracking-wider mb-1">TWO STEP PROCESS</p>
-                  <p className="text-zinc-500 text-xs font-medium normal-case leading-relaxed">
-                    1. Go to <span className="text-white font-semibold">Firebase Console → Authentication → Add user</span> and create their account.<br/>
-                    2. Copy their UID from the Users tab and paste it below.
-                  </p>
-                </div>
-                <input
-                  value={newUserUid}
-                  onChange={e => setNewUserUid(e.target.value)}
-                  placeholder="Firebase UID (paste from Auth console)"
-                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs font-mono text-white outline-none"
-                />
-                <input
-                  value={newUserEmail}
-                  onChange={e => setNewUserEmail(e.target.value)}
-                  placeholder="Email address"
-                  className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-xs text-white outline-none"
-                />
-                <div className="flex gap-2">
-                  <select
-                    value={newUserRole}
-                    onChange={e => setNewUserRole(e.target.value as 'scorer'|'master')}
-                    className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none flex-1">
-                    <option value="scorer">Scorer Admin</option>
-                    <option value="master">Master Admin</option>
-                  </select>
-                  <button
-                    onClick={async () => {
-                      if (!newUserUid.trim() || !newUserEmail.trim()) return showToast('Enter both UID and email')
-                      await set(ref(db, `users/${newUserUid.trim()}`), { role: newUserRole, email: newUserEmail.trim() })
-                      setNewUserUid(''); setNewUserEmail('')
-                      showToast('✓ User added — they can now sign in')
-                    }}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5">
-                    <UserPlus size={13}/> Add
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Password reset shortcut */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-3">SEND PASSWORD RESET</p>
-              <div className="flex gap-2">
-                <input
-                  value={inviteEmail}
-                  onChange={e => setInviteEmail(e.target.value)}
-                  placeholder="user@email.com"
-                  className="flex-1 bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-xl text-sm text-white outline-none"
-                />
-                <button
-                  onClick={async () => {
-                    if (!inviteEmail.trim()) return
-                    setInviting(true)
-                    try {
-                      await resetPassword(inviteEmail.trim())
-                      showToast(`✓ Reset email sent to ${inviteEmail}`)
-                      setInviteEmail('')
-                    } catch { showToast('Failed — check the email address') }
-                    setInviting(false)
-                  }}
-                  disabled={inviting}
-                  className="bg-blue-500 hover:bg-blue-400 disabled:bg-zinc-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5">
-                  <Mail size={13}/> {inviting ? 'Sending...' : 'Send Reset'}
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </Section>
-
-        {/* ── APP SETTINGS ── */}
-<Section title={`⛔ Blocked Players (${blockedPlayers.length})`} icon={<Users size={16}/>} defaultOpen={false}>
- <div className="space-y-3">
- <p className="text-[11px] text-zinc-500 font-medium normal-case leading-relaxed">
- These names can never be added to a roster or a match. Matching ignores case and
- catches partial names — a first and last name also blocks &quot;Jr&quot; variants.
- Add each spelling you want caught.
+ <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+ onClick={() => setShowLegal(false)}>
+ <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+ onClick={e => e.stopPropagation()}>
+ <div>
+ <p className="font-black text-lg text-white">JF Tournament Manager</p>
+ <p className="text-[11px] font-black text-zinc-500 tracking-widest mt-0.5">
+ © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
  </p>
-
- {blockedErr && (
- <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-3 py-2 text-[11px] font-black">
- {blockedErr}
  </div>
- )}
 
- <div className="space-y-2">
- {blockedPlayers.length === 0 && (
- <p className="text-[11px] text-zinc-600 font-medium normal-case">No blocked names. Anyone can be added.</p>
- )}
- {blockedPlayers.map(b => (
- <div key={b.id} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5">
- <div className="flex-1 min-w-0">
- <p className="font-black text-sm text-white truncate">{b.name}</p>
- {b.note && <p className="text-[10px] text-zinc-500 font-medium normal-case truncate">{b.note}</p>}
+ <div className="space-y-3 text-[12px] text-zinc-400 font-medium normal-case leading-relaxed">
+ <p>
+ JF Tournament Manager is an original software application designed, built and owned by
+ Jared Friend — including its source code, database design, scoring and payout
+ engines, interface and visual design.
+ </p>
+ <p>
+ Game formats, scorecards and spreadsheets that existed before the app remain
+ the property of whoever created them, and they are free to keep using them.
+ Ownership of the application is separate and rests with its author.
+ </p>
+ <p>
+ Access is a personal licence to use the app as provided. It can be changed or
+ ended at any time, and it does not transfer any ownership.
+ </p>
+ <p>
+ The application may not be copied, modified, distributed, published or
+ rebuilt, in whole or in part, without the owner&apos;s prior written consent.
+ </p>
+ <p>
+ Data entered by users — scores, handicaps and related records — remains the
+ property of those users. The software that stores, calculates and presents
+ that data does not.
+ </p>
  </div>
- <button onClick={() => removeBlocked(b.id)}
- className="text-zinc-600 hover:text-rose-400 transition-colors flex-shrink-0" aria-label={`Unblock ${b.name}`}>
- <Trash2 size={14}/>
+
+ <div className="border-t border-zinc-900 pt-3">
+ <p className="text-[10px] text-zinc-600 font-medium normal-case leading-relaxed">
+ All rights not expressly granted are reserved. Enquiries regarding use or licensing should be directed to the owner.
+ </p>
+ </div>
+
+ <button onClick={() => setShowLegal(false)}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-2xl font-black text-sm transition-colors">
+ CLOSE
  </button>
  </div>
+ </div>
+ 
+ )
+
+ // Show loading while Firebase Auth resolves
+ if (authLoading) {
+ return (
+ <div className="min-h-screen bg-black flex items-center justify-center">
+ <div className="text-zinc-700 text-sm font-medium">Loading...</div>
+ </div>
+ )
+ }
+
+ // ── ROLE SELECTION SCREEN ──────────────────────────────────────
+ if (role === 'none') {
+ return (
+ <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 font-sans">
+ <div className="w-full max-w-sm space-y-8">
+
+ {/* Logo */}
+ <div className="text-center">
+ <h1 className="text-6xl font-black tracking-tighter leading-none mb-1">
+ JF <span className="text-rose-500">TOURNAMENT</span>
+ </h1>
+ <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
+ TOURNAMENT MANAGER
+ </p>
+ <p className="text-zinc-700 text-[10px] font-medium normal-case mt-1">By Jared Friend</p>
+ </div>
+
+ {/* Role choice */}
+ <div className="space-y-3">
+ <p className="text-zinc-600 text-[10px] font-black tracking-[0.3em] text-center">WHO ARE YOU?</p>
+
+ {showPlayerCode ? (
+ <div className="w-full bg-zinc-900 border-2 border-emerald-500/40 p-6 rounded-[2rem] space-y-3">
+   <div>
+     <div className="text-xl font-black text-white">Enter group code</div>
+     <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
+       Ask the group admin if you do not have it
+     </div>
+   </div>
+   <input
+     type="password"
+     autoFocus
+     value={playerCode}
+     onChange={e => setPlayerCode(e.target.value)}
+     onKeyDown={e => { if (e.key === 'Enter') submitPlayerCode() }}
+     placeholder="Group code"
+     className="w-full bg-black border-2 border-zinc-700 focus:border-emerald-500 p-4 rounded-2xl font-black text-white outline-none transition-colors"
+   />
+   {playerErr && <p className="text-[11px] font-black text-rose-400">{playerErr}</p>}
+   <div className="flex gap-2">
+     <button
+       onClick={submitPlayerCode}
+       disabled={playerBusy || !playerCode.trim()}
+       className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 rounded-2xl font-black transition-colors"
+     >
+       {playerBusy ? 'Checking...' : 'Continue'}
+     </button>
+     <button
+       onClick={() => setShowPlayerCode(false)}
+       className="px-5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl font-black transition-colors"
+     >
+       Cancel
+     </button>
+   </div>
+ </div>
+ ) : (
+ <button
+ onClick={choosePlayer}
+ className="w-full bg-zinc-900 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-6 rounded-[2rem] font-black flex items-center gap-5 transition-all group"
+ >
+ <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/30 transition-colors">
+ <User size={28} className="text-emerald-400"/>
+ </div>
+ <div className="text-left">
+ <div className="text-xl font-black text-white">I'm a Player</div>
+ <div className="text-[10px] font-black text-zinc-500 tracking-widest normal-case mt-0.5">
+ View scores, results & payouts
+ </div>
+ </div>
+ <ChevronRight size={20} className="text-zinc-600 ml-auto group-hover:text-emerald-400 transition-colors"/>
+ </button>
+ )}
+ </div>
+ <Link href="/login"
+ className="w-full flex items-center gap-4 bg-zinc-800/40 hover:bg-zinc-800 border-2 border-zinc-700 hover:border-emerald-500 p-5 rounded-[2rem] transition-all group">
+ <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-colors">
+ <Shield size={24} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
+ </div>
+ <div className="text-left flex-1">
+ <div className="text-xl font-black text-zinc-400 group-hover:text-white">Admin Sign In</div>
+ <div className="text-[10px] font-black text-zinc-600 tracking-widest normal-case mt-0.5">Sign in with email & password</div>
+ </div>
+ <ChevronRight size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+ </Link>
+
+
+
+
+ <Link href="/guide"
+ className="w-full flex items-center justify-center gap-2 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 px-4 py-3.5 rounded-2xl transition-all group">
+ <BookOpen size={14} className="text-zinc-600 group-hover:text-emerald-400 transition-colors"/>
+ <span className="font-black text-xs text-zinc-600 group-hover:text-emerald-400 transition-colors tracking-widest">
+ EXPLORE HOW THIS WORKS
+ </span>
+ </Link>
+ <button onClick={() => setShowLegal(true)}
+ className="w-full text-center text-[9px] text-zinc-700 hover:text-zinc-500 font-black tracking-widest transition-colors py-2">
+ © {new Date().getFullYear()} JARED FRIEND · ALL RIGHTS RESERVED
+ </button>
+
+ </div>
+
+ {/* In-app confirm modal — no popup blockers */}
+ {modal && (
+ <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/80 backdrop-blur-sm overflow-y-auto">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-[2rem] border border-zinc-700 shadow-2xl overflow-hidden">
+ <div className="p-6 space-y-3">
+ <h2 className="font-bold text-lg text-white">{modal.title}</h2>
+ <p className="text-zinc-400 text-sm font-medium normal-case leading-relaxed">{modal.body}</p>
+ {modal.warning && (
+ <div className={`flex items-start gap-2 rounded-xl p-3 text-xs font-medium normal-case leading-relaxed ${
+ modal.danger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+ }`}>
+ <span className="flex-shrink-0">⚠️</span>
+ <span>{modal.warning}</span>
+ </div>
+ )}
+ </div>
+ <div className="px-6 pb-6 flex flex-col gap-2">
+ <button onClick={modal.onConfirm}
+ className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-colors ${
+ modal.danger ? 'bg-rose-500 hover:bg-rose-400 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
+ }`}>
+ {modal.confirmLabel}
+ </button>
+ {modal.cancelLabel && (
+ <button onClick={modal.onCancel || closeModal}
+ className="w-full py-3.5 rounded-2xl font-bold text-sm text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 transition-colors">
+ {modal.cancelLabel}
+ </button>
+ )}
+ </div>
+ </div>
+ </div>
+ )}
+
+ <LegalModal/>
+ </div>
+ )
+ }
+
+ // ── PLAYER HUB ─────────────────────────────────────────────────
+ if (role === 'player') {
+ const playerItems = [
+ { title:"Live Scorer", desc:"Enter hole-by-hole scores", path:"/scorer", icon:<Target className="text-emerald-500"size={28}/>, color:"border-emerald-500/20 hover:border-emerald-500", accent:"text-emerald-400"},
+ { title:"Tournament Results", desc:"Leaderboard & team rankings", path:"/results", icon:<Trophy className="text-[#33CCFF]"size={28}/>, color:"border-blue-400/20 hover:border-blue-400", accent:"text-blue-400"},
+ { title:"Side Bets & Payouts", desc:"Match payouts & evidence", path:"/payouts", icon:<DollarSign className="text-amber-400"size={28}/>, color:"border-amber-400/20 hover:border-amber-400", accent:"text-amber-400"},
+ { title:"History", desc:"Past tournament results", path:"/history", icon:<Archive className="text-blue-400"size={28}/>, color:"border-blue-800/20 hover:border-blue-600", accent:"text-blue-400"},
+ ...(playerCanSeeAnalytics ? [{ title:"Analytics", desc:"Stats, records & betting trends", path:"/master/analytics", icon:<BarChart3 className="text-purple-400"size={28}/>, color:"border-purple-800/20 hover:border-purple-600", accent:"text-purple-400"}] : []),
+ ]
+
+ return (
+ <div className="min-h-screen bg-zinc-950 text-white font-sans">
+ <div className="max-w-2xl mx-auto px-4 py-10">
+
+ {/* Header */}
+ <header className="mb-10 border-b-4 border-emerald-500 pb-6">
+ <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
+ JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
+ </h1>
+ <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
+ {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
+ {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-400">{tripName}</span></>}
+ {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-400">{currentDay}</span></>}
+ {isMock && <span className="text-amber-400">· DEMO</span>}
+ </div>
+ </header>
+ {/* Demo banner - purple for pro golfer demo */}
+ {isMock && (
+ <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
+ <div>
+ <p className="text-purple-400 font-bold text-sm">🎮 Demo Active</p>
+ <p className="text-zinc-500 text-xs font-medium normal-case">Tiger, Rory & friends at Augusta National</p>
+ </div>
+ <button onClick={clearDemo}
+ className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 hover:border-rose-500 text-zinc-400 hover:text-rose-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
+ <X size={12}/> Clear Demo
+ </button>
+ </div>
+ )}
+ {/* Old demo banner - keep for backward compat */}
+ {false && isMock && (
+ <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
+ <div>
+ <p className="text-amber-400 font-bold text-sm">Demo Mode</p>
+ <p className="text-zinc-500 text-xs font-medium normal-case">Sample match — 1v1, 2v2, Team, Wheel</p>
+ </div>
+ <button onClick={clearDemo}
+ className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 hover:border-rose-500 text-zinc-400 hover:text-rose-400 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
+ <X size={12}/> Exit Demo
+ </button>
+ </div>
+ )}
+
+
+ {/* Player nav — uniform pill style */}
+ <div className="space-y-3 mb-6">
+ {playerItems.map(item => (
+ <Link key={item.title} href={item.path}
+ className={`group w-full bg-zinc-900/40 p-4 rounded-2xl border ${item.color} transition-all active:scale-[0.99] flex items-center gap-4`}>
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ {React.cloneElement(item.icon, { size: 20 })}
+ </div>
+ <div className="flex-1 min-w-0">
+ <h2 className={`text-base font-bold leading-tight group-hover:${item.accent} transition-colors`}>{item.title}</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">{item.desc}</p>
+ </div>
+ <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center group-hover:border-zinc-600 transition-all flex-shrink-0">
+ <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
+ </div>
+ </Link>
  ))}
  </div>
 
- <div className="border-t border-zinc-800 pt-3 space-y-2">
- <input value={newBlockedName} onChange={e => setNewBlockedName(e.target.value)}
- onKeyDown={e => { if (e.key === 'Enter') addBlocked() }}
- placeholder="Name to block"
- className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-sm transition-colors"/>
- <input value={newBlockedNote} onChange={e => setNewBlockedNote(e.target.value)}
- onKeyDown={e => { if (e.key === 'Enter') addBlocked() }}
- placeholder="Reason (optional, only you see this)"
- className="w-full bg-black border border-zinc-700 focus:border-zinc-500 p-2.5 rounded-xl font-medium text-zinc-300 outline-none text-xs transition-colors"/>
- <button onClick={addBlocked} disabled={blockedBusy || !newBlockedName.trim()}
- className="w-full bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
- {blockedBusy ? 'ADDING…' : 'BLOCK THIS NAME'}
+ {/* Guide + Exit — uniform pill style */}
+ <div className="space-y-3">
+ <Link href="/guide"
+ className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ <BookOpen size={20} className="text-zinc-500 group-hover:text-emerald-400 transition-colors"/>
+ </div>
+ <div className="flex-1 min-w-0">
+ <h2 className="text-base font-bold leading-tight group-hover:text-emerald-400 transition-colors">How This App Works</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Guide, tips & feature walkthrough</p>
+ </div>
+ <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center flex-shrink-0 group-hover:border-zinc-600 transition-all">
+ <ChevronRight size={14} className="text-zinc-600 group-hover:text-white transition-colors"/>
+ </div>
+ </Link>
+ <button onClick={async () => {
+ sessionStorage.removeItem('role')
+ if (user) await signOut()
+ setRole('none')
+ }}
+ className="w-full bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-600 transition-all flex items-center gap-4 group">
+ <div className="bg-zinc-950 w-10 h-10 rounded-xl flex items-center justify-center border border-zinc-800 flex-shrink-0 group-hover:scale-110 transition-transform">
+ <RefreshCw size={18} className="text-zinc-500 group-hover:text-zinc-300 transition-colors"/>
+ </div>
+ <div className="flex-1 min-w-0">
+ <h2 className="text-base font-bold leading-tight group-hover:text-zinc-300 transition-colors">Exit</h2>
+ <p className="text-xs text-zinc-500 font-medium normal-case mt-0.5">Return to home screen</p>
+ </div>
  </button>
  </div>
+
+ {/* Demo type modal */}
+ {showDemoModal && (
+ <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
+ <div className="text-center">
+ <div className="text-3xl mb-2">🎮</div>
+ <h2 className="font-black text-lg">Load Demo Round</h2>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-1">8 pro golfers at Augusta National with all bet types pre-loaded.</p>
  </div>
- </Section>
-
-<Section title={`🔌 Other App — ${remote.enabled ? 'ONLINE' : 'OFFLINE'}`} icon={<Activity size={16}/>} defaultOpen={false}>
- <div className="space-y-4">
- <p className="text-[11px] text-zinc-500 font-medium normal-case leading-relaxed">
- Controls whether the other deployment serves its app. Switching it off shows
- your message instead of the hub. This app is unaffected either way.
- </p>
-
- {remoteErr && (
- <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-3 py-2 text-[11px] font-black">
- {remoteErr}
+ {isMock && (
+ <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+ <p className="text-amber-400 text-xs font-semibold">⚠️ Demo already active</p>
+ <button onClick={async () => { await clearDemo(); setShowDemoModal(false) }}
+ className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
+ </div>
+ )}
+ <div className="space-y-2">
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
+ <div className="font-black">⚡ Quick Match Demo</div>
+ <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
+ <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
+ </button>
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
+ <div className="font-black">🏆 Tournament Demo</div>
+ <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ </button>
+ </div>
+ <button onClick={() => setShowDemoModal(false)}
+ className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
+ Cancel
+ </button>
+ </div>
  </div>
  )}
 
- <div className={`rounded-2xl border-2 p-4 ${remote.enabled ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-rose-500/40 bg-rose-500/5'}`}>
- <div className="flex items-center justify-between gap-3">
- <div className="min-w-0">
- <p className={`font-black text-sm ${remote.enabled ? 'text-emerald-400' : 'text-rose-400'}`}>
- {remote.enabled ? 'Running normally' : 'Switched off'}
- </p>
- <p className="text-[10px] text-zinc-600 font-medium normal-case mt-0.5">
- {remote.enabled ? 'Anyone with the link can use it' : 'Visitors see your message'}
- </p>
  </div>
- <button
- onClick={() => saveRemote(!remote.enabled, remoteDraft)}
- disabled={remoteBusy}
- className={`px-4 py-2.5 rounded-xl font-black text-xs flex-shrink-0 transition-colors ${
- remote.enabled
- ? 'bg-rose-600 hover:bg-rose-500 text-white'
- : 'bg-emerald-500 hover:bg-emerald-400 text-black'} disabled:opacity-50`}>
- {remoteBusy ? '…' : remote.enabled ? 'SWITCH OFF' : 'SWITCH ON'}
- </button>
+ <LegalModal/>
  </div>
- </div>
+ )
+ }
 
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">
- MESSAGE SHOWN WHEN OFF
- </label>
- <textarea
- value={remoteDraft}
- onChange={e => setRemoteDraft(e.target.value)}
- rows={2}
- placeholder="This app is no longer available."
- className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-medium text-white outline-none text-xs transition-colors normal-case resize-none"/>
- <button
- onClick={() => saveRemote(remote.enabled, remoteDraft)}
- disabled={remoteBusy || remoteDraft === remote.message}
- className="mt-2 w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 py-2.5 rounded-xl font-black text-xs transition-colors">
- SAVE MESSAGE
- </button>
- <p className="text-[10px] text-zinc-700 font-medium normal-case mt-2 leading-snug">
- Leave blank and they will see a plain notice. The message can be changed
- while the app is off — it updates for anyone looking at it.
- </p>
- </div>
- </div>
- </Section>
+ // ── ADMIN HUB ──────────────────────────────────────────────────
+  // Grouped by what you are actually doing: play, start, keep, review.
+  const playItems = [
+    { title:"Live Scorer",    desc:"Enter hole-by-hole scores", path:"/scorer",  icon:<Target size={20} className="text-emerald-400"/>,   hover:"hover:border-emerald-500/60" },
+    { title:"Results",        desc:"Leaderboard & teams",       path:"/results", icon:<Trophy size={20} className="text-[#33CCFF]"/>,     hover:"hover:border-blue-400/60" },
+    { title:"Payouts",        desc:"Side bets & evidence",      path:"/payouts", icon:<DollarSign size={20} className="text-amber-400"/>, hover:"hover:border-amber-400/60" },
+  ]
+  const dataItems = [
+    { title:"Roster",  desc:"Permanent player list", path:"/roster",  icon:<Users size={20} className="text-emerald-400"/>, hover:"hover:border-emerald-600/60" },
+    { title:"Courses", desc:"Saved · scan cards",    path:"/courses", icon:<Flag size={20} className="text-teal-400"/>,     hover:"hover:border-teal-600/60" },
+  ]
+  const reviewItems = [
+    { title:"History", desc:"Past trips & rounds", path:"/history", icon:<Archive size={20} className="text-blue-400"/>, hover:"hover:border-blue-600/60" },
+    ...((authRole === 'master' || scorerCanSeeAnalytics) ? [
+    { title:"Analytics", desc:"Stats & betting trends", path:"/master/analytics", icon:<BarChart3 size={20} className="text-purple-400"/>, hover:"hover:border-purple-600/60" }] : []),
+  ]
 
-                  <Section title="App Settings" icon={<Settings size={16}/>} defaultOpen={false}>
-          <div className="p-4 space-y-4">
+  // A round is live when there is a mode set and we are not in demo.
+  const liveRound = !isMock && !!activeMode
+  const liveLabel = activeMode === 'match' ? 'Quick match' : (tripName || 'Tournament')
 
+  const Tile = ({ item, wide = false }: { item:any, wide?:boolean, key?:any }) => (
+    <Link href={item.path}
+      className={`group bg-zinc-900/40 border border-zinc-800 ${item.hover} rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${wide ? 'col-span-2' : ''}`}>
+      {item.icon}
+      <h2 className="text-[15px] font-bold leading-tight mt-1.5">{item.title}</h2>
+      <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">{item.desc}</p>
+    </Link>
+  )
 
-            {/* Saved formats */}
-            <div>
-              <p className="text-zinc-500 text-[10px] font-semibold tracking-widest mb-2">SAVED FORMATS ({savedFormats.length})</p>
-              <div className="space-y-2">
-                {savedFormats.map(f => (
-                  <div key={f.id} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5">
-                    <span className="font-semibold text-sm">{f.name}</span>
-                    <button onClick={()=>setConfirmDelete({id:f.id,label:f.name,path:`savedFormats/${f.id}`})}
-                      className="text-zinc-700 hover:text-rose-400 transition-colors"><Trash2 size={13}/></button>
-                  </div>
-                ))}
-                {savedFormats.length===0 && <p className="text-zinc-600 text-xs">No saved formats</p>}
-              </div>
+  const GroupLabel = ({ children }: { children?:React.ReactNode }) => (
+    <p className="text-[9px] font-black text-zinc-600 tracking-[0.2em] mb-2">{children}</p>
+  )
+
+  const StartGroup = () => (
+    <div className="mb-5">
+      <GroupLabel>START A ROUND</GroupLabel>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Link href="/setup"
+          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
+            activeMode && activeMode !== 'match' ? 'border-rose-500/60 bg-rose-950/10' : 'border-rose-500/25 hover:border-rose-500/70'}`}>
+          <ShieldAlert size={20} className="text-rose-400"/>
+          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Tournament</h2>
+          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Multi-day &amp; skins</p>
+        </Link>
+        <Link href="/match"
+          className={`group bg-zinc-900/40 border rounded-2xl p-3.5 transition-all active:scale-[0.98] block ${
+            activeMode === 'match' ? 'border-amber-500/60 bg-amber-950/10' : 'border-amber-500/25 hover:border-amber-500/70'}`}>
+          <Zap size={20} className="text-amber-400"/>
+          <h2 className="text-[15px] font-bold leading-tight mt-1.5">Quick match</h2>
+          <p className="text-[11px] text-zinc-500 font-medium normal-case leading-snug mt-0.5">Casual · just bets</p>
+        </Link>
+        {!isMock ? (
+          <button onClick={() => setShowDemoModal(true)} disabled={demoLoading}
+            className="col-span-2 text-left bg-zinc-900/30 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl px-3.5 py-2.5 transition-all active:scale-[0.99] flex items-center gap-2.5 disabled:opacity-50">
+            <PlayCircle size={16} className="text-purple-400 flex-shrink-0"/>
+            <span className="text-[13px] font-bold text-purple-400">{demoLoading ? 'Loading demo…' : 'Demo round'}</span>
+            <span className="text-[11px] text-zinc-600 font-medium normal-case truncate">Tiger · Rory · Augusta</span>
+          </button>
+        ) : (
+          <div className="col-span-2 bg-purple-500/10 border border-purple-500/30 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-purple-400 font-black text-[13px]">Demo active</p>
+              <p className="text-zinc-500 text-[10px] font-medium normal-case truncate">Augusta National · 8 pros</p>
             </div>
-
-            {/* Danger zone */}
-            <div className="border border-rose-500/20 rounded-xl p-4 space-y-2">
-              <p className="text-rose-400 text-[10px] font-black tracking-widest mb-3">DANGER ZONE</p>
-              <button onClick={()=>setConfirmDelete({id:'demo',label:'demo/mock tournament data',path:'tournament'})}
-                className="w-full flex items-center justify-between bg-transparent hover:bg-rose-950/10 border border-zinc-800 hover:border-rose-500/30 px-4 py-3 rounded-xl transition-all">
-                <span className="text-zinc-400 text-sm font-semibold">Clear Active Match</span>
-                <Trash2 size={14} className="text-zinc-600"/>
-              </button>
-
-            </div>
+            <button onClick={clearDemo}
+              className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-[11px] font-black transition-all flex-shrink-0">
+              <X size={12}/> EXIT
+            </button>
           </div>
-        </Section>
-
-{/* ── FIREBASE INFO ── */}
-        
-
+        )}
       </div>
     </div>
   )
+
+  const PlayGroup = () => (
+    <div className="mb-5">
+      <GroupLabel>DURING PLAY</GroupLabel>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Tile item={playItems[0]} wide={liveRound}/>
+        <Tile item={playItems[1]}/>
+        <Tile item={playItems[2]}/>
+      </div>
+    </div>
+  )
+
+
+ return (
+ <div className="min-h-screen bg-zinc-950 text-white font-sans">
+ <div className="max-w-2xl mx-auto px-4 py-10">
+
+ {/* Header */}
+ <header className="mb-10 border-b-4 border-emerald-500 pb-6">
+ <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
+ JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
+ </h1>
+ <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
+ {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
+ {!isMock && tripName && <><span className="text-zinc-700">·</span><span className="text-zinc-400">{tripName}</span></>}
+ {!isMock && currentDay && <><span className="text-zinc-700">·</span><span className="text-blue-400">{currentDay}</span></>}
+ {isMock && <span className="text-amber-400">· DEMO</span>}
+ <span className="text-zinc-700">·</span>
+ <span className="text-rose-500 flex items-center gap-1"><ShieldAlert size={10}/> ADMIN</span>
+ {authRole === 'master' && (
+ <Link href="/master" className="ml-auto flex items-center gap-1 text-emerald-500 hover:text-emerald-400 transition-colors">
+ <Shield size={11}/> MASTER
+ </Link>
+ )}
+ </div>
+ </header>
+
+             {/* Live round banner — the "you are here" */}
+            {liveRound && (
+              <Link href={activeMode === 'match' ? '/match' : '/setup'}
+                className="w-full bg-emerald-500/10 border-2 border-emerald-500/40 hover:border-emerald-500 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3 transition-all active:scale-[0.99] block">
+                <Trophy size={18} className="text-emerald-400 flex-shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-emerald-400 truncate">
+                    {liveLabel}{currentDay ? ` · ${currentDay}` : ''}
+                  </p>
+                  <p className="text-[11px] text-emerald-600/80 font-medium normal-case truncate">
+                    {courseName || 'Tap to continue'} · in progress
+                  </p>
+                </div>
+                <ChevronRight size={16} className="text-emerald-500 flex-shrink-0"/>
+              </Link>
+            )}
+
+            {/* Mid-round, the scorer matters more than starting something new */}
+            {liveRound ? <><PlayGroup/><StartGroup/></> : <><StartGroup/><PlayGroup/></>}
+
+            <div className="mb-5">
+              <GroupLabel>YOUR DATA</GroupLabel>
+              <div className="grid grid-cols-2 gap-2.5">
+                {dataItems.map(item => <Tile key={item.title} item={item}/>)}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <GroupLabel>REVIEW</GroupLabel>
+              <div className="grid grid-cols-2 gap-2.5">
+                {reviewItems.map(item => <Tile key={item.title} item={item}/>)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 mb-6">
+              <Link href="/guide"
+                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
+                <BookOpen size={13}/> How it works
+              </Link>
+              <button onClick={async () => {
+                sessionStorage.removeItem('role')
+                if (user) await signOut()
+                setRole('none')
+              }}
+                className="border border-zinc-800 hover:border-zinc-600 rounded-xl py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-zinc-500 hover:text-zinc-300 transition-all">
+                <RefreshCw size={13}/> Exit
+              </button>
+            </div>
+
+{/* Demo type modal */}
+ {showDemoModal && (
+ <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+ <div className="w-full max-w-sm bg-zinc-900 rounded-2xl border border-zinc-700 p-6 space-y-4">
+ <div className="text-center">
+ <div className="text-3xl mb-2">🎮</div>
+ <h2 className="font-black text-lg">Load Demo Round</h2>
+ <p className="text-zinc-500 text-xs font-medium normal-case mt-1">8 pro golfers at Augusta National with all bet types pre-loaded.</p>
+ </div>
+ {isMock && (
+ <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+ <p className="text-amber-400 text-xs font-semibold">⚠️ Demo already active</p>
+ <button onClick={async () => { await clearDemo(); setShowDemoModal(false) }}
+ className="text-rose-400 text-xs font-bold mt-1 hover:text-rose-300 transition-colors">Clear current demo first</button>
+ </div>
+ )}
+ <div className="space-y-2">
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runDemoLoad() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left">
+ <div className="font-black">⚡ Quick Match Demo</div>
+ <div className="text-purple-200 text-xs font-medium normal-case mt-0.5">Tiger · Rory · Rahm · Scheffler · Phil · JT · Brooks · DJ</div>
+ <div className="text-purple-300 text-[10px] font-medium normal-case">1v1 · 2v2 · Team · Wheel · Nassau · Skins</div>
+ </button>
+ <button
+ onClick={async () => { setShowDemoModal(false); setDemoLoading(true); await runTournamentDemo() }}
+ disabled={demoLoading || isMock}
+ className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-white p-4 rounded-xl font-bold text-sm transition-colors text-left border border-zinc-700">
+ <div className="font-black">🏆 Tournament Demo</div>
+ <div className="text-zinc-400 text-xs font-medium normal-case mt-0.5">3-day trip · 8 players · Full leaderboard</div>
+ <div className="text-zinc-500 text-[10px] font-medium normal-case">Augusta Invitational · Skins · Nassau · Teams</div>
+ </button>
+ </div>
+ <button onClick={() => setShowDemoModal(false)}
+ className="w-full text-zinc-500 hover:text-zinc-300 text-sm font-semibold py-2 transition-colors">
+ Cancel
+ </button>
+ </div>
+ </div>
+ )}
+
+ <LegalModal/>
+ </div>
+ </div>
+ )
+
+
 }
