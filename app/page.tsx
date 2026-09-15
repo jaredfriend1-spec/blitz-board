@@ -392,7 +392,7 @@ export default function LandingPage() {
  {/* Logo */}
  <div className="text-center">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-1">
- JF <span className="text-blue-500">TOURNAMENT</span>
+ JF <span className="text-rose-500">TOURNAMENT</span>
  </h1>
  <p className="text-zinc-600 text-[10px] font-black tracking-[0.4em]">
  TOURNAMENT MANAGER
@@ -541,7 +541,7 @@ export default function LandingPage() {
  {/* Header */}
  <header className="mb-10 border-b-4 border-emerald-500 pb-6">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- JF <span className="text-blue-500 text-4xl">TOURNAMENT</span>
+ JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
  </h1>
  <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
  {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}
@@ -770,7 +770,7 @@ export default function LandingPage() {
  {/* Header */}
  <header className="mb-10 border-b-4 border-emerald-500 pb-6">
  <h1 className="text-6xl font-black tracking-tighter leading-none mb-2">
- JF <span className="text-blue-500 text-4xl">TOURNAMENT</span>
+ JF <span className="text-rose-500 text-4xl">TOURNAMENT</span>
  </h1>
  <div className="flex items-center gap-3 text-zinc-500 font-bold text-[10px] tracking-[.3em] flex-wrap">
  {courseName && <><Flag size={11} className="text-emerald-500"/><span>{courseName}</span></>}

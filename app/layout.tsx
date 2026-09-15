@@ -2,8 +2,15 @@ import './globals.css'
 import BottomNav from '@/components/BottomNav'
 import { AuthProvider } from '@/components/AuthProvider'
 import type { Metadata, Viewport } from 'next'
-import { GeistSans } from 'geist/font/sans'
-import { GeistMono } from 'geist/font/mono'
+import { Oswald, Inter, Roboto_Mono } from 'next/font/google'
+
+// Oswald carries the headings — condensed, a little sporting, and it holds
+// up at the large sizes the hub uses. Inter does the body work because it
+// stays legible on a phone in bright sun. Roboto Mono keeps score columns
+// aligned.
+const display = Oswald({ subsets: ['latin'], weight: ['400','500','600','700'], variable: '--font-display', display: 'swap' })
+const body = Inter({ subsets: ['latin'], weight: ['400','500','600','700','800','900'], variable: '--font-body', display: 'swap' })
+const mono = Roboto_Mono({ subsets: ['latin'], weight: ['400','500','700'], variable: '--font-mono', display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'JF Tournament Manager',
@@ -27,7 +34,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#3b82f6',
+  themeColor: '#12294D',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -40,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <head>
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-capable" content="yes"/>
