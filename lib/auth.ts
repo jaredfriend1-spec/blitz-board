@@ -14,7 +14,10 @@ export type UserRole = 'master' | 'scorer' | 'player' | 'guest' | null
 // player must know the code to read anything — the database rules require a
 // signed-in user. This account's role is 'player', which the rules block from
 // writing, so a shared credential can never edit a scorecard.
-export const PLAYER_EMAIL = 'players@blitzboard.app'
+// The +alias delivers to the owner's normal inbox, so Firebase password
+// resets actually arrive. Changing the group code is then a reset link,
+// not a delete-and-recreate with a new UID to wire up.
+export const PLAYER_EMAIL = 'jaredfriend1+jfplayers@gmail.com'
 
 export async function getUserRole(uid: string): Promise<UserRole> {
   try {
