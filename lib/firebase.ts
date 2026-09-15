@@ -12,6 +12,10 @@ const firebaseConfig = {
   databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// getApps() returns every initialised app, including named ones. Checking
+// only the count breaks as soon as a second app exists — getApp() would
+// then be asked for a default that was never created. Look for the
+// default app by name instead.
+const app = getApps().find(a => a.name === '[DEFAULT]') ?? initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 export const auth = getAuth(app);
