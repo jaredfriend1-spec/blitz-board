@@ -1,55 +1,75 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { initializeApp, getApps } from 'firebase/app'
+import { getDatabase, ref, onValue } from 'firebase/database'
 
 // ─────────────────────────────────────────────────────────────────────
 // APP STATUS GATE
 //
-// Checks a publicly-readable flag before rendering the app. The flag is
-// controlled from the owner's dashboard, so access can be changed without
-// a deploy.
+// Holds a live connection to a publicly-readable flag in the owner's
+// database. Because it is a realtime listener rather than a one-off
+// fetch, switching the flag takes effect on every open session within
+// about a second — a phone left open all day does not need reloading.
 //
-// It deliberately fails OPEN: if the request errors, times out, or the
-// node is missing, the app renders normally. A network blip should never
-// take the app down.
+// The flag lives in a different Firebase project, so this opens a second
+// named app pointed at it. The node is world-readable, so no sign-in is
+// involved and this app's own auth is untouched.
+//
+// It fails OPEN. If the connection drops, the project is unreachable, or
+// the node is missing, the app renders normally. Only an explicit
+// `enabled: false` closes it — an outage must never take the app down.
 // ─────────────────────────────────────────────────────────────────────
 
-const STATUS_URL =
-  'https://jf-tournament-default-rtdb.firebaseio.com/publicStatus/legacyApp.json'
+const STATUS_CONFIG = {
+  apiKey: 'AIzaSyCEuZqtsiX8M2QvNCNdvFFZpIbHQ22W8aE',
+  projectId: 'jf-tournament',
+  databaseURL: 'https://jf-tournament-default-rtdb.firebaseio.com',
+}
 
 const DEFAULT_MESSAGE = 'This app is no longer available.'
 
+// Don't hold the app on a blank screen if the connection is slow.
+const DECIDE_AFTER_MS = 3500
+
 export default function AppStatusGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<'checking' | 'open' | 'closed'>('checking')
+  const [closed, setClosed] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
-    const controller = new AbortController()
-    // Don't let a slow response hold the app hostage.
-    const timer = setTimeout(() => controller.abort(), 4000)
+    const timer = setTimeout(() => setReady(true), DECIDE_AFTER_MS)
+    let unsub: (() => void) | undefined
 
-    fetch(`${STATUS_URL}?cb=${Date.now()}`, {
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-      .then(r => (r.ok ? r.json() : null))
-      .then(v => {
-        if (cancelled) return
-        if (v && v.enabled === false) {
-          setMessage(v.message || DEFAULT_MESSAGE)
-          setState('closed')
-        } else {
-          setState('open')
-        }
-      })
-      .catch(() => { if (!cancelled) setState('open') })
-      .finally(() => clearTimeout(timer))
+    try {
+      const app = getApps().find(a => a.name === 'status')
+        || initializeApp(STATUS_CONFIG, 'status')
+      const statusDb = getDatabase(app)
 
-    return () => { cancelled = true; controller.abort(); clearTimeout(timer) }
+      unsub = onValue(
+        ref(statusDb, 'publicStatus/legacyApp'),
+        snap => {
+          const v = snap.val()
+          if (v && v.enabled === false) {
+            setMessage(v.message || DEFAULT_MESSAGE)
+            setClosed(true)
+          } else {
+            setClosed(false)
+          }
+          setReady(true)
+          clearTimeout(timer)
+        },
+        () => { setReady(true); clearTimeout(timer) },
+      )
+    } catch {
+      setReady(true)
+      clearTimeout(timer)
+    }
+
+    return () => { if (unsub) unsub(); clearTimeout(timer) }
   }, [])
 
-  if (state === 'checking') {
+  if (!ready) {
     return (
       <div style={{
         minHeight: '100vh', background: '#000', display: 'flex',
@@ -60,7 +80,7 @@ export default function AppStatusGate({ children }: { children: React.ReactNode 
     )
   }
 
-  if (state === 'closed') {
+  if (closed) {
     return (
       <div style={{
         minHeight: '100vh', background: '#000', display: 'flex',
@@ -73,9 +93,7 @@ export default function AppStatusGate({ children }: { children: React.ReactNode 
           }}>
             BLITZ <span style={{ color: '#10b981' }}>BOARD</span>
           </div>
-          <p style={{
-            fontSize: '14px', lineHeight: 1.6, color: '#a1a1aa', margin: 0,
-          }}>
+          <p style={{ fontSize: '14px', lineHeight: 1.6, color: '#a1a1aa', margin: 0 }}>
             {message}
           </p>
         </div>
