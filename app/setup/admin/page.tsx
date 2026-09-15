@@ -221,8 +221,6 @@ export default function AdminWizard() {
 
  // Only reachable once a trip is marked complete.
  const startNewTournament = async () => {
- const pw = prompt("ADMIN PASSWORD:")
- if (pw !== "jeff") return alert("ACCESS DENIED")
  if (!confirm("Start a brand new tournament?\n\nKeeps roster and course. Clears trip, teams, matchups and scores.")) return
  setLoading(true)
  await set(ref(db,'tournament/scores'), null)
@@ -629,7 +627,6 @@ export default function AdminWizard() {
 
  <button disabled={destructiveBusy}
  onClick={()=>{
- const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
  if(!confirm("Wipe scores only?\n\nTeams, matchups, course and trip settings all stay.")) return
  runDestructive('Scores wiped.', async()=>{ await set(ref(db,'tournament/scores'), null); await set(ref(db,'tournament/draws'), null) })
  }}
@@ -640,7 +637,6 @@ export default function AdminWizard() {
 
  <button disabled={destructiveBusy}
  onClick={()=>{
- const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
  if(!confirm("Reset the round?\n\nClears scores, teams, matchups and trip settings.\nKeeps the course and money settings so you can run it again.")) return
  runDestructive('Round reset. Course and money settings kept.', async()=>{
  await set(ref(db,'tournament/scores'), null)
@@ -682,7 +678,6 @@ export default function AdminWizard() {
  <button
  disabled={destructiveBusy || abandonText.trim().toUpperCase() !== 'ABANDON'}
  onClick={()=>{
- const pw=prompt("ADMIN PASSWORD:"); if(pw!=="jeff") return alert("ACCESS DENIED")
  runDestructive('Setup abandoned. Ready for a fresh tournament.', async()=>{
  await set(ref(db,'tournament'), null)
  setAbandonConfirm(false); setAbandonText('')

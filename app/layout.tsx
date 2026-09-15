@@ -1,6 +1,7 @@
 import './globals.css'
 import BottomNav from '@/components/BottomNav'
 import { AuthProvider } from '@/components/AuthProvider'
+import AppStatusGate from '@/components/AppStatusGate'
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
@@ -156,7 +157,7 @@ export default function RootLayout({
           </button>
         </div>
 
-        <AuthProvider>{children}</AuthProvider>
+        <AppStatusGate><AuthProvider>{children}</AuthProvider></AppStatusGate>
         <BottomNav />
       </body>
     </html>
