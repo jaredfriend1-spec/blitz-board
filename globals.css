@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Oswald', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, monospace;
+
+  --ink: #0F2340;
+  --page: #EEF2F7;
+  --crest-red: #C8102E;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--page);
+  color: var(--ink);
+}
+
+/* ── Display type ──────────────────────────────────────────────────
+   The components use Tailwind size classes rather than heading tags,
+   so the condensed face is applied by size. Anything text-2xl and up
+   is a heading in this app; smaller text stays in the body face for
+   legibility on a phone in sunlight. */
+h1, h2, h3,
+.text-2xl, .text-3xl, .text-4xl, .text-5xl, .text-6xl, .text-7xl {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Scores, money and any tabular figure — even columns matter more than
+   character here, so the mono face carries them. */
+.font-mono,
+.tabular-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small uppercase labels are everywhere in this UI. Condensed at that
+   size turns to mush, so they stay in the body face with wider tracking. */
+.tracking-widest,
+.tracking-\[0\.2em\],
+.tracking-\[0\.3em\] {
+  font-family: var(--font-body);
+}
+
+/* Keep score cells crisp */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Inputs inherit the page, not the browser default */
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, opacity, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Scrollbar — thin, tinted to the theme */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #C3CDDB;
+  border-radius: 2px;
+}
+
+/* The app sets its own light scheme; stop mobile browsers darkening it */
+:root {
+  color-scheme: light;
+}
