@@ -152,17 +152,50 @@ export default function CoursesPage() {
     })
   }, [])
 
+  // Downscale before upload. A phone photo is 4-12MB and base64 adds ~33%;
+  // sending it raw times out on cell service. 1000px wide at JPEG 0.7 lands
+  // around 150KB and costs no accuracy on scorecard digits.
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error('Could not read file'))
+      reader.onload = event => {
+        const img = new Image()
+        img.onerror = () => reject(new Error('Could not decode image'))
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const scale = Math.min(1000 / img.width, 1)
+          canvas.width = img.width * scale
+          canvas.height = img.height * scale
+          canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
+          resolve(canvas.toDataURL('image/jpeg', 0.7))
+        }
+        img.src = event.target?.result as string
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // The API expects JSON { imageBase64 }. This page used to post FormData,
+  // which the route never read, so every scan here failed with "No image
+  // provided". Matches /match and /setup/settings now.
   const scanCard = async (file: File) => {
     setScanning(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/scan-scorecard', { method: 'POST', body: formData })
+      const imageBase64 = await compressImage(file)
+      const res = await fetch('/api/scan-scorecard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64 }),
+      })
       const data = await res.json()
-      if (data.holes) {
+      if (res.ok && data.success && data.holes?.length === 18) {
         setScanPreview(data.holes)
         setAddMode('scan')
-      } else showToast('Could not read scorecard — try a clearer photo')
+        if (data.warning) showToast(data.warning)
+      } else {
+        showToast(data.error || 'Could not read scorecard — try a clearer photo')
+      }
     } catch { showToast('Scan failed — check connection') }
     setScanning(false)
   }
@@ -288,9 +321,9 @@ export default function CoursesPage() {
                   </button>
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-                  onChange={e => e.target.files?.[0] && scanCard(e.target.files[0])} />
+                  onChange={e => { const f = e.target.files?.[0]; if (f) scanCard(f); e.target.value = '' }} />
                 <input ref={uploadInputRef} type="file" accept="image/*" className="hidden"
-                  onChange={e => e.target.files?.[0] && scanCard(e.target.files[0])} />
+                  onChange={e => { const f = e.target.files?.[0]; if (f) scanCard(f); e.target.value = '' }} />
               </div>
             )}
 
