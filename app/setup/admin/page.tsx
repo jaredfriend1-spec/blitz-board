@@ -364,7 +364,7 @@ export default function TournamentSetup() {
           <Link href="/" className="text-emerald-400 font-semibold flex items-center gap-2 text-sm hover:text-emerald-300">
             <ArrowLeft size={16}/> Home
           </Link>
-          <span className="text-sm text-zinc-500">Tournament setup</span>
+          <Link href="/setup/help" className="text-sm text-zinc-400 hover:text-emerald-400 underline underline-offset-4">How to set up a tournament</Link>
         </div>
       </div>
 
