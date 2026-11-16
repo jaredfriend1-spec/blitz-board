@@ -248,6 +248,15 @@ function buildRecap(arch: any) {
  }
 }
 
+// Opens the whole-tournament export in a new tab, ready to print or save.
+function openTripExport(tripName: string, dayArchives: any[]) {
+  const html = buildTripExportHtml(tripName, dayArchives)
+  if (!html) { alert('There are no finished days to export yet.'); return }
+  const win = window.open('', '_blank')
+  if (win) { win.document.write(html); win.document.close() }
+  else alert('The export opens in a new tab. Allow pop-ups for this site and try again.')
+}
+
 // ── TRIP ROLL-UP ENGINE ────────────────────────────────────────────
 // Aggregates every archived day that shares a tripName into one
 // cumulative view. Net uses each day's own handicap %, and to-par uses
@@ -361,20 +370,7 @@ function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any,
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <button
-              onClick={e => {
-                e.stopPropagation()
-                const html = buildTripExportHtml(trip.tripName, trip.days.map((d: any) => d.arch))
-                const win = window.open('', '_blank')
-                if (win) { win.document.write(html); win.document.close() }
-                else alert('The export opens in a new tab. Allow pop-ups for this site and try again.')
-              }}
-              className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white px-3 py-2 rounded-xl font-black text-xs transition-all">
-              <FileDown size={13}/> <span className="normal-case">Export tournament PDF</span>
-            </button>
-            <div className="text-emerald-500">{open ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</div>
-          </div>
+          <div className="text-emerald-500 flex-shrink-0">{open ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</div>
         </div>
 
         {champ && (
@@ -392,6 +388,13 @@ function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any,
             </div>
           </div>
         )}
+
+        {/* One PDF for the whole tournament — every day, standings and money */}
+        <button
+          onClick={e => { e.stopPropagation(); openTripExport(trip.tripName, trip.days.map((d: any) => d.arch)) }}
+          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black py-3.5 rounded-2xl font-black text-sm transition-colors">
+          <FileDown size={16}/> <span className="normal-case">Export the whole tournament as a PDF ({trip.days.length} day{trip.days.length > 1 ? 's' : ''})</span>
+        </button>
       </div>
 
       {open && (
@@ -1557,9 +1560,17 @@ ${recap.teamResults.filter((t:any)=>t.tot>0).length>0?'<div class="section"><div
  >
  {exportingId === arch.id
  ? <><Loader2 size={13} className="animate-spin text-emerald-400"/> Exporting...</>
- : <><FileDown size={13}/> Export PDF</>
+ : <><FileDown size={13}/> {arch._meta?.tripName && arch._meta?.mode !== 'match' ? 'Export this day' : 'Export PDF'}</>
  }
  </button>
+ {arch._meta?.tripName && arch._meta?.mode !== 'match' && (
+ <button
+ onClick={() => openTripExport(arch._meta.tripName, archives.filter((a: any) => a._meta?.tripName === arch._meta.tripName && a._meta?.mode !== 'match' && a.scores && Object.keys(a.scores).length > 0))}
+ className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-emerald-500 text-zinc-400 hover:text-emerald-400 px-3 py-2 rounded-xl font-black text-xs transition-all"
+ >
+ <FileDown size={13}/> Export whole tournament
+ </button>
+ )}
  {canDelete && (confirmDeleteId === arch.id ? (
  <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/40 rounded-xl px-3 py-1.5">
  <span className="text-[10px] font-black text-rose-400">DELETE THIS ROUND?</span>
@@ -1953,7 +1964,7 @@ return (
  <Archive size={48} className="mx-auto mb-4 text-zinc-800"/>
  <p className="text-zinc-600 font-black text-lg">NO HISTORY YET</p>
  <p className="text-zinc-700 text-xs font-black mt-2 tracking-widest normal-case">
- Use Admin → Archive to History after each round
+ Finish a day, or the whole tournament, in Tournament setup to save it here
  </p>
  </div>
  )}
