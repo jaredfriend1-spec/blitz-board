@@ -5,6 +5,7 @@ import { ref, onValue } from 'firebase/database'
 import { normalizeDraws, type DrawMap } from '@/lib/draws'
 import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users, Copy } from 'lucide-react'
 import Link from 'next/link'
+import { tournamentTeamStandings } from '@/lib/plan'
 
 export default function ResultsPage() {
   const [activeTab, setActiveTab] = useState<'INDIVIDUAL' | 'TEAM'>('INDIVIDUAL')
@@ -16,6 +17,20 @@ export default function ResultsPage() {
   const [mode, setMode] = useState('')
 
   const [draws, setDraws] = useState<DrawMap>({})
+
+  // Whole-tournament team prize (fixed dollars by finishing place). Only
+  // loaded when the money setup asks for it.
+  const byPlace = money.teamPayoutMode === 'places'
+  const [meta, setMeta] = useState<any>({})
+  const [plan, setPlan] = useState<any>(null)
+  const [history, setHistory] = useState<any>(null)
+  useEffect(() => {
+    if (!byPlace) return
+    const u1 = onValue(ref(db, 'tournament/meta'), snap => setMeta(snap.val() || {}))
+    const u2 = onValue(ref(db, 'tournament/plan'), snap => setPlan(snap.val()))
+    const u3 = onValue(ref(db, 'history'), snap => setHistory(snap.val()))
+    return () => { u1(); u2(); u3() }
+  }, [byPlace])
 
   // A drawn card belongs to someone else — label it wherever a name appears.
   const DrawBadge = ({ id }: { id: string }) => {
@@ -31,7 +46,7 @@ export default function ResultsPage() {
 
   useEffect(() => {
     onValue(ref(db, 'tournament/meta'), snap => setMode(snap.val()?.mode || ''))
-    onValue(ref(db, 'tournament/scores'), snap => snap.val() && setScores(snap.val()))
+    onValue(ref(db, 'tournament/scores'), snap => setScores(snap.val() || {}))
     onValue(ref(db, 'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
     onValue(ref(db, 'tournament/draws'), snap => setDraws(normalizeDraws(snap.val())))
     onValue(ref(db, 'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
@@ -151,7 +166,8 @@ export default function ResultsPage() {
     const activePlayerIds = new Set<string>()
     teams.forEach(t => (t.playerIds || []).forEach((id: string) => activePlayerIds.add(id)))
     const totalTeamPot = activePlayerIds.size * ((money.entryFee || 0) - (money.skinsAllocation || 0))
-    const sidePot = totalTeamPot / 2
+    // With a whole-tournament prize there is no daily front/back money.
+    const sidePot = byPlace ? 0 : totalTeamPot / 2
 
     const teamScores = teams.map(t => {
       const pIds = t.playerIds || []
@@ -212,6 +228,13 @@ export default function ResultsPage() {
   const holeOffset = nineHoleDisplay && course.nineHoleStart === 'back' ? 9 : 0
   const ind = getIndividualResults()
   const tm = getTeamResults()
+  const trip = byPlace
+    ? tournamentTeamStandings(
+        { meta, plan, course, scores, teams: Object.fromEntries(teams.map((t: any) => [t.id, t])) },
+        history, money.placePayouts || [])
+    : null
+  const fmtPar = (n: number) => n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`
+  const tripDone = meta.status === 'complete'
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8">
@@ -403,16 +426,58 @@ export default function ResultsPage() {
               <span className="text-3xl font-bold text-blue-400">${tm.totalTeamPot}</span>
             </div>
 
+            {/* Whole-tournament team prize */}
+            {trip && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="bg-blue-600/20 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
+                  <span className="font-semibold text-sm text-blue-400">Tournament Team Standings</span>
+                  <span className="text-zinc-500 text-xs">{tripDone ? 'Final' : trip.dayLabels.length ? `Through ${trip.dayLabels[trip.dayLabels.length - 1]}` : 'No scores yet'}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[10px] text-zinc-500 font-semibold">
+                        <th className="text-left px-4 py-2.5">Team</th>
+                        {trip.dayLabels.map(d => <th key={d} className="px-2 py-2.5 text-center whitespace-nowrap">{d}</th>)}
+                        <th className="px-2 py-2.5 text-center">Total</th>
+                        <th className="px-2 py-2.5 text-center">To Par</th>
+                        <th className="px-4 py-2.5 text-right">{tripDone ? 'Wins' : 'In line for'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trip.standings.map(t => (
+                        <tr key={t.id} className={`border-t border-zinc-800 ${t.payout > 0 ? 'bg-blue-500/5' : ''}`}>
+                          <td className="px-4 py-3 font-semibold whitespace-nowrap">
+                            <span className="inline-block w-7 text-zinc-500 text-xs">{t.rank ? `${t.tied ? 'T' : ''}${t.rank}` : '—'}</span>
+                            {t.name}
+                          </td>
+                          {trip.dayLabels.map(d => (
+                            <td key={d} className="px-2 py-3 text-center text-zinc-400">{t.days[d] ? t.days[d].total : '—'}</td>
+                          ))}
+                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{t.holes ? t.total : '—'}</td>
+                          <td className="px-2 py-3 text-center font-bold text-zinc-300">{t.holes ? fmtPar(t.toPar) : '—'}</td>
+                          <td className="px-4 py-3 text-right font-bold text-blue-400">{t.payout > 0 ? `$${Number.isInteger(t.payout) ? t.payout : t.payout.toFixed(2)}` : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="px-5 py-3 border-t border-zinc-800 text-zinc-600 text-[11px] leading-snug">
+                  Every day's team score added together — the two lowest scores on each hole, three on par 3s. Ranked by score to par so a round in progress compares fairly. Ties split the prize money.
+                </p>
+              </div>
+            )}
+
             {/* Front 9 / Back 9 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
-                { title: 'Front 9', res: tm.f9Results, pot: tm.sidePot, key: 'f9' },
-                { title: 'Back 9', res: tm.b9Results, pot: tm.sidePot, key: 'b9' },
+                { title: byPlace ? 'Today · Front 9' : 'Front 9', res: tm.f9Results, pot: tm.sidePot, key: 'f9' },
+                { title: byPlace ? 'Today · Back 9' : 'Back 9', res: tm.b9Results, pot: tm.sidePot, key: 'b9' },
               ].map(half => (
                 <div key={half.title} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                   <div className="bg-blue-600/20 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
                     <span className="font-semibold text-sm text-blue-400">{half.title}</span>
-                    <span className="text-zinc-500 text-xs">Side pot ${half.pot}</span>
+                    {!byPlace && <span className="text-zinc-500 text-xs">Side pot ${half.pot}</span>}
                   </div>
                   <div className="p-4 space-y-2">
                     {half.res.map((t: any) => (

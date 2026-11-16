@@ -245,8 +245,8 @@ export default function PayoutsPage() {
 
  useEffect(() => {
  onValue(ref(db,'tournament/meta'), snap => { const m=snap.val()||{}; setActiveMode(m.mode||''); setIsMock(!!m.isMock) })
- onValue(ref(db,'tournament/scores'), snap => snap.val() && setScores(snap.val()))
- onValue(ref(db,'tournament/matchups'), snap => snap.val() && setMatches(Object.values(snap.val())))
+ onValue(ref(db,'tournament/scores'), snap => setScores(snap.val() || {}))
+ onValue(ref(db,'tournament/matchups'), snap => setMatches(snap.val() ? Object.values(snap.val()) : []))
  onValue(ref(db,'tournament/roster'), snap => snap.val() && setPlayers(Object.values(snap.val())))
  onValue(ref(db,'tournament/teams'), snap => snap.val() && setTeams(Object.values(snap.val())))
  onValue(ref(db,'tournament/course'), snap => snap.val() && setCourse(snap.val()))

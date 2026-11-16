@@ -32,10 +32,11 @@ export default function SetupCenter() {
   }, [unlocked])
 
   useEffect(() => {
-    setStepsComplete([tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length)
+    setStepsComplete([tripReady,courseReady,rosterReady,moneyReady].filter(Boolean).length)
   }, [tripReady,courseReady,rosterReady,moneyReady,matchupsReady])
 
-  const allDone = stepsComplete === 5
+  // Side bets are optional — four steps are required to go live.
+  const allDone = stepsComplete === 4
 
   const quickLinks = [
     { title:"Trip & Days", icon:<Flag size={20}/>, href:"/setup/admin", done:tripReady, color:"text-zinc-400" },
@@ -88,16 +89,16 @@ export default function SetupCenter() {
               <ChevronRight size={24} className={`mt-1 transition-transform group-hover:translate-x-1 ${allDone?'text-emerald-400':'text-zinc-600'}`}/>
             </div>
             <div className="bg-zinc-800 rounded-full h-2 mb-3 overflow-hidden">
-              <div className={`h-full rounded-full transition-all duration-700 ${allDone?'bg-emerald-400':'bg-zinc-500'}`} style={{width:`${(stepsComplete/5)*100}%`}}/>
+              <div className={`h-full rounded-full transition-all duration-700 ${allDone?'bg-emerald-400':'bg-zinc-500'}`} style={{width:`${(stepsComplete/4)*100}%`}}/>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {[tripReady,courseReady,rosterReady,moneyReady,matchupsReady].map((done,i) => (
+                {[tripReady,courseReady,rosterReady,moneyReady].map((done,i) => (
                   <div key={i} className={done?'text-emerald-400':'text-zinc-700'}>
                     {done?<CheckCircle2 size={16}/>:<Circle size={16}/>}
                   </div>
                 ))}
-                <span className="text-xs font-black text-zinc-500 ml-1">{stepsComplete}/5 DONE</span>
+                <span className="text-xs font-black text-zinc-500 ml-1">{stepsComplete}/4 DONE</span>
               </div>
               {allDone && <span className="text-[10px] font-black text-emerald-400 tracking-widest flex items-center gap-1"><Play size={10}/> START TOURNAMENT</span>}
             </div>
@@ -117,7 +118,7 @@ export default function SetupCenter() {
                 <div>
                   <p className="font-black text-sm text-white leading-tight">{item.title}</p>
                   <p className={`text-[9px] font-black mt-1 tracking-wider ${item.done?'text-emerald-600':'text-zinc-600'}`}>
-                    {item.title==='Team Format'?"JEFF'S BLITZ DEFAULT":item.done?'CONFIGURED ✓':'NOT SET'}
+                    {item.title==='Team Format'?"JEFF'S BLITZ DEFAULT":item.done?'CONFIGURED ✓':item.title==='Side Bets'?'OPTIONAL':'NOT SET'}
                   </p>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import { ref, set, onValue, push } from 'firebase/database'
 import { ArrowLeft, User, Users, Sword, Trash2, Save, Target, Zap, ZapOff, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { HcpPercentSelector, NetSkinsToggle, SkinsSplitSelector } from '@/components/HcpPercentSelector'
+import { dayPath } from '@/lib/plan'
 
 type MatchType = 'PvP' | '2v2' | 'TvT' | 'Wheel'
 
@@ -35,8 +36,23 @@ export default function MatchupCenter() {
  const [isBuilding, setIsBuilding] = useState<MatchType|null>(null)
  const [newMatch, setNewMatch] = useState({...DEFAULT_MATCH})
 
+ // ?day=Day 3 plans that day's side matches ahead of time. With no day in
+ // the link this page edits the day in play, exactly as before.
+ const [planDay, setPlanDay] = useState<string|null>(null)
+ const [currentDay, setCurrentDay] = useState<string|null|undefined>(undefined)
  useEffect(() => {
- onValue(ref(db,'tournament/matchups'), snap => setMatches(snap.val() ? Object.values(snap.val()) : []))
+ setPlanDay(new URLSearchParams(window.location.search).get('day'))
+ return onValue(ref(db,'tournament/meta'), snap => setCurrentDay(snap.val()?.currentDay || null))
+ }, [])
+ const matchupsPath = planDay ? dayPath(planDay, currentDay, 'matchups') : 'tournament/matchups'
+ const planningAhead = !!planDay && planDay !== currentDay
+
+ useEffect(() => {
+ if (currentDay === undefined) return
+ return onValue(ref(db, matchupsPath), snap => setMatches(snap.val() ? Object.values(snap.val()) : []))
+ }, [matchupsPath, currentDay])
+
+ useEffect(() => {
  onValue(ref(db,'tournament/roster'), snap => setPlayers(snap.val() ? Object.values(snap.val()) : []))
  onValue(ref(db,'tournament/teams'), snap => setTeams(snap.val() ? Object.values(snap.val()) : []))
  }, [])
@@ -46,17 +62,17 @@ export default function MatchupCenter() {
  const filled = newMatch.wheelPlayers.filter(Boolean)
  if (filled.length !== 4) return alert("SELECT ALL 4 PLAYERS FOR THE WHEEL")
  if (new Set(filled).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
- const mRef = push(ref(db,'tournament/matchups'))
+ const mRef = push(ref(db, matchupsPath))
  set(mRef, { id: mRef.key, type: 'Wheel', wheelPlayers: newMatch.wheelPlayers, wheelAmount: newMatch.wheelAmount, scoringType: newMatch.scoringType, wheelFormat: newMatch.wheelFormat, wheelNassau: newMatch.wheelNassau, wheelPress: newMatch.wheelPress, wheelAutoPress: newMatch.wheelAutoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  } else if (isBuilding === '2v2') {
  const picks = [newMatch.sideA, newMatch.sideA2, newMatch.sideB, newMatch.sideB2]
  if (picks.some(p => !p)) return alert("SELECT ALL 4 PLAYERS")
  if (new Set(picks).size !== 4) return alert("ALL 4 PLAYERS MUST BE DIFFERENT")
- const mRef = push(ref(db,'tournament/matchups'))
+ const mRef = push(ref(db, matchupsPath))
  set(mRef, { id: mRef.key, type: '2v2', sideA: newMatch.sideA, sideA2: newMatch.sideA2, sideB: newMatch.sideB, sideB2: newMatch.sideB2, nassau: newMatch.nassauF9, nassauF9: newMatch.nassauF9, nassauB9: newMatch.nassauB9, nassauOverall: newMatch.nassauOverall, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  } else {
  if (!newMatch.sideA || !newMatch.sideB || newMatch.sideA === newMatch.sideB) return alert("SELECT TWO DISTINCT SIDES")
- const mRef = push(ref(db,'tournament/matchups'))
+ const mRef = push(ref(db, matchupsPath))
  set(mRef, { id: mRef.key, type: isBuilding, sideA: newMatch.sideA, sideB: newMatch.sideB, nassau: newMatch.nassauF9, nassauF9: newMatch.nassauF9, nassauB9: newMatch.nassauB9, nassauOverall: newMatch.nassauOverall, press: newMatch.press, birdie: newMatch.birdie, eagle: newMatch.eagle, scoringType: newMatch.scoringType, autoPress: newMatch.autoPress, handicapPercent: newMatch.handicapPercent, netSkinsEnabled: newMatch.netSkinsEnabled, skinsSplitGross: newMatch.skinsSplitGross, skinsSplitNet: newMatch.skinsSplitNet, doSkins: newMatch.doSkins, skinsAmount: newMatch.skinsAmount })
  }
  setIsBuilding(null)
@@ -64,7 +80,7 @@ export default function MatchupCenter() {
  }
 
  const deleteMatch = (id: string) => {
- if (confirm("DELETE THIS MATCHUP?")) set(ref(db,`tournament/matchups/${id}`), null)
+ if (confirm("DELETE THIS MATCHUP?")) set(ref(db,`${matchupsPath}/${id}`), null)
  }
 
  const isPvPLike = isBuilding === 'PvP' || isBuilding === '2v2'
@@ -74,9 +90,17 @@ export default function MatchupCenter() {
 
  return (
  <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans">
- <Link href="/setup/admin"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
- <ArrowLeft size={18}/> CHECKLIST
+ <Link href={planDay ? `/setup/day?day=${encodeURIComponent(planDay)}` : '/setup/admin'} className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
+ <ArrowLeft size={18}/> {planDay ? planDay.toUpperCase() + ' PLAN' : 'CHECKLIST'}
  </Link>
+
+ {planDay && (
+ <div className={`max-w-5xl mx-auto mb-6 rounded-2xl border px-4 py-3 text-xs font-black ${planningAhead?'border-blue-500/40 bg-blue-500/10 text-blue-400':'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'}`}>
+ {planningAhead
+ ? `PLANNING AHEAD · THESE SIDE MATCHES ARE SAVED FOR ${planDay.toUpperCase()} AND GO LIVE WHEN THAT DAY IS OPENED`
+ : `${planDay.toUpperCase()} IS OPEN FOR SCORING · THESE SIDE MATCHES ARE LIVE NOW`}
+ </div>
+ )}
 
  <div className="max-w-5xl mx-auto space-y-10">
 

@@ -13,7 +13,12 @@ export default function MoneySetup() {
  netSkinsEnabled: false,
  skinsSplitGross: 100,
  skinsSplitNet: 0,
+ // 'split'  = each day's team pot, half front nine / half back nine, 60/40
+ // 'places' = one pot for the whole tournament, fixed dollars by finish
+ teamPayoutMode: 'split' as 'split' | 'places',
+ placePayouts: [0, 0, 0, 0] as number[],
  })
+ const [teamCount, setTeamCount] = useState(0)
  const [fieldSize, setFieldSize] = useState(0)
  const [saved, setSaved] = useState(false)
 
@@ -24,6 +29,7 @@ export default function MoneySetup() {
  const ids = new Set()
  Object.values(snap.val()).forEach((t: any) => (t.playerIds || []).forEach((id: string) => ids.add(id)))
  setFieldSize(ids.size)
+ setTeamCount(Object.keys(snap.val()).length)
  }
  })
  }, [])
@@ -34,10 +40,16 @@ export default function MoneySetup() {
  const grossSkinsPot = money.netSkinsEnabled ? Math.round(skinsPot * (money.skinsSplitGross / 100) * 100) / 100 : skinsPot
  const netSkinsPot = money.netSkinsEnabled ? Math.round(skinsPot * (money.skinsSplitNet / 100) * 100) / 100 : 0
  const hasError = money.skinsAllocation > money.entryFee
+ const byPlace = money.teamPayoutMode === 'places'
+ const places = Math.max(2, Math.min(8, teamCount || 4))
+ const placeList: number[] = Array.from({ length: places }, (_, i) => Number(money.placePayouts?.[i]) || 0)
+ const placeTotal = placeList.reduce((a, b) => a + b, 0)
+ const potGap = totalTeamPot - placeTotal
+ const ORD = ['1ST', '2ND', '3RD', '4TH', '5TH', '6TH', '7TH', '8TH']
 
  const save = async () => {
  if (hasError) return
- await set(ref(db, 'tournament/money'), money)
+ await set(ref(db, 'tournament/money'), byPlace ? { ...money, placePayouts: placeList } : money)
  setSaved(true)
  setTimeout(() => setSaved(false), 3000)
  }
@@ -150,6 +162,48 @@ export default function MoneySetup() {
  <div className="text-[9px] opacity-75 mt-0.5">{preset.g}% / {preset.n}%</div>
  </button>
  ))}
+ </div>
+ </div>
+ )}
+ </div>
+
+ {/* ── TEAM POT PAYOUT ── */}
+ <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 space-y-4">
+ <div>
+ <label className="text-zinc-400 font-black text-sm tracking-widest block">TEAM POT PAYOUT</label>
+ <p className="text-zinc-600 text-[10px] font-black normal-case mt-0.5">How the team money is paid out</p>
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <button onClick={() => setMoney({...money, teamPayoutMode: 'split'})}
+ className={`py-3 px-2 rounded-xl font-black text-xs transition-all ${!byPlace ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ <div>EACH DAY</div>
+ <div className="text-[9px] opacity-75 mt-0.5 normal-case">Front 9 / Back 9 · 60/40</div>
+ </button>
+ <button onClick={() => setMoney({...money, teamPayoutMode: 'places'})}
+ className={`py-3 px-2 rounded-xl font-black text-xs transition-all ${byPlace ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+ <div>WHOLE TOURNAMENT</div>
+ <div className="text-[9px] opacity-75 mt-0.5 normal-case">Fixed $ by finishing place</div>
+ </button>
+ </div>
+
+ {byPlace && (
+ <div className="space-y-3">
+ <p className="text-zinc-500 text-[11px] font-black normal-case leading-snug">
+ The entry fee is paid once for the whole tournament. Teams are ranked on their combined score across every day, and these amounts are paid at the end.
+ </p>
+ <div className="grid grid-cols-2 gap-3">
+ {placeList.map((amt, i) => (
+ <div key={i}>
+ <label className="text-[10px] font-black text-zinc-500 tracking-widest block mb-1">{ORD[i]} PLACE ($)</label>
+ <input type="number" value={amt || ''} placeholder="0"
+ onChange={e => { const next = [...placeList]; next[i] = Number(e.target.value) || 0; setMoney({...money, placePayouts: next}) }}
+ className="w-full bg-black border border-zinc-700 focus:border-blue-500 p-3 rounded-xl font-black text-blue-400 text-xl outline-none transition-colors"/>
+ </div>
+ ))}
+ </div>
+ <div className={`flex items-center justify-between text-xs font-black rounded-xl px-3 py-2.5 border ${potGap === 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/40 bg-amber-500/10 text-amber-400'}`}>
+ <span className="normal-case">Paying out ${placeTotal} of the ${totalTeamPot > 0 ? totalTeamPot : 0} team pot</span>
+ <span>{potGap === 0 ? '✓ MATCHES' : potGap > 0 ? `$${potGap} LEFT OVER` : `$${-potGap} SHORT`}</span>
  </div>
  </div>
  )}

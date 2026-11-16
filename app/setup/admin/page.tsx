@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, get, onValue } from 'firebase/database'
+import { ref, set, get, update, onValue } from 'firebase/database'
+import { DAY_LABELS, afterCloseUpdates, openDayUpdates, archivedDayLabels } from '@/lib/plan'
 import {
  ArrowLeft, CheckCircle2, Circle, ChevronRight, Flag, Users,
  DollarSign, Sword, Loader2, Archive, Trash2, Play, ShieldAlert,
@@ -9,7 +10,6 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7','Day 8']
 const MAX_DAYS = DAY_LABELS.length
 
 export default function AdminWizard() {
@@ -23,7 +23,10 @@ export default function AdminWizard() {
  const [formatCustom, setFormatCustom] = useState(false)
  const [matchupCount, setMatchupCount] = useState(0)
  const [hasAnyData, setHasAnyData] = useState(false)
- const [archivedDays, setArchivedDays] = useState<string[]>([])
+ const [history, setHistory] = useState<any>(null)
+ const [plan, setPlan] = useState<any>({})
+ const [pairingCount, setPairingCount] = useState(0)
+ const [openingDay, setOpeningDay] = useState<string|null>(null)
 
  const [editingTrip, setEditingTrip] = useState(false)
  const [tripNameInput, setTripNameInput] = useState('')
@@ -71,13 +74,13 @@ export default function AdminWizard() {
  })
  onValue(ref(db,'tournament/matchups'), snap => setMatchupCount(snap.val() ? Object.keys(snap.val()).length : 0))
  onValue(ref(db,'tournament'), snap => setHasAnyData(!!snap.val()))
- onValue(ref(db,'history'), snap => {
- if (!snap.val()) { setArchivedDays([]); return }
- const days: string[] = []
- Object.values(snap.val()).forEach((h:any) => { if (h._meta?.dayLabel) days.push(h._meta.dayLabel) })
- setArchivedDays(days)
- })
+ onValue(ref(db,'history'), snap => setHistory(snap.val()))
+ onValue(ref(db,'tournament/plan'), snap => setPlan(snap.val() || {}))
+ onValue(ref(db,'tournament/pairings'), snap => setPairingCount(snap.val() ? Object.keys(snap.val()).length : 0))
  }, [])
+
+ // Only this trip's archived days — History also holds earlier tournaments.
+ const archivedDays = archivedDayLabels(history, meta)
 
  const flash = (msg:string) => { setActionMsg(msg); setTimeout(()=>setActionMsg(null), 5000) }
 
@@ -106,6 +109,8 @@ export default function AdminWizard() {
  tripName: tripNameInput.trim(),
  totalDays: totalDaysInput,
  currentDay: meta.currentDay || 'Day 1',
+ // Ties this trip's archived days together, even if a trip name is reused.
+ tripId: meta.tripId || String(Date.now()),
  isMock: false,
  })
  setEditingTrip(false)
@@ -155,7 +160,10 @@ export default function AdminWizard() {
  setCloseStep('Reading live tournament…')
  const snap = await get(ref(db,'tournament'))
  if (!snap.exists()) throw new Error('No live tournament found. Nothing to archive.')
- const payload = snap.val()
+ const live = snap.val()
+ // The other days' plans stay with the live tournament, not in this day's archive.
+ const { plan: _otherDays, ...payload } = live
+ const tripId = meta.tripId || String(Date.now())
  const liveCards = Object.keys(payload.scores || {}).length
  if (liveCards === 0) throw new Error('No scorecards found. Refusing to archive an empty day.')
 
@@ -164,6 +172,7 @@ export default function AdminWizard() {
  ...payload,
  _meta: {
  tripName: meta.tripName || 'Unnamed Trip',
+ tripId,
  dayLabel: currentDay,
  dayNumber: idx + 1,
  totalDays: meta.totalDays || 1,
@@ -189,26 +198,27 @@ export default function AdminWizard() {
  )
  }
 
- setCloseStep('Verified. Clearing the day…')
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
+ const nextDay = isFinal ? null : DAY_LABELS[idx + 1]
+ if (!isFinal && !nextDay) throw new Error(`No day slot beyond ${currentDay}.`)
+
+ // Clear the closed day and bring the next day's course, pairings and
+ // side matches live in one write.
+ setCloseStep(nextDay ? `Verified. Loading ${nextDay}…` : 'Verified. Clearing the day…')
+ await update(ref(db,'tournament'), afterCloseUpdates(live, nextDay))
 
  if (isFinal) {
  await set(ref(db,'tournament/meta'), {
- ...meta, mode:'tournament', isMock:false,
+ ...meta, tripId, mode:'tournament', isMock:false,
  status:'complete', completedAt: archiveId, currentDay: null,
  })
  setCloseDone({ mode:'end', day: currentDay, cards: savedCards })
  } else {
- const nextDay = DAY_LABELS[idx + 1]
- if (!nextDay) throw new Error(`No day slot beyond ${currentDay}.`)
  await set(ref(db,'tournament/meta'), {
- ...meta, mode:'tournament', isMock:false, status:'active',
+ ...meta, tripId, mode:'tournament', isMock:false, status:'active',
  totalDays: Math.max(meta.totalDays || 1, idx + 2),
  currentDay: nextDay,
  })
- setCloseDone({ mode:'next', day: currentDay, next: nextDay, cards: savedCards })
+ setCloseDone({ mode:'next', day: currentDay, next: nextDay, cards: savedCards, nextCourse: live.plan?.[nextDay as string]?.course?.name || null })
  }
  setCloseStep(null)
  } catch (e:any) {
@@ -219,6 +229,25 @@ export default function AdminWizard() {
  }
  }
 
+ // Park the day in play (scores included) and bring another day live.
+ // Nothing is archived or deleted, so days can be opened in any order.
+ const openDay = async (day: string) => {
+ const cur = meta.currentDay
+ if (!confirm(`Open ${day} for scoring?\n\n${cur ? `${cur} is saved exactly as it is — scores, pairings and side matches — and can be reopened any time.\n\n` : ''}The scorer, results and payouts will switch to ${day}.`)) return
+ setOpeningDay(day)
+ try {
+ const snap = await get(ref(db,'tournament'))
+ const u = openDayUpdates(snap.val() || {}, day)
+ if (Object.keys(u).length) await update(ref(db,'tournament'), u)
+ flash(`✓ ${day} is now open for scoring.`)
+ } catch (e:any) {
+ const m = String(e?.message || e)
+ flash(/permission|PERMISSION_DENIED/i.test(m) ? 'Permission denied — sign out, sign back in, and try again.' : `Could not open ${day}: ${m}`)
+ } finally {
+ setOpeningDay(null)
+ }
+ }
+
  // Only reachable once a trip is marked complete.
  const startNewTournament = async () => {
  if (!confirm("Start a brand new tournament?\n\nKeeps roster and course. Clears trip, teams, matchups and scores.")) return
@@ -226,6 +255,8 @@ export default function AdminWizard() {
  await set(ref(db,'tournament/scores'), null)
  await set(ref(db,'tournament/matchups'), null)
  await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
+ await set(ref(db,'tournament/pairings'), null)
+ await set(ref(db,'tournament/plan'), null)
  await set(ref(db,'tournament/teams'), null)
  await set(ref(db,'tournament/meta'), null)
  flash("✓ Ready for a fresh tournament.")
@@ -237,8 +268,9 @@ export default function AdminWizard() {
  const rosterReady = playerCount > 0 && teamCount > 0 && teamsHavePlayers
  const moneyReady = moneySet
  const matchupsReady = matchupCount > 0
- const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length
- const allComplete = tripReady && courseReady && rosterReady && moneyReady && matchupsReady
+ // Side matches are optional — a day can go live without any.
+ const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady].filter(Boolean).length
+ const allComplete = tripReady && courseReady && rosterReady && moneyReady
  const currentDayIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
  const tripComplete = meta.status === 'complete'
  const hasMoreDaysConfigured = (currentDayIdx + 1) < (meta.totalDays || 1)
@@ -340,7 +372,7 @@ export default function AdminWizard() {
  {closeDone.mode === 'next' ? (
  <p className="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
  {closeDone.next?.toUpperCase()} IS NOW ACTIVE.<br/>
- <span className="text-zinc-500">Set up matchups, then go live.</span>
+ <span className="text-zinc-500">{closeDone.nextCourse ? `Course: ${closeDone.nextCourse}. ` : ''}Its planned pairings and side matches are loaded.</span>
  </p>
  ) : (
  <p className="text-xs font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
@@ -445,10 +477,10 @@ export default function AdminWizard() {
 
  {/* Progress */}
  <div className="bg-zinc-900 rounded-full h-2 overflow-hidden">
- <div className="h-full bg-emerald-500 transition-all duration-700" style={{width:`${(stepsComplete/5)*100}%`}}/>
+ <div className="h-full bg-emerald-500 transition-all duration-700" style={{width:`${(stepsComplete/4)*100}%`}}/>
  </div>
  <div className="flex justify-between text-[9px] font-black text-zinc-600 tracking-widest px-0.5">
- <span>SETUP PROGRESS</span><span>{stepsComplete} / 5 COMPLETE</span>
+ <span>SETUP PROGRESS</span><span>{stepsComplete} / 4 REQUIRED</span>
  </div>
 
  {/* ── STEP 1: TRIP ── */}
@@ -491,28 +523,6 @@ export default function AdminWizard() {
  </div>
  <button onClick={()=>setEditingTrip(true)} className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></button>
  </div>
- {meta.totalDays > 1 && (
- <div>
- <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TOURNAMENT DAYS</p>
- <div className="flex gap-2 flex-wrap">
- {Array.from({length:meta.totalDays},(_,i) => {
- const dayLabel = DAY_LABELS[i]
- const isArchived = archivedDays.includes(dayLabel)
- const isCurrent = meta.currentDay === dayLabel
- return (
- <div key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-xs ${
- isArchived?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':
- isCurrent?'border-blue-500/50 bg-blue-500/10 text-blue-400':
- 'border-zinc-800 bg-black text-zinc-600'}`}>
- {isArchived?<CheckCircle2 size={12}/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>:<Circle size={12}/>}
- {dayLabel}
- {isCurrent && <span className="text-[9px]">← NOW</span>}
- </div>
- )
- })}
- </div>
- </div>
- )}
  {canGoNextDay && (
  <button onClick={openClose} disabled={transitioningDay}
  className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
@@ -531,8 +541,69 @@ export default function AdminWizard() {
  )}
  </StepCard>
 
+ {/* ── DAY PLANNER ── */}
+ {tripReady && !tripComplete && (
+ <div className="rounded-[1.75rem] border-2 border-blue-500/30 bg-zinc-950 overflow-hidden">
+ <div className="px-5 py-4 flex items-center gap-4 border-b border-blue-500/20">
+ <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-400 flex-shrink-0"><Calendar size={16}/></div>
+ <div className="flex-1 min-w-0">
+ <div className="font-black text-sm text-blue-400">Day Planner</div>
+ <div className="text-[10px] font-black text-zinc-600 tracking-wider normal-case mt-0.5">Set each day's course, pairings and side matches ahead of time</div>
+ </div>
+ </div>
+ <div className="px-5 py-4 space-y-2">
+ {Array.from({length: meta.totalDays || 1}, (_, i) => {
+ const day = DAY_LABELS[i]
+ const isArchived = archivedDays.includes(day)
+ const isCurrent = meta.currentDay === day
+ const d = plan?.[day] || {}
+ const cName = isCurrent ? course?.name : d.course?.name
+ const groups = isCurrent ? pairingCount : (d.pairings ? Object.keys(d.pairings).length : 0)
+ const matches = isCurrent ? matchupCount : (d.matchups ? Object.keys(d.matchups).length : 0)
+ const hasScores = !isCurrent && d.scores && Object.keys(d.scores).length > 0
+ return (
+ <div key={day} className={`rounded-2xl border p-3.5 ${isArchived?'border-emerald-500/30 bg-emerald-500/5':isCurrent?'border-blue-500/50 bg-blue-500/10':'border-zinc-800 bg-black'}`}>
+ <div className="flex items-center justify-between gap-2">
+ <div className="flex items-center gap-2 min-w-0">
+ {isArchived?<CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0"/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0"/>:<Circle size={14} className="text-zinc-600 flex-shrink-0"/>}
+ <span className={`font-black text-sm ${isArchived?'text-emerald-400':isCurrent?'text-blue-400':'text-zinc-300'}`}>{day}</span>
+ <span className="text-[9px] font-black tracking-widest text-zinc-600">
+ {isArchived?'CLOSED · IN HISTORY':isCurrent?'OPEN FOR SCORING':hasScores?'PAUSED · SCORES SAVED':'PLANNED'}
+ </span>
+ </div>
+ {!isArchived && (
+ <div className="flex items-center gap-2 flex-shrink-0">
+ {!isCurrent && (
+ <button onClick={()=>openDay(day)} disabled={!!openingDay}
+ className="text-[10px] font-black text-blue-400 border border-blue-500/40 hover:bg-blue-500/20 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+ {openingDay===day?<Loader2 size={11} className="animate-spin"/>:<Play size={11}/>} OPEN
+ </button>
+ )}
+ <Link href={`/setup/day?day=${encodeURIComponent(day)}`}
+ className="text-[10px] font-black text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/20 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+ PLAN <ChevronRight size={11}/>
+ </Link>
+ </div>
+ )}
+ </div>
+ {!isArchived && (
+ <p className="text-[10px] font-black text-zinc-500 mt-2 normal-case">
+ <span className={cName?'text-zinc-300':'text-amber-500'}>{cName || 'No course picked'}</span>
+ {' · '}{groups} group{groups===1?'':'s'}{' · '}{matches} side match{matches===1?'':'es'}
+ </p>
+ )}
+ </div>
+ )
+ })}
+ <p className="text-[9px] font-black text-zinc-700 leading-relaxed pt-1">
+ OPENING A DAY SAVES THE DAY IN PLAY AND SWITCHES SCORING TO THE NEW ONE. NOTHING IS LOST — CLOSE A DAY ONLY WHEN IT IS FINAL.
+ </p>
+ </div>
+ </div>
+ )}
+
  {/* ── STEP 2: COURSE ── */}
- <StepCard number={2} title="Course Setup" icon={<Flag size={18}/>} status={courseReady?'complete':'empty'} summary={courseReady?`${course?.name} · Par ${(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)}`:'No course set'}>
+ <StepCard number={2} title={meta.currentDay && (meta.totalDays||1) > 1 ? `Course · ${meta.currentDay}` : 'Course Setup'} icon={<Flag size={18}/>} status={courseReady?'complete':'empty'} summary={courseReady?`${course?.name} · Par ${(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)}`:'No course set'}>
  {courseReady ? (
  <div className="flex items-center justify-between">
  <div><div className="text-white font-black">{course?.name}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">Par {(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes</div></div>
@@ -582,7 +653,7 @@ export default function AdminWizard() {
  </StepCard>
 
  {/* ── STEP 6: MATCHUPS ── */}
- <StepCard number={6} title="Side Bets & Matches" icon={<Sword size={18}/>} status={matchupsReady?'complete':'empty'} summary={matchupsReady?`${matchupCount} match${matchupCount>1?'es':''} configured`:'No matches set up'}>
+ <StepCard number={6} title={meta.currentDay && (meta.totalDays||1) > 1 ? `Side Bets & Matches · ${meta.currentDay}` : 'Side Bets & Matches'} icon={<Sword size={18}/>} status={matchupsReady?'complete':'empty'} summary={matchupsReady?`${matchupCount} match${matchupCount>1?'es':''} configured`:'Optional — none set up'}>
  {matchupsReady ? (
  <div className="flex items-center justify-between">
  <div className="text-white font-black text-sm">{matchupCount} match{matchupCount>1?'es':''} configured</div>
@@ -590,7 +661,7 @@ export default function AdminWizard() {
  </div>
  ) : (
  <Link href="/setup/matchups" className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Sword size={14}/> SET UP MATCHES</span><ChevronRight size={14}/>
+ <span className="flex items-center gap-2"><Sword size={14}/> ADD MATCHES (OPTIONAL)</span><ChevronRight size={14}/>
  </Link>
  )}
  </StepCard>
@@ -603,7 +674,7 @@ export default function AdminWizard() {
  </div>
  <div>
  <h3 className={`font-black text-base ${allComplete?'text-emerald-400':'text-zinc-600'}`}>GO LIVE</h3>
- <p className="text-[10px] font-black text-zinc-600 tracking-wider">{allComplete?'All set · Ready to start scoring':'Complete steps 1–6 above'}</p>
+ <p className="text-[10px] font-black text-zinc-600 tracking-wider">{allComplete?'All set · Ready to start scoring':'Complete trip, course, roster and money above'}</p>
  </div>
  </div>
  <Link href="/scorer" className={`w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-xl ${allComplete?'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20':'bg-zinc-800 text-zinc-600 pointer-events-none'}`}>
@@ -637,11 +708,13 @@ export default function AdminWizard() {
 
  <button disabled={destructiveBusy}
  onClick={()=>{
- if(!confirm("Reset the round?\n\nClears scores, teams, matchups and trip settings.\nKeeps the course and money settings so you can run it again.")) return
+ if(!confirm("Reset the round?\n\nClears scores, teams, pairings, matchups, every day's plan and trip settings.\nKeeps the course and money settings so you can run it again.")) return
  runDestructive('Round reset. Course and money settings kept.', async()=>{
  await set(ref(db,'tournament/scores'), null)
  await set(ref(db,'tournament/teams'), null)
  await set(ref(db,'tournament/matchups'), null)
+ await set(ref(db,'tournament/pairings'), null)
+ await set(ref(db,'tournament/plan'), null)
  await set(ref(db,'tournament/meta'), null)
  })
  }}
