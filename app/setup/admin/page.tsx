@@ -49,6 +49,12 @@ export default function TournamentSetup() {
   const [audit, setAudit] = useState<any>(null)
   const [playDate, setPlayDate] = useState('')
 
+  // Finish-tournament flow
+  const [showFinish, setShowFinish] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [finishStep, setFinishStep] = useState<string | null>(null)
+  const [finishError, setFinishError] = useState<string | null>(null)
+
   useEffect(() => {
     const u1 = onValue(ref(db, 'tournament'), snap => setT(snap.val() || {}))
     const u2 = onValue(ref(db, 'history'), snap => setHistory(snap.val()))
@@ -177,6 +183,75 @@ export default function TournamentSetup() {
     setShowClose(true)
   }
 
+  // Write one day to History and read it back. Throws — before anything
+  // live is touched — if the saved copy does not match.
+  const archiveDay = async (live: any, day: string, archiveId: number, tripId: string, isFinal: boolean, played: string) => {
+    const liveMeta = live.meta || {}
+    const d = dayData(live, day)
+    // The tournament-wide setup plus this one day. Other days stay out of it.
+    const { plan: _plan, course: _c, matchups: _m, pairings: _p, scores: _s, draws: _d, ...base } = live
+    const payload = { ...base, ...d, course: d.course || live.course || null }
+    const liveCards = Object.keys(payload.scores || {}).length
+    if (liveCards === 0) throw new Error(`${day} has no scores, so there is nothing to save.`)
+    const record = {
+      ...payload,
+      _meta: {
+        tripName: liveMeta.tripName || 'Unnamed Trip',
+        tripId,
+        dayLabel: day,
+        dayNumber: DAY_LABELS.indexOf(day) + 1,
+        totalDays: liveMeta.totalDays || 1,
+        archivedAt: archiveId,
+        playedAt: played ? new Date(played + 'T12:00:00').getTime() : archiveId,
+        isFinal,
+        formatName: payload.format?.name || null,
+        courseName: payload.course?.name || null,
+      },
+    }
+    await set(ref(db, `history/${archiveId}`), record)
+    const verify = (await get(ref(db, `history/${archiveId}`))).val()
+    const savedCards = Object.keys(verify?.scores || {}).length
+    if (!verify || savedCards !== liveCards || verify._meta?.dayLabel !== day) {
+      throw new Error(`The saved copy of ${day} did not match — ${savedCards} of ${liveCards} scorecards. Nothing was cleared and your scores are untouched. Try again.`)
+    }
+    return savedCards
+  }
+
+  // ── Finish the whole tournament ────────────────────────────────────
+  // Saves every day that has scores and is not finished yet, then marks the
+  // tournament complete. Each day is saved and checked before anything is
+  // cleared; if any one fails, the live tournament is left exactly as it was.
+  const finishTournament = async () => {
+    setFinishing(true); setFinishError(null)
+    try {
+      const snap = await get(ref(db, 'tournament'))
+      if (!snap.exists()) throw new Error('There is no tournament to finish.')
+      const live = snap.val()
+      const liveMeta = live.meta || {}
+      const already: string[] = Array.from(new Set([...archivedDays, ...(liveMeta.closedDays || [])]))
+      const toSave = DAY_LABELS.slice(0, liveMeta.totalDays || 1)
+        .filter(day => !already.includes(day) && Object.keys(dayData(live, day).scores || {}).length > 0)
+      const tripId = liveMeta.tripId || String(Date.now())
+      const stamp = Date.now()
+      const saved: string[] = []
+      for (let k = 0; k < toSave.length; k++) {
+        setFinishStep(`Saving ${toSave[k]} to History…`)
+        await archiveDay(live, toSave[k], stamp + k, tripId, k === toSave.length - 1, '')
+        saved.push(toSave[k])
+      }
+      setFinishStep('Finishing…')
+      await update(ref(db, 'tournament'), { scores: null, draws: null, matchups: null, pairings: null, plan: null })
+      await set(ref(db, 'tournament/meta'), {
+        ...liveMeta, tripId, mode: 'tournament', isMock: false,
+        closedDays: Array.from(new Set([...already, ...saved])),
+        status: 'complete', completedAt: stamp, currentDay: null,
+      })
+      setShowFinish(false)
+      say(saved.length ? `Tournament finished. ${saved.join(', ')} saved to History.` : 'Tournament finished.')
+    } catch (e) { setFinishError(explain(e)) }
+    finally { setFinishing(false); setFinishStep(null) }
+  }
+
   // endHere = also end the tournament, even if later days were never played
   const closeDay = async (endHere = false) => {
     const day = closeTarget
@@ -191,45 +266,14 @@ export default function TournamentSetup() {
       const live = snap.val()
       const liveMeta = live.meta || {}
       const isOpenDay = day === liveMeta.currentDay
-      const d = dayData(live, day)
-      // The tournament-wide setup plus this one day. Other days stay out of it.
-      const { plan: _plan, course: _c, matchups: _m, pairings: _p, scores: _s, draws: _d, ...base } = live
-      const payload = { ...base, ...d, course: d.course || live.course || null }
-      const tripId = liveMeta.tripId || String(Date.now())
-      const liveCards = Object.keys(payload.scores || {}).length
-      if (liveCards === 0) throw new Error(`${day} has no scores, so there is nothing to save.`)
-
       const closedDays: string[] = Array.from(new Set([...archivedDays, ...(liveMeta.closedDays || []), day]))
       const remaining = DAY_LABELS.slice(0, liveMeta.totalDays || 1).filter(x => !closedDays.includes(x))
       const tournamentOver = endHere || remaining.length === 0
-
+      const tripId = liveMeta.tripId || String(Date.now())
       const archiveId = Date.now()
-      const record = {
-        ...payload,
-        _meta: {
-          tripName: liveMeta.tripName || 'Unnamed Trip',
-          tripId,
-          dayLabel: day,
-          dayNumber: idx + 1,
-          totalDays: liveMeta.totalDays || 1,
-          archivedAt: archiveId,
-          playedAt: playDate ? new Date(playDate + 'T12:00:00').getTime() : archiveId,
-          isFinal: tournamentOver,
-          formatName: payload.format?.name || null,
-          courseName: payload.course?.name || null,
-        },
-      }
 
-      setCloseStep('Saving to History…')
-      await set(ref(db, `history/${archiveId}`), record)
-
-      // Read the archive back and prove it landed BEFORE clearing anything live.
-      setCloseStep('Checking the saved copy…')
-      const verify = (await get(ref(db, `history/${archiveId}`))).val()
-      const savedCards = Object.keys(verify?.scores || {}).length
-      if (!verify || savedCards !== liveCards || verify._meta?.dayLabel !== day) {
-        throw new Error(`The saved copy did not match — ${savedCards} of ${liveCards} scorecards. Nothing was cleared and your scores are untouched. Try again.`)
-      }
+      setCloseStep('Saving to History and checking the copy…')
+      const savedCards = await archiveDay(live, day, archiveId, tripId, tournamentOver, playDate)
 
       setCloseStep('Finishing…')
       const metaBase = { ...liveMeta, tripId, mode: 'tournament', isMock: false, closedDays }
@@ -341,6 +385,12 @@ export default function TournamentSetup() {
               <Link href="/scorer" className="bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2">
                 <Play size={15}/> Score {currentDay}
               </Link>
+              {dayRows.some(r => !r.isClosed && r.scored > 0) && (
+                <button onClick={() => { setFinishError(null); setShowFinish(true) }}
+                  className="border border-zinc-700 hover:border-zinc-500 text-zinc-300 px-4 py-2.5 rounded-xl font-semibold text-sm">
+                  Finish tournament
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -593,6 +643,54 @@ export default function TournamentSetup() {
           </div>
         )}
       </div>
+
+      {/* ── Finish-tournament dialog ── */}
+      {showFinish && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => { if (!finishing) setShowFinish(false) }}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="font-semibold text-lg">Finish the tournament</p>
+              <p className="text-sm text-zinc-500 mt-1">
+                Saves every day below to History in one go and marks the tournament finished. Scores are locked after this, so fix any mistakes first.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+              {dayRows.map(r => {
+                const a = !r.isClosed && r.scored > 0 ? runAudit(r.day) : null
+                return (
+                  <div key={r.day} className="px-4 py-3 flex items-start justify-between gap-3 text-sm">
+                    <span className="font-semibold">{r.day}</span>
+                    <span className={`text-right ${r.isClosed ? 'text-zinc-500' : !a ? 'text-zinc-500' : a.partial.length ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {r.isClosed ? 'Already in History'
+                        : !a ? 'No scores, will be skipped'
+                        : a.partial.length ? `Will be saved. ${a.partial.length} of ${a.total} scorecards not finished.`
+                        : `Will be saved. All ${a.total} scorecards complete.`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {finishError && <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-sm">{finishError}</div>}
+            {finishStep && <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 size={14} className="animate-spin"/> {finishStep}</div>}
+
+            <div className="space-y-2">
+              <button onClick={finishTournament} disabled={finishing}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black py-3.5 rounded-xl font-semibold text-sm">
+                Save to History and finish the tournament
+              </button>
+              <button onClick={() => setShowFinish(false)} disabled={finishing} className="w-full text-zinc-500 hover:text-zinc-300 py-2 text-sm">Cancel</button>
+            </div>
+
+            <p className="text-xs text-zinc-600 text-center leading-relaxed">
+              Each day is saved and checked before anything is cleared. If a check fails, your scores are left alone.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Finish-day dialog ── */}
       {showClose && closeTarget && (
