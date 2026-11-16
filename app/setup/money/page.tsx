@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase'
 import { ref, set, onValue } from 'firebase/database'
 import { ArrowLeft, DollarSign, Save, CheckCircle2, AlertTriangle, Users, Target, Zap } from 'lucide-react'
 import Link from 'next/link'
+import SetupBack from '@/components/SetupBack'
 
 export default function MoneySetup() {
  const [money, setMoney] = useState({
@@ -56,9 +57,7 @@ export default function MoneySetup() {
 
  return (
  <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans">
- <Link href="/setup/admin" className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors text-sm">
- <ArrowLeft size={16}/> CHECKLIST
- </Link>
+ <SetupBack here="Money"/>
 
  <div className="max-w-lg mx-auto space-y-6">
  <div>
@@ -238,9 +237,9 @@ export default function MoneySetup() {
  <Save size={18}/> Save Configuration
  </button>
 
- <Link href="/setup/admin"
+ <Link href="/setup"
  className="w-full text-center text-zinc-600 hover:text-zinc-400 text-sm font-black py-2 block transition-colors">
- ← Back without saving
+ Back to tournament setup without saving
  </Link>
  </div>
  </div>

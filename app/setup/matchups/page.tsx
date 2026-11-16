@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase'
 import { ref, set, onValue, push } from 'firebase/database'
 import { ArrowLeft, User, Users, Sword, Trash2, Save, Target, Zap, ZapOff, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
+import SetupBack from '@/components/SetupBack'
 import { HcpPercentSelector, NetSkinsToggle, SkinsSplitSelector } from '@/components/HcpPercentSelector'
 import { dayPath } from '@/lib/plan'
 
@@ -90,9 +91,7 @@ export default function MatchupCenter() {
 
  return (
  <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans">
- <Link href={planDay ? `/setup/day?day=${encodeURIComponent(planDay)}` : '/setup/admin'} className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
- <ArrowLeft size={18}/> {planDay ? planDay.toUpperCase() + ' PLAN' : 'CHECKLIST'}
- </Link>
+ <SetupBack here={planDay ? `${planDay} side matches` : 'Side matches'}/>
 
  {planDay && (
  <div className={`max-w-5xl mx-auto mb-6 rounded-2xl border px-4 py-3 text-xs font-black ${planningAhead?'border-blue-500/40 bg-blue-500/10 text-blue-400':'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'}`}>

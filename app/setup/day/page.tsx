@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { ref, set, get, update, onValue } from 'firebase/database'
-import { ArrowLeft, Play, Plus, Trash2, X, ChevronRight, CheckCircle2, Loader2 } from 'lucide-react'
+import { Play, Plus, Trash2, X, ChevronRight, CheckCircle2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import SetupBack from '@/components/SetupBack'
 import { DAY_LABELS, dayPath, dayData, openDayUpdates, archivedDayLabels } from '@/lib/plan'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -140,16 +141,8 @@ export default function DayPlan() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans">
-      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur border-b border-zinc-900">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link href="/setup/admin" className="text-emerald-400 font-semibold flex items-center gap-2 text-sm hover:text-emerald-300">
-            <ArrowLeft size={16}/> Tournament setup
-          </Link>
-          <span className="text-sm text-zinc-500">{meta.tripName || 'Day plan'}</span>
-        </div>
-      </div>
-
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-28 space-y-6">
+        <SetupBack here={`${day} course and pairings`}/>
 
         {/* Day tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1">

@@ -41,6 +41,7 @@ export default function TournamentSetup() {
 
   // Close-day flow
   const [showClose, setShowClose] = useState(false)
+  const [closeTarget, setCloseTarget] = useState<string | null>(null)   // the day being finished
   const [closing, setClosing] = useState(false)
   const [closeStep, setCloseStep] = useState<string | null>(null)
   const [closeError, setCloseError] = useState<string | null>(null)
@@ -145,62 +146,75 @@ export default function TournamentSetup() {
     finally { setOpeningDay(null) }
   }
 
-  // ── Close a day ────────────────────────────────────────────────────
+  // ── Finish a day ───────────────────────────────────────────────────
+  // Finishing saves a day to History as a permanent record and locks it.
+  // It is never needed to move on — any day can be opened at any time — so
+  // days can be finished in any order, whenever their scores are final.
+
   // Count how many holes each player has entered, so a half-scored day is
-  // never closed without the person closing it knowing.
-  const runAudit = async () => {
-    const holes = (t.course?.pars || []).length || 18
-    const scores = t.scores || {}
+  // never finished without the person finishing it knowing.
+  const runAudit = (day: string) => {
+    const d = dayData(t, day)
+    const holes = ((d.course || t.course)?.pars || []).length || 18
+    const scores = d.scores || {}
     const partial: string[] = []
     let complete = 0
     Object.entries(t.roster || {}).forEach(([pid, p]: any) => {
+      if (!fieldIds.has(pid) && fieldIds.size > 0) return
       const filled = (scores[pid] || []).filter((v: any) => v != null && v > 0).length
       if (filled >= holes) complete++
       else partial.push(`${p.name} (${filled}/${holes})`)
     })
-    return { complete, partial, total: Object.keys(t.roster || {}).length, holes }
+    return { complete, partial, total: complete + partial.length, holes }
   }
 
-  const openClose = async () => {
+  const openClose = (day: string) => {
     setCloseError(null); setCloseDone(null); setCloseStep(null)
-    setShowClose(true)
-    setAudit(null)
+    setCloseTarget(day)
     const now = new Date()
     setPlayDate(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10))
-    setAudit(await runAudit())
+    setAudit(runAudit(day))
+    setShowClose(true)
   }
 
-  // 'next' = close this day and open the following one (adding it if needed)
-  // 'end'  = close this day and finish the tournament
-  const closeDay = async (mode: 'next' | 'end') => {
+  // endHere = also end the tournament, even if later days were never played
+  const closeDay = async (endHere = false) => {
+    const day = closeTarget
+    if (!day) return
     setClosing(true); setCloseError(null)
     try {
-      const day = currentDay || 'Day 1'
       const idx = DAY_LABELS.indexOf(day)
-      const isFinal = mode === 'end'
 
       setCloseStep('Reading the day…')
       const snap = await get(ref(db, 'tournament'))
-      if (!snap.exists()) throw new Error('There is no tournament to close.')
+      if (!snap.exists()) throw new Error('There is no tournament to finish.')
       const live = snap.val()
-      // The other days' plans stay with the live tournament, not in this day's archive.
-      const { plan: _otherDays, ...payload } = live
-      const tripId = meta.tripId || String(Date.now())
+      const liveMeta = live.meta || {}
+      const isOpenDay = day === liveMeta.currentDay
+      const d = dayData(live, day)
+      // The tournament-wide setup plus this one day. Other days stay out of it.
+      const { plan: _plan, course: _c, matchups: _m, pairings: _p, scores: _s, draws: _d, ...base } = live
+      const payload = { ...base, ...d, course: d.course || live.course || null }
+      const tripId = liveMeta.tripId || String(Date.now())
       const liveCards = Object.keys(payload.scores || {}).length
-      if (liveCards === 0) throw new Error(`${day} has no scorecards, so there is nothing to close. Open another day instead.`)
+      if (liveCards === 0) throw new Error(`${day} has no scores, so there is nothing to save.`)
+
+      const closedDays: string[] = Array.from(new Set([...archivedDays, ...(liveMeta.closedDays || []), day]))
+      const remaining = DAY_LABELS.slice(0, liveMeta.totalDays || 1).filter(x => !closedDays.includes(x))
+      const tournamentOver = endHere || remaining.length === 0
 
       const archiveId = Date.now()
       const record = {
         ...payload,
         _meta: {
-          tripName: meta.tripName || 'Unnamed Trip',
+          tripName: liveMeta.tripName || 'Unnamed Trip',
           tripId,
           dayLabel: day,
           dayNumber: idx + 1,
-          totalDays: meta.totalDays || 1,
+          totalDays: liveMeta.totalDays || 1,
           archivedAt: archiveId,
           playedAt: playDate ? new Date(playDate + 'T12:00:00').getTime() : archiveId,
-          isFinal,
+          isFinal: tournamentOver,
           formatName: payload.format?.name || null,
           courseName: payload.course?.name || null,
         },
@@ -217,30 +231,24 @@ export default function TournamentSetup() {
         throw new Error(`The saved copy did not match — ${savedCards} of ${liveCards} scorecards. Nothing was cleared and your scores are untouched. Try again.`)
       }
 
-      // The day bar on the scorer and results reads this to mark finished days.
-      const closedDays = Array.from(new Set([...archivedDays, day]))
-      const nextDay = isFinal ? null : DAY_LABELS[idx + 1]
-      if (!isFinal && !nextDay) throw new Error(`There is no day after ${day}.`)
-
-      // Clear the closed day and bring the next day's course, pairings and
-      // side matches live in one write.
-      setCloseStep(nextDay ? `Opening ${nextDay}…` : 'Finishing…')
-      await update(ref(db, 'tournament'), afterCloseUpdates(live, nextDay))
-
-      if (isFinal) {
-        await set(ref(db, 'tournament/meta'), {
-          ...meta, tripId, mode: 'tournament', isMock: false, closedDays,
-          status: 'complete', completedAt: archiveId, currentDay: null,
-        })
-        setCloseDone({ mode: 'end', day, cards: savedCards })
+      setCloseStep('Finishing…')
+      const metaBase = { ...liveMeta, tripId, mode: 'tournament', isMock: false, closedDays }
+      let next: string | null = null
+      if (isOpenDay) {
+        // Move scoring on to the next day that is not finished yet.
+        next = tournamentOver ? null : (remaining.find(x => DAY_LABELS.indexOf(x) > idx) || remaining[0] || null)
+        await update(ref(db, 'tournament'), afterCloseUpdates(live, next))
+        await set(ref(db, 'tournament/meta'), next
+          ? { ...metaBase, status: 'active', currentDay: next }
+          : { ...metaBase, status: 'complete', completedAt: archiveId, currentDay: null })
       } else {
-        await set(ref(db, 'tournament/meta'), {
-          ...meta, tripId, mode: 'tournament', isMock: false, status: 'active', closedDays,
-          totalDays: Math.max(meta.totalDays || 1, idx + 2),
-          currentDay: nextDay,
-        })
-        setCloseDone({ mode: 'next', day, next: nextDay, cards: savedCards, nextCourse: live.plan?.[nextDay as string]?.course?.name || live.course?.name || null })
+        // A day that was not the open one: just drop its parked copy.
+        await update(ref(db, 'tournament'), { [`plan/${day}`]: null })
+        await set(ref(db, 'tournament/meta'), tournamentOver
+          ? { ...metaBase, status: 'complete', completedAt: archiveId, currentDay: null }
+          : metaBase)
       }
+      setCloseDone({ day, cards: savedCards, next, over: tournamentOver })
       setCloseStep(null)
     } catch (e: any) {
       setCloseError(explain(e))
@@ -333,9 +341,6 @@ export default function TournamentSetup() {
               <Link href="/scorer" className="bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2">
                 <Play size={15}/> Score {currentDay}
               </Link>
-              <button onClick={openClose} className="border border-zinc-700 hover:border-zinc-500 text-zinc-300 px-4 py-2.5 rounded-xl font-semibold text-sm">
-                Close {currentDay}
-              </button>
             </div>
           )}
         </div>
@@ -452,7 +457,7 @@ export default function TournamentSetup() {
                 <div className="flex lg:block items-center justify-between gap-3">
                   <div className="font-semibold">{r.day}</div>
                   <div className={`text-xs mt-0.5 ${r.isClosed ? 'text-zinc-500' : r.isCurrent ? 'text-emerald-400' : r.scored ? 'text-amber-400' : 'text-zinc-600'}`}>
-                    {r.isClosed ? 'Closed' : r.isCurrent ? 'Open for scoring' : r.scored ? 'Paused, scores saved' : 'Not started'}
+                    {r.isClosed ? 'Finished' : r.isCurrent ? 'Open for scoring' : r.scored ? 'Scores saved' : 'Not started'}
                   </div>
                 </div>
 
@@ -509,13 +514,19 @@ export default function TournamentSetup() {
                       {openingDay === r.day ? <Loader2 size={13} className="animate-spin"/> : null} Open
                     </button>
                   )}
+                  {!r.isClosed && r.scored > 0 && (
+                    <button onClick={() => openClose(r.day)} className="block w-full lg:w-auto lg:ml-auto mt-2 text-xs text-zinc-500 hover:text-emerald-400 whitespace-nowrap">
+                      Finish day
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
 
             <div className="px-5 py-3.5 bg-black/40 text-xs text-zinc-500 leading-relaxed">
-              Only one day is open for scoring at a time. Opening another day saves the open one exactly as it is, so you can go back to it.
-              Close a day once its scores are final; that saves it to History and opens the next day.
+              Open whichever day you are playing. Opening another day keeps the scores on the one you leave, so you can move between days freely.
+              When a day's scores are final, finish it: that saves it to History for the record and locks it. You never have to finish a day to move on.{' '}
+              <Link href="/courses" className="text-zinc-400 hover:text-emerald-400 underline">Add a course to the list</Link>
             </div>
           </section>
         </div>
@@ -583,8 +594,8 @@ export default function TournamentSetup() {
         )}
       </div>
 
-      {/* ── Close-day dialog ── */}
-      {showClose && (
+      {/* ── Finish-day dialog ── */}
+      {showClose && closeTarget && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
           onClick={() => { if (!closing) { setShowClose(false); setCloseDone(null) } }}>
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
@@ -594,22 +605,24 @@ export default function TournamentSetup() {
               <div className="space-y-4 text-center">
                 <CheckCircle2 size={40} className="text-emerald-400 mx-auto"/>
                 <div>
-                  <p className="font-semibold text-lg">{closeDone.day} is closed</p>
+                  <p className="font-semibold text-lg">{closeDone.day} is finished</p>
                   <p className="text-sm text-zinc-500 mt-1">{closeDone.cards} scorecards saved to History.</p>
                 </div>
-                <p className="text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-                  {closeDone.mode === 'next'
-                    ? `${closeDone.next} is now open${closeDone.nextCourse ? ` at ${closeDone.nextCourse}` : ''}, with its pairings and side matches loaded.`
-                    : 'The tournament is finished. Every day is in History.'}
-                </p>
+                {(closeDone.over || closeDone.next) && (
+                  <p className="text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+                    {closeDone.over ? 'That was the last day. The tournament is finished.' : `${closeDone.next} is now open for scoring.`}
+                  </p>
+                )}
                 <button onClick={() => { setShowClose(false); setCloseDone(null) }}
                   className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-xl font-semibold text-sm">Done</button>
               </div>
             ) : (
               <>
                 <div>
-                  <p className="font-semibold text-lg">Close {currentDay}</p>
-                  <p className="text-sm text-zinc-500 mt-0.5">Saves the day to History. Do this once the scores are final.</p>
+                  <p className="font-semibold text-lg">Finish {closeTarget}</p>
+                  <p className="text-sm text-zinc-500 mt-1">
+                    Saves {closeTarget} to History as the permanent record and locks its scores. Do this once the scores are final. It still counts toward the team prize.
+                  </p>
                 </div>
 
                 <div>
@@ -618,9 +631,7 @@ export default function TournamentSetup() {
                     className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-lg text-white outline-none text-sm"/>
                 </div>
 
-                {audit === null ? (
-                  <div className="flex items-center gap-2 text-zinc-500 text-sm"><Loader2 size={14} className="animate-spin"/> Checking scorecards…</div>
-                ) : audit.partial.length === 0 ? (
+                {audit && (audit.partial.length === 0 ? (
                   <div className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 rounded-xl p-3 text-sm flex items-center gap-2">
                     <CheckCircle2 size={15}/> All {audit.total} scorecards are complete.
                   </div>
@@ -631,38 +642,23 @@ export default function TournamentSetup() {
                       {audit.partial.slice(0, 6).map((n: string) => <li key={n}>{n}</li>)}
                       {audit.partial.length > 6 && <li>and {audit.partial.length - 6} more</li>}
                     </ul>
-                    <p className="text-xs text-zinc-500">You can still close the day. Payouts will use what has been entered.</p>
+                    <p className="text-xs text-zinc-500">You can still finish the day, but its scores are locked once you do.</p>
                   </div>
-                )}
+                ))}
 
                 {closeError && <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-sm">{closeError}</div>}
                 {closeStep && <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 size={14} className="animate-spin"/> {closeStep}</div>}
 
                 <div className="space-y-2">
-                  {hasMoreDays ? (
-                    <>
-                      <button onClick={() => closeDay('next')} disabled={closing}
-                        className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black py-3.5 rounded-xl font-semibold text-sm">
-                        Close {currentDay} and open {DAY_LABELS[currentDayIdx + 1]}
-                      </button>
-                      <button onClick={() => closeDay('end')} disabled={closing}
-                        className="w-full border border-zinc-700 hover:border-zinc-500 text-zinc-400 py-3 rounded-xl text-sm">
-                        Close {currentDay} and end the tournament here
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => closeDay('end')} disabled={closing}
-                        className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black py-3.5 rounded-xl font-semibold text-sm">
-                        Close {currentDay} and finish the tournament
-                      </button>
-                      {canAddDay && (
-                        <button onClick={() => closeDay('next')} disabled={closing}
-                          className="w-full border border-zinc-700 hover:border-zinc-500 text-zinc-400 py-3 rounded-xl text-sm">
-                          Close {currentDay} and add {DAY_LABELS[currentDayIdx + 1]}
-                        </button>
-                      )}
-                    </>
+                  <button onClick={() => closeDay(false)} disabled={closing}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black py-3.5 rounded-xl font-semibold text-sm">
+                    Finish {closeTarget}
+                  </button>
+                  {dayRows.filter(r => !r.isClosed && r.day !== closeTarget).length > 0 && (
+                    <button onClick={() => { if (confirm(`End the whole tournament after ${closeTarget}?\n\nDays that are not finished will not be saved to History.`)) closeDay(true) }} disabled={closing}
+                      className="w-full border border-zinc-700 hover:border-zinc-500 text-zinc-400 py-3 rounded-xl text-sm">
+                      Finish {closeTarget} and end the tournament early
+                    </button>
                   )}
                   <button onClick={() => setShowClose(false)} disabled={closing} className="w-full text-zinc-500 hover:text-zinc-300 py-2 text-sm">Cancel</button>
                 </div>
