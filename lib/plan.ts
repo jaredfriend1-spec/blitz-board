@@ -137,30 +137,48 @@ export type TeamStanding = {
 // with scores on them, and the day in play — and pays fixed dollar amounts
 // by finishing place. Teams tied for a place split the money for the places
 // they cover between them.
-export function tournamentTeamStandings(tournament: any, history: any, placePayouts: number[] = []) {
+// ── Every day of the trip that has scores ────────────────────────────
+// One record per day, shaped like an archived round (roster, teams, money,
+// course, scores, draws, matchups) so the payout engine can read any of
+// them. Sources, in order of authority: History for finished days, the
+// live tree for the open day, the plan for every other day.
+export type TripDay = {
+  label: string; source: 'history' | 'live' | 'plan'
+  roster: any; teams: any; money: any; format: any
+  course: any; scores: any; draws: any; matchups: any; pairings: any
+}
+
+export function tripDayRecords(tournament: any, history: any): TripDay[] {
   const t = tournament || {}
   const meta = t.meta || {}
-  const liveTeams: any[] = t.teams ? Object.values(t.teams) : []
-  const perDay: Record<string, { teams: any[]; scores: any; pars: number[] }> = {}
-
-  // Days parked in the plan
-  Object.entries(t.plan || {}).forEach(([day, d]: [string, any]) => {
-    if (has(d?.scores)) perDay[day] = { teams: liveTeams, scores: d.scores, pars: d.course?.pars || t.course?.pars || [] }
-  })
-  // The day in play
-  if (meta.currentDay && has(t.scores)) {
-    perDay[meta.currentDay] = { teams: liveTeams, scores: t.scores, pars: t.course?.pars || [] }
+  const base = { roster: t.roster || {}, teams: t.teams || {}, money: t.money || {}, format: t.format || null }
+  const out: Record<string, TripDay> = {}
+  const add = (label: string, source: TripDay['source'], d: any, b: any = base) => {
+    out[label] = {
+      label, source, ...b,
+      course: d.course || t.course || { pars: [] },
+      scores: d.scores || {}, draws: d.draws || {}, matchups: d.matchups || {}, pairings: d.pairings || {},
+    }
   }
-  // Archived days win over anything else carrying the same label
+  Object.entries(t.plan || {}).forEach(([day, d]: [string, any]) => { if (has(d?.scores)) add(day, 'plan', d) })
+  if (meta.currentDay && has(t.scores)) add(meta.currentDay, 'live', t)
   if (history) {
     (Object.values(history) as any[]).filter(h => isTripArchive(h, meta)).forEach(h => {
-      perDay[h._meta.dayLabel] = {
-        teams: h.teams ? Object.values(h.teams) : liveTeams,
-        scores: h.scores || {},
-        pars: h.course?.pars || [],
-      }
+      add(h._meta.dayLabel, 'history', h, {
+        roster: h.roster || base.roster, teams: h.teams || base.teams, money: h.money || base.money, format: h.format || base.format,
+      })
     })
   }
+  return Object.values(out).sort((a, b) => DAY_LABELS.indexOf(a.label) - DAY_LABELS.indexOf(b.label))
+}
+
+export function tournamentTeamStandings(tournament: any, history: any, placePayouts: number[] = []) {
+  const t = tournament || {}
+  const liveTeams: any[] = t.teams ? Object.values(t.teams) : []
+  const perDay: Record<string, { teams: any[]; scores: any; pars: number[] }> = {}
+  tripDayRecords(t, history).forEach(d => {
+    perDay[d.label] = { teams: Object.values(d.teams || {}), scores: d.scores, pars: d.course?.pars || [] }
+  })
 
   const dayLabels = Object.keys(perDay).sort((a, b) => DAY_LABELS.indexOf(a) - DAY_LABELS.indexOf(b))
 
@@ -211,12 +229,19 @@ export function restartUpdates(tournament: any, closed: Record<string, any> = {}
     const { scores: _s, draws: _d, ...keep } = dayData(t, day)
     const was = closed[day]
     if (was) (['course', 'pairings', 'matchups'] as const).forEach(k => { if (keep[k] == null && was[k] != null) keep[k] = was[k] })
+    // Anything the sample-data button made up goes too.
+    if (keep.course?.sample) delete keep.course
+    ;(['pairings', 'matchups'] as const).forEach(k => {
+      if (!keep[k]) return
+      const real = Object.fromEntries(Object.entries(keep[k]).filter(([, v]: any) => !v?.sample))
+      if (Object.keys(real).length) keep[k] = real; else delete keep[k]
+    })
     if (day === 'Day 1') first = keep
     else if (Object.keys(keep).length) plan[day] = keep
   })
   return {
     plan: Object.keys(plan).length ? plan : null,
-    course: first.course ?? t.course ?? null,
+    course: first.course ?? (t.course?.sample ? null : t.course) ?? null,
     matchups: first.matchups ?? null,
     pairings: first.pairings ?? null,
     scores: null,
@@ -225,5 +250,121 @@ export function restartUpdates(tournament: any, closed: Record<string, any> = {}
     'meta/status': 'active',
     'meta/completedAt': null,
     'meta/closedDays': null,
+    'meta/sampleData': null,
+  }
+}
+
+// ── Whole-tournament individual standings ────────────────────────────
+// Gross strokes per day and in total. Ranked by score to par over the
+// holes actually played, so someone mid-round compares fairly.
+export function tournamentPlayerStandings(days: TripDay[]) {
+  const rows: Record<string, { id: string; name: string; days: Record<string, number>; total: number; toPar: number; holes: number }> = {}
+  days.forEach(d => {
+    const pars: number[] = d.course?.pars || []
+    Object.values(d.roster || {}).forEach((p: any) => {
+      const card: number[] = d.scores?.[p.id] || []
+      let total = 0, toPar = 0, holes = 0
+      card.forEach((s, i) => { const v = Number(s) || 0; if (v > 0) { total += v; toPar += v - (Number(pars[i]) || 4); holes++ } })
+      if (!holes) return
+      const r = rows[p.id] || (rows[p.id] = { id: p.id, name: p.name, days: {}, total: 0, toPar: 0, holes: 0 })
+      r.days[d.label] = total; r.total += total; r.toPar += toPar; r.holes += holes
+    })
+  })
+  return Object.values(rows).sort((a, b) => a.toPar - b.toPar || a.name.localeCompare(b.name))
+}
+
+// ── Sample data ──────────────────────────────────────────────────────
+// Fills the trip with made-up pairings, side matches and scores so the
+// screens can be looked at with something in them. Uses the real players,
+// teams and courses. Every day but the last is fully scored; the day
+// before the last is left half-played and open; the last day is untouched.
+// Everything it creates is tagged `sample` so starting over removes it.
+export function sampleFillUpdates(tournament: any, library: any[] = [], seed = 7): Record<string, any> {
+  const t = tournament || {}
+  const total = Math.max(1, Number(t.meta?.totalDays) || 1)
+  const days = DAY_LABELS.slice(0, total)
+  const teams: any[] = Object.values(t.teams || {})
+  const roster: Record<string, any> = t.roster || {}
+  const field: string[] = teams.flatMap((tm: any) => tm.playerIds || []).filter((id: string) => roster[id])
+  let x = seed
+  const rnd = () => { x = (x * 1664525 + 1013904223) % 4294967296; return x / 4294967296 }
+
+  const openDay = days[Math.max(0, total - 2)]
+  const out: Record<string, any> = {}
+  days.forEach((day, di) => {
+    const d: any = { ...dayData(t, day) }
+    delete d.scores; delete d.draws
+    if (!d.course) {
+      const c = library.length ? library[di % library.length] : null
+      if (c) d.course = { name: c.name, holes: c.holes, pars: c.pars || (c.holes || []).map((h: any) => h.par), sample: true }
+      else if (t.course) d.course = t.course
+    }
+    const pars: number[] = d.course?.pars || Array(18).fill(4)
+
+    // Groups of four, one player from each team where the teams allow it,
+    // rotated each day so the groups differ.
+    if (!d.pairings) {
+      const size = 4, n = Math.ceil(field.length / size)
+      const order: string[] = []
+      const longest = Math.max(0, ...teams.map((tm: any) => (tm.playerIds || []).length))
+      for (let k = 0; k < longest; k++) teams.forEach((tm: any, ti: number) => {
+        const ids: string[] = (tm.playerIds || []).filter((id: string) => roster[id])
+        if (ids.length) { const id = ids[(k + ti * di) % ids.length]; if (!order.includes(id)) order.push(id) }
+      })
+      field.forEach(id => { if (!order.includes(id)) order.push(id) })
+      d.pairings = {}
+      for (let g = 0; g < n; g++) {
+        const id = `sample-g${g + 1}`
+        d.pairings[id] = { id, name: `Group ${g + 1}`, teeTime: `${8 + Math.floor((g * 10) / 60)}:${String((g * 10) % 60).padStart(2, '0')}`, order: g, playerIds: order.slice(g * size, g * size + size), sample: true }
+      }
+    }
+    const groups: any[] = Object.values(d.pairings).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+
+    // One match inside each of the first two groups.
+    if (!d.matchups) {
+      d.matchups = {}
+      groups.slice(0, 2).forEach((g: any, gi: number) => {
+        const [a, b] = (g.playerIds || []).map((id: string) => roster[id]?.name).filter(Boolean)
+        if (!a || !b) return
+        const id = `sample-m${gi + 1}`
+        d.matchups[id] = { id, type: 'PvP', sideA: a, sideB: b, nassau: 10, nassauF9: 10, nassauB9: 10, nassauOverall: 10, press: 5, birdie: 0, eagle: 0, scoringType: 'NET', autoPress: true, handicapPercent: 100, sample: true }
+      })
+    }
+
+    // Scores: full rounds before the open day, a round in progress on it.
+    const full = di < days.indexOf(openDay)
+    const inProgress = day === openDay
+    if (full || inProgress) {
+      d.scores = {}
+      groups.forEach((g: any, gi: number) => {
+        const thru = full ? 18 : Math.max(4, 13 - gi * 3)
+        ;(g.playerIds || []).forEach((id: string) => {
+          const hcp = Number(roster[id]?.handicap) || 0
+          d.scores[id] = pars.slice(0, 18).map((par, h) => {
+            if (h >= thru) return 0
+            const r = rnd() + hcp / 60
+            return Math.max(2, par + (r < 0.12 ? -1 : r < 0.55 ? 0 : r < 0.9 ? 1 : 2))
+          })
+        })
+      })
+    }
+    out[day] = d
+  })
+
+  const live = out[openDay] || {}
+  const plan: Record<string, any> = {}
+  days.forEach(day => { if (day !== openDay && Object.keys(out[day]).length) plan[day] = out[day] })
+  return {
+    plan: Object.keys(plan).length ? plan : null,
+    course: live.course ?? t.course ?? null,
+    matchups: live.matchups ?? null,
+    pairings: live.pairings ?? null,
+    scores: live.scores ?? null,
+    draws: null,
+    'meta/currentDay': openDay,
+    'meta/status': 'active',
+    'meta/completedAt': null,
+    'meta/closedDays': null,
+    'meta/sampleData': true,
   }
 }

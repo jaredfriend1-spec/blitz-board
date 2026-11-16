@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase'
 import { ref, set, get, update, onValue } from 'firebase/database'
 import { ArrowLeft, ChevronRight, CheckCircle2, Loader2, Play, Pencil, AlertTriangle, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
-import { DAY_LABELS, dayData, dayPath, afterCloseUpdates, openDayUpdates, restartUpdates, archivedDayLabels, isTripArchive } from '@/lib/plan'
+import { DAY_LABELS, dayData, dayPath, afterCloseUpdates, openDayUpdates, restartUpdates, sampleFillUpdates, tripDayRecords, archivedDayLabels, isTripArchive } from '@/lib/plan'
 
 // ─────────────────────────────────────────────────────────────────────
 // TOURNAMENT SETUP
@@ -335,6 +335,18 @@ export default function TournamentSetup() {
     })
   }
 
+  // Made-up pairings, side matches and scores, for looking the screens over.
+  // Only offered while the trip has no scores of its own, so it can never
+  // overwrite a real round.
+  const canSample = rosterReady && tripReady && archivedDays.length === 0 && tripDayRecords(t, history).length === 0
+  const fillSample = () => {
+    if (!confirm('Fill the tournament with sample data?\n\nThis adds made-up pairings, side matches and scores using your real players, teams and courses, so you can see how every screen looks. Anything you have already set up is kept.\n\nTo remove it afterwards, use Start over from Day 1.')) return
+    run('Sample data added. Have a look at the scorer and results. Start over from Day 1 removes it.', async () => {
+      const snap = await get(ref(db, 'tournament'))
+      await update(ref(db, 'tournament'), sampleFillUpdates(snap.val() || {}, library))
+    })
+  }
+
   const eraseEverything = () => run('Everything in the setup was erased.', async () => { await set(ref(db, 'tournament'), null) })
 
   // ── Day rows ───────────────────────────────────────────────────────
@@ -398,6 +410,13 @@ export default function TournamentSetup() {
         {notice && (
           <div className={`rounded-xl border px-4 py-3 text-sm ${notice.ok ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-rose-500/40 bg-rose-500/10 text-rose-400'}`}>
             {notice.text}
+          </div>
+        )}
+
+        {meta.sampleData && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-400 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
+            <span>This tournament is showing sample scores. They are made up. Remove them before the real thing.</span>
+            <button onClick={() => { setShowReset(true); setConfirmKind('restart'); setConfirmText('') }} className="font-semibold underline underline-offset-4">Remove the sample data</button>
           </div>
         )}
 
@@ -585,7 +604,7 @@ export default function TournamentSetup() {
         {hasAnyData && (
           <div className="pt-2">
             <button onClick={() => setShowReset(!showReset)} className="text-sm text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5">
-              <ChevronDown size={15} className={showReset ? 'rotate-180' : ''}/> Clear scores or start over
+              <ChevronDown size={15} className={showReset ? 'rotate-180' : ''}/> Sample data, clear scores or start over
             </button>
 
             {showReset && (
@@ -614,6 +633,12 @@ export default function TournamentSetup() {
                       go="Remove the scores and go back to Day 1" onGo={restartFromDayOne} onCancel={() => setConfirmKind(null)}/>
                   )}
                 </div>
+
+                <ResetRow title="Fill with sample data"
+                  detail={canSample
+                    ? 'Adds made-up pairings, side matches and scores using your real players, teams and courses, so you can see every screen with something in it. Start over from Day 1 removes it again.'
+                    : 'Only available while the tournament has no scores. Use Start over from Day 1 first if you want to try it.'}
+                  button="Add sample data" onClick={fillSample} disabled={resetBusy || !canSample}/>
 
                 <ResetRow title="Start a new tournament"
                   detail="Clears the trip, teams, pairings, side matches and scores. Keeps the players, the course and the money settings. Closed days stay in History."
@@ -804,7 +829,7 @@ function ResetRow({ title, detail, button, onClick, disabled }: { title: string;
         <p className="text-xs text-zinc-500 mt-0.5 max-w-xl">{detail}</p>
       </div>
       <button onClick={onClick} disabled={disabled}
-        className="border border-zinc-700 hover:border-zinc-500 text-zinc-300 px-4 py-2 rounded-lg text-sm font-semibold">{button}</button>
+        className="border border-zinc-700 hover:border-zinc-500 disabled:opacity-40 disabled:hover:border-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-sm font-semibold">{button}</button>
     </div>
   )
 }

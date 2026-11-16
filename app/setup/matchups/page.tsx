@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, onValue, push } from 'firebase/database'
+import { ref, onValue, push } from 'firebase/database'
+import { set } from '@/components/saved'
 import { ArrowLeft, User, Users, Sword, Trash2, Save, Target, Zap, ZapOff, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import SetupBack from '@/components/SetupBack'

@@ -5,33 +5,47 @@ import { ref, onValue } from 'firebase/database'
 import { normalizeDraws, type DrawMap } from '@/lib/draws'
 import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users, Copy } from 'lucide-react'
 import Link from 'next/link'
-import { tournamentTeamStandings } from '@/lib/plan'
-import DayBar from '@/components/DayBar'
+import { DAY_LABELS, dayData, tripDayRecords, tournamentTeamStandings, tournamentPlayerStandings } from '@/lib/plan'
+import { computeRoundPayouts } from '@/lib/payouts'
 
 export default function ResultsPage() {
   const [activeTab, setActiveTab] = useState<'INDIVIDUAL' | 'TEAM'>('INDIVIDUAL')
-  const [scores, setScores] = useState<Record<string, number[]>>({})
+  const [liveScores, setScores] = useState<Record<string, number[]>>({})
   const [players, setPlayers] = useState<any[]>([])
   const [teams, setTeams] = useState<any[]>([])
   const [money, setMoney] = useState<any>({ entryFee: 25, skinsAllocation: 10, handicapPercent: 100, netSkinsEnabled: false, skinsSplitGross: 100, skinsSplitNet: 0 })
-  const [course, setCourse] = useState<any>({ pars: Array(18).fill(4) })
+  const [liveCourse, setCourse] = useState<any>({ pars: Array(18).fill(4) })
   const [mode, setMode] = useState('')
 
-  const [draws, setDraws] = useState<DrawMap>({})
+  const [liveDraws, setDraws] = useState<DrawMap>({})
 
-  // Whole-tournament team prize (fixed dollars by finishing place). Only
-  // loaded when the money setup asks for it.
+  // ── Which day is on screen ─────────────────────────────────────────
+  // In a tournament the page can show the open day, any other day of the
+  // trip, or everything so far added together. Looking at another day here
+  // is view-only: it never changes which day is open for scoring.
   const byPlace = money.teamPayoutMode === 'places'
-  const [meta, setMeta] = useState<any>({})
-  const [plan, setPlan] = useState<any>(null)
+  const [t, setT] = useState<any>(null)
   const [history, setHistory] = useState<any>(null)
+  const [view, setView] = useState<string>('')        // '' = the open day, 'ALL' = whole tournament, or a day label
+  const meta = t?.meta || {}
+  const isTrip = meta.mode === 'tournament' && !meta.isMock && !!meta.tripName
+  useEffect(() => onValue(ref(db, 'tournament'), snap => setT(snap.val() || {})), [])
   useEffect(() => {
-    if (!byPlace) return
-    const u1 = onValue(ref(db, 'tournament/meta'), snap => setMeta(snap.val() || {}))
-    const u2 = onValue(ref(db, 'tournament/plan'), snap => setPlan(snap.val()))
-    const u3 = onValue(ref(db, 'history'), snap => setHistory(snap.val()))
-    return () => { u1(); u2(); u3() }
-  }, [byPlace])
+    if (!isTrip) return
+    return onValue(ref(db, 'history'), snap => setHistory(snap.val()))
+  }, [isTrip])
+
+  const tripDays = isTrip ? tripDayRecords(t, history) : []
+  const openDay: string | null = meta.currentDay || null
+  const showAll = isTrip && view === 'ALL'
+  const viewDay: string | null = isTrip ? (view && view !== 'ALL' ? view : openDay) : null
+  // Another day's data, when one is picked. null = use the live day.
+  const other = isTrip && view && view !== 'ALL' && view !== openDay
+    ? (tripDays.find(d => d.label === view) || { scores: {}, draws: {}, course: dayData(t, view).course || liveCourse })
+    : null
+  const scores: Record<string, number[]> = other ? other.scores : liveScores
+  const course: any = other ? other.course : liveCourse
+  const draws: DrawMap = other ? normalizeDraws(other.draws) : liveDraws
 
   // A drawn card belongs to someone else — label it wherever a name appears.
   const DrawBadge = ({ id }: { id: string }) => {
@@ -229,13 +243,30 @@ export default function ResultsPage() {
   const holeOffset = nineHoleDisplay && course.nineHoleStart === 'back' ? 9 : 0
   const ind = getIndividualResults()
   const tm = getTeamResults()
-  const trip = byPlace
-    ? tournamentTeamStandings(
-        { meta, plan, course, scores, teams: Object.fromEntries(teams.map((t: any) => [t.id, t])) },
-        history, money.placePayouts || [])
-    : null
   const fmtPar = (n: number) => n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`
+  const fmtMoney = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(Math.round(n * 100) / 100).toLocaleString('en-US')}`
   const tripDone = meta.status === 'complete'
+
+  // Whole-tournament numbers, only worked out when that view is showing.
+  const trip = showAll ? tournamentTeamStandings(t, history, byPlace ? (money.placePayouts || []) : []) : null
+  const tripPlayers = showAll ? tournamentPlayerStandings(tripDays) : []
+  const tripMoney = (() => {
+    if (!showAll) return { rows: [] as any[], any: false }
+    const rows: Record<string, { name: string; days: Record<string, number>; total: number }> = {}
+    tripDays.forEach(d => {
+      const pay = computeRoundPayouts(d)
+      Object.entries(pay.buckets).forEach(([name, cats]: [string, any]) => {
+        const net = Object.values(cats).reduce((a: number, c: any) => a + c.won - c.lost, 0)
+        if (!net) return
+        const r = rows[name] || (rows[name] = { name, days: {}, total: 0 })
+        r.days[d.label] = (r.days[d.label] || 0) + net; r.total += net
+      })
+    })
+    const list = Object.values(rows).sort((a, b) => b.total - a.total)
+    return { rows: list, any: list.length > 0 }
+  })()
+  const dayChips = isTrip ? DAY_LABELS.slice(0, meta.totalDays || 1) : []
+  const scoredDays = new Set(tripDays.map(d => d.label))
 
   return (
     <div className="min-h-screen bg-black text-white p-4 sm:p-8">
@@ -245,13 +276,158 @@ export default function ResultsPage() {
           <ArrowLeft size={16}/> Home
         </Link>
 
-        <DayBar inset/>
+        {isTrip && (
+          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
+              <span className="font-semibold text-sm">{meta.tripName}</span>
+              <span className="text-xs text-zinc-500">
+                {tripDone ? 'Tournament finished' : openDay ? `${openDay} is the day being scored` : ''}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setView('ALL')}
+                className={`h-9 px-3.5 rounded-lg border text-sm font-semibold ${showAll ? 'bg-emerald-500 border-emerald-500 text-black' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
+                Whole tournament
+              </button>
+              {dayChips.map(day => {
+                const sel = !showAll && viewDay === day
+                return (
+                  <button key={day} onClick={() => setView(day)}
+                    className={`h-9 px-3.5 rounded-lg border text-sm font-semibold ${sel ? 'bg-emerald-500 border-emerald-500 text-black' : scoredDays.has(day) ? 'border-zinc-700 text-zinc-300 hover:border-zinc-500' : 'border-zinc-800 text-zinc-600 hover:border-zinc-600'}`}>
+                    {day}{day === openDay && !tripDone ? ' (today)' : ''}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Results</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {showAll ? 'Whole tournament' : isTrip && viewDay ? `${viewDay} results` : 'Results'}
+            {!showAll && isTrip && course?.name ? <span className="block text-sm font-normal text-zinc-500 mt-1 tracking-normal">{course.name}</span> : null}
+          </h1>
         </div>
 
+        {/* ── WHOLE TOURNAMENT ── */}
+        {showAll && trip && (
+          <div className="space-y-6">
+            {tripDays.length === 0 && <p className="text-zinc-500 text-sm">No scores have been entered yet.</p>}
+
+            {tripDays.length > 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="bg-blue-600/20 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
+                  <span className="font-semibold text-sm text-blue-400">Teams</span>
+                  <span className="text-zinc-500 text-xs">{tripDone ? 'Final' : `Through ${tripDays[tripDays.length - 1].label}`}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-zinc-500">
+                        <th className="text-left px-4 py-2.5 font-medium">Team</th>
+                        {trip.dayLabels.map(d => <th key={d} className="px-2 py-2.5 text-center whitespace-nowrap font-medium">{d}</th>)}
+                        <th className="px-2 py-2.5 text-center font-medium">Total</th>
+                        <th className="px-2 py-2.5 text-center font-medium">To par</th>
+                        {byPlace && <th className="px-4 py-2.5 text-right font-medium">{tripDone ? 'Wins' : 'In line for'}</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trip.standings.map(row => (
+                        <tr key={row.id} className={`border-t border-zinc-800 ${row.payout > 0 ? 'bg-blue-500/5' : ''}`}>
+                          <td className="px-4 py-3 font-semibold whitespace-nowrap">
+                            <span className="inline-block w-7 text-zinc-500 text-xs">{row.rank ? `${row.tied ? 'T' : ''}${row.rank}` : '—'}</span>
+                            {row.name}
+                          </td>
+                          {trip.dayLabels.map(d => <td key={d} className="px-2 py-3 text-center text-zinc-400">{row.days[d] ? row.days[d].total : '—'}</td>)}
+                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{row.holes ? row.total : '—'}</td>
+                          <td className="px-2 py-3 text-center font-bold text-zinc-300">{row.holes ? fmtPar(row.toPar) : '—'}</td>
+                          {byPlace && <td className="px-4 py-3 text-right font-bold text-blue-400">{row.payout > 0 ? fmtMoney(row.payout) : ''}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="px-5 py-3 border-t border-zinc-800 text-zinc-600 text-xs leading-snug">
+                  Each day's team score added together: the two lowest scores on every hole, three on par 3s. Ranked by score to par, so a round still being played compares fairly.{byPlace ? ' Ties split the prize money.' : ''}
+                </p>
+              </div>
+            )}
+
+            {tripMoney.any && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="bg-amber-500/10 border-b border-zinc-800 px-5 py-3">
+                  <span className="font-semibold text-sm text-amber-400">Side matches and skins</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-zinc-500">
+                        <th className="text-left px-4 py-2.5 font-medium">Player</th>
+                        {tripDays.map(d => <th key={d.label} className="px-2 py-2.5 text-center whitespace-nowrap font-medium">{d.label}</th>)}
+                        <th className="px-4 py-2.5 text-right font-medium">Net</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tripMoney.rows.map(row => (
+                        <tr key={row.name} className="border-t border-zinc-800">
+                          <td className="px-4 py-3 font-semibold whitespace-nowrap">{row.name}</td>
+                          {tripDays.map(d => (
+                            <td key={d.label} className={`px-2 py-3 text-center ${!row.days[d.label] ? 'text-zinc-600' : row.days[d.label] > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {row.days[d.label] ? fmtMoney(row.days[d.label]) : '—'}
+                            </td>
+                          ))}
+                          <td className={`px-4 py-3 text-right font-bold ${row.total > 0 ? 'text-emerald-400' : row.total < 0 ? 'text-rose-400' : 'text-zinc-400'}`}>{fmtMoney(row.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="px-5 py-3 border-t border-zinc-800 text-zinc-600 text-xs leading-snug">
+                  What each player is up or down from side matches, presses and skins, day by day. A match on a day still being played counts as it stands now. The team prize is not included.
+                </p>
+              </div>
+            )}
+
+            {tripPlayers.length > 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="bg-emerald-600/20 border-b border-zinc-800 px-5 py-3">
+                  <span className="font-semibold text-sm text-emerald-400">Players</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-zinc-500">
+                        <th className="text-left px-4 py-2.5 font-medium">Player</th>
+                        {tripDays.map(d => <th key={d.label} className="px-2 py-2.5 text-center whitespace-nowrap font-medium">{d.label}</th>)}
+                        <th className="px-2 py-2.5 text-center font-medium">Total</th>
+                        <th className="px-4 py-2.5 text-right font-medium">To par</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tripPlayers.map((row, i) => (
+                        <tr key={row.id} className="border-t border-zinc-800">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span className="inline-block w-7 text-zinc-500 text-xs">{i + 1}</span>
+                            <span className="font-semibold">{row.name}</span>
+                          </td>
+                          {tripDays.map(d => <td key={d.label} className="px-2 py-2.5 text-center text-zinc-400">{row.days[d.label] || '—'}</td>)}
+                          <td className="px-2 py-2.5 text-center font-bold text-zinc-200">{row.total}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-zinc-300">{fmtPar(row.toPar)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="px-5 py-3 border-t border-zinc-800 text-zinc-600 text-xs leading-snug">
+                  Gross strokes, with no handicap. A day shows the strokes entered so far, so a round in progress is lower than a finished one; the ranking uses score to par.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tab switcher — only show Team tab if teams exist */}
+        {!showAll && (
         <div className="flex bg-zinc-900 rounded-2xl p-1.5 mb-8 border border-zinc-800 gap-1">
           <button
             onClick={() => setActiveTab('INDIVIDUAL')}
@@ -272,9 +448,10 @@ export default function ResultsPage() {
           </button>
           )}
         </div>
+        )}
 
         {/* ── INDIVIDUAL TAB ── */}
-        {activeTab === 'INDIVIDUAL' && (
+        {!showAll && activeTab === 'INDIVIDUAL' && (
           <div className="space-y-8">
 
             {/* Front 9 / Back 9 low */}
@@ -417,65 +594,23 @@ export default function ResultsPage() {
         )}
 
         {/* ── TEAM TAB ── */}
-        {activeTab === 'TEAM' && (
+        {!showAll && activeTab === 'TEAM' && (
           <div className="space-y-6">
 
             {/* Total pot */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Users size={20} className="text-blue-400"/>
-                <span className="font-semibold text-sm text-zinc-400">Total Team Pot</span>
+                <span className="font-semibold text-sm text-zinc-400">{byPlace ? 'Team prize pot, paid on the whole tournament' : 'Total Team Pot'}</span>
               </div>
               <span className="text-3xl font-bold text-blue-400">${tm.totalTeamPot}</span>
             </div>
 
-            {/* Whole-tournament team prize */}
-            {trip && (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-                <div className="bg-blue-600/20 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
-                  <span className="font-semibold text-sm text-blue-400">Tournament Team Standings</span>
-                  <span className="text-zinc-500 text-xs">{tripDone ? 'Final' : trip.dayLabels.length ? `Through ${trip.dayLabels[trip.dayLabels.length - 1]}` : 'No scores yet'}</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-[10px] text-zinc-500 font-semibold">
-                        <th className="text-left px-4 py-2.5">Team</th>
-                        {trip.dayLabels.map(d => <th key={d} className="px-2 py-2.5 text-center whitespace-nowrap">{d}</th>)}
-                        <th className="px-2 py-2.5 text-center">Total</th>
-                        <th className="px-2 py-2.5 text-center">To Par</th>
-                        <th className="px-4 py-2.5 text-right">{tripDone ? 'Wins' : 'In line for'}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {trip.standings.map(t => (
-                        <tr key={t.id} className={`border-t border-zinc-800 ${t.payout > 0 ? 'bg-blue-500/5' : ''}`}>
-                          <td className="px-4 py-3 font-semibold whitespace-nowrap">
-                            <span className="inline-block w-7 text-zinc-500 text-xs">{t.rank ? `${t.tied ? 'T' : ''}${t.rank}` : '—'}</span>
-                            {t.name}
-                          </td>
-                          {trip.dayLabels.map(d => (
-                            <td key={d} className="px-2 py-3 text-center text-zinc-400">{t.days[d] ? t.days[d].total : '—'}</td>
-                          ))}
-                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{t.holes ? t.total : '—'}</td>
-                          <td className="px-2 py-3 text-center font-bold text-zinc-300">{t.holes ? fmtPar(t.toPar) : '—'}</td>
-                          <td className="px-4 py-3 text-right font-bold text-blue-400">{t.payout > 0 ? `$${Number.isInteger(t.payout) ? t.payout : t.payout.toFixed(2)}` : ''}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="px-5 py-3 border-t border-zinc-800 text-zinc-600 text-[11px] leading-snug">
-                  Every day's team score added together — the two lowest scores on each hole, three on par 3s. Ranked by score to par so a round in progress compares fairly. Ties split the prize money.
-                </p>
-              </div>
-            )}
-
             {/* Front 9 / Back 9 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
-                { title: byPlace ? 'Today · Front 9' : 'Front 9', res: tm.f9Results, pot: tm.sidePot, key: 'f9' },
-                { title: byPlace ? 'Today · Back 9' : 'Back 9', res: tm.b9Results, pot: tm.sidePot, key: 'b9' },
+                { title: 'Front 9', res: tm.f9Results, pot: tm.sidePot, key: 'f9' },
+                { title: 'Back 9', res: tm.b9Results, pot: tm.sidePot, key: 'b9' },
               ].map(half => (
                 <div key={half.title} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                   <div className="bg-blue-600/20 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">

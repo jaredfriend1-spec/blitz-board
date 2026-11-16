@@ -96,10 +96,11 @@ export default function SetupHelp() {
           <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
             <h2 className="text-lg font-semibold mb-3">If you need to undo something</h2>
             <div className="space-y-3 text-sm text-zinc-300 leading-relaxed">
-              <p>At the bottom of Tournament setup, open <B>Clear scores or start over</B>.</p>
+              <p>At the bottom of Tournament setup, open <B>Sample data, clear scores or start over</B>.</p>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li><B>Clear today&apos;s scores</B> removes the scores on the open day only.</li>
                 <li><B>Start over from Day 1</B> is for clearing practice rounds. It removes every score and this tournament&apos;s finished days, and keeps players, teams, courses, pairings, side matches and money.</li>
+                <li><B>Fill with sample data</B> adds made-up pairings, matches and scores so you can look the screens over before the trip. Start over from Day 1 removes it.</li>
                 <li><B>Start a new tournament</B> clears the trip and teams for next time. Players and past results stay.</li>
               </ul>
               <p>Starting over cannot be reversed, so it asks you to type a confirmation first.</p>
