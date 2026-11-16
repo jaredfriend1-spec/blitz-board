@@ -4,8 +4,8 @@
   "description": "Golf tournament scoring — live scorer, payouts, skins",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#10b981",
+  "background_color": "#111715",
+  "theme_color": "#111715",
   "orientation": "portrait-primary",
   "icons": [
     {

@@ -18,10 +18,30 @@ html {
 
 body {
   font-family: var(--font-geist-sans);
-  background: #000;
-  color: #fff;
-  /* Removed: uppercase, italic — pages control their own style */
+  background: #111715;
+  color: #ECEFEA;
 }
+
+/* ── Calmer type ───────────────────────────────────────────────────
+   The pages were written with the heaviest weight, italics and wide
+   letter-spacing on almost everything. Taken together that shouts. The
+   classes are spread over every page, so they are softened here in one
+   place rather than edited one by one. */
+.font-black { font-weight: 700; }
+.italic { font-style: normal; }
+.tracking-widest { letter-spacing: 0.06em; }
+.tracking-\[0\.2em\], .tracking-\[0\.3em\], .tracking-\[\.4em\] { letter-spacing: 0.08em; }
+
+/* Glows read as neon on a dark page */
+.shadow-2xl, .shadow-xl { box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); }
+
+/* Keyboard users can see where they are */
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 2px solid #84C2A0;
+  outline-offset: 2px;
+}
+
+:root { color-scheme: dark; }
 
 /* Scores and numbers use mono */
 .font-mono {
@@ -54,6 +74,6 @@ input[type="number"] {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #3B4741;
   border-radius: 2px;
 }

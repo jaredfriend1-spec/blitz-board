@@ -5,6 +5,7 @@ import { ref, onValue, get, set } from 'firebase/database'
 import { ArrowLeft, Zap, ZapOff, DollarSign, Target, RefreshCw, Archive } from 'lucide-react'
 import Link from 'next/link'
 import { runNine as sharedRunNine } from '@/lib/payouts'
+import DayBar from '@/components/DayBar'
 
 // ── TYPES ──────────────────────────────────────────────────────────
 type BallType = 'net' | 'gross'
@@ -638,6 +639,8 @@ export default function PayoutsPage() {
  <Link href="/"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
  <ArrowLeft size={18}/> HUB
  </Link>
+
+ <DayBar inset/>
 
  <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
  <div className="flex items-center gap-4">

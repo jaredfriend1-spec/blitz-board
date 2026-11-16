@@ -6,6 +6,7 @@ import { normalizeDraws, type DrawMap } from '@/lib/draws'
 import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users, Copy } from 'lucide-react'
 import Link from 'next/link'
 import { tournamentTeamStandings } from '@/lib/plan'
+import DayBar from '@/components/DayBar'
 
 export default function ResultsPage() {
   const [activeTab, setActiveTab] = useState<'INDIVIDUAL' | 'TEAM'>('INDIVIDUAL')
@@ -243,6 +244,8 @@ export default function ResultsPage() {
         <Link href="/" className="text-emerald-500 font-semibold mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors text-sm">
           <ArrowLeft size={16}/> Home
         </Link>
+
+        <DayBar inset/>
 
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Results</h1>

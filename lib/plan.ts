@@ -193,3 +193,37 @@ export function tournamentTeamStandings(tournament: any, history: any, placePayo
   const unscored = rows.filter(r => r.holes === 0)
   return { dayLabels, standings: [...scored, ...unscored] }
 }
+
+// ── Start the trip over from Day 1 ───────────────────────────────────
+// For wiping practice rounds before the real thing. Every day keeps its
+// course, pairings and side matches; every score and drawn card goes, and
+// Day 1 becomes the open day again. Closed days in History are removed
+// separately by the caller (they live outside `tournament`).
+// `closed` = this trip's closed days keyed by day label, so a closed day
+// gets its own course, pairings and side matches back.
+export function restartUpdates(tournament: any, closed: Record<string, any> = {}): Record<string, any> {
+  const t = tournament || {}
+  const total = Math.max(1, Number(t.meta?.totalDays) || 1)
+  const days = DAY_LABELS.slice(0, Math.max(total, DAY_LABELS.indexOf(t.meta?.currentDay || 'Day 1') + 1))
+  const plan: Record<string, any> = {}
+  let first: any = {}
+  days.forEach(day => {
+    const { scores: _s, draws: _d, ...keep } = dayData(t, day)
+    const was = closed[day]
+    if (was) (['course', 'pairings', 'matchups'] as const).forEach(k => { if (keep[k] == null && was[k] != null) keep[k] = was[k] })
+    if (day === 'Day 1') first = keep
+    else if (Object.keys(keep).length) plan[day] = keep
+  })
+  return {
+    plan: Object.keys(plan).length ? plan : null,
+    course: first.course ?? t.course ?? null,
+    matchups: first.matchups ?? null,
+    pairings: first.pairings ?? null,
+    scores: null,
+    draws: null,
+    'meta/currentDay': 'Day 1',
+    'meta/status': 'active',
+    'meta/completedAt': null,
+    'meta/closedDays': null,
+  }
+}

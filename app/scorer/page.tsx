@@ -6,6 +6,7 @@ import { ref, set, get, update, onValue } from 'firebase/database'
 import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive, Copy, X, AlertTriangle } from 'lucide-react'
 import { applyDraws, normalizeDraws, type DrawMap } from '@/lib/draws'
 import Link from 'next/link'
+import DayBar from '@/components/DayBar'
 
 
 // ── GOLF SCORING SYMBOL ────────────────────────────────────────────
@@ -299,6 +300,8 @@ export default function ScorerPage() {
  </div>
 
 
+
+ <DayBar/>
 
  {/* Legend */}
  <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto border-b border-zinc-900/50">
