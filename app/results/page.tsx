@@ -5,7 +5,7 @@ import { ref, onValue } from 'firebase/database'
 import { normalizeDraws, type DrawMap } from '@/lib/draws'
 import { Trophy, Award, ArrowLeft, LayoutGrid, Medal, Users, Copy } from 'lucide-react'
 import Link from 'next/link'
-import { DAY_LABELS, dayData, tripDayRecords, tournamentTeamStandings, tournamentPlayerStandings } from '@/lib/plan'
+import { DAY_LABELS, dayData, teamDayScore, tripDayRecords, tournamentTeamStandings, tournamentPlayerStandings } from '@/lib/plan'
 import { computeRoundPayouts } from '@/lib/payouts'
 
 export default function ResultsPage() {
@@ -244,6 +244,35 @@ export default function ResultsPage() {
   const ind = getIndividualResults()
   const tm = getTeamResults()
   const fmtPar = (n: number) => n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`
+
+  // ── The day's leaderboards: front, back and combined, leader first ──
+  // Ranked by score to par over the holes played, so the order is right
+  // while a round is still going. Once everyone has finished that is the
+  // same order as lowest total.
+  const dayPars: number[] = course.pars || []
+  const activeIds = new Set<string>(teams.flatMap((tm: any) => tm.playerIds || []))
+  const playerBoard = (teams.length ? players.filter(p => activeIds.has(p.id)) : players).map(p => {
+    const card: number[] = scores[p.id] || []
+    let f9 = 0, b9 = 0, toPar = 0, thru = 0
+    for (let i = 0; i < 18; i++) {
+      const v = Number(card[i]) || 0
+      if (!v) continue
+      if (i < 9) f9 += v; else b9 += v
+      toPar += v - (Number(dayPars[i]) || 4); thru++
+    }
+    return { id: p.id, name: p.name, f9, b9, total: f9 + b9, toPar, thru }
+  }).filter(r => r.thru > 0).sort((a, b) => a.toPar - b.toPar || b.thru - a.thru || a.name.localeCompare(b.name))
+  const teamBoard = teams.map((tm: any) => {
+    const ids: string[] = tm.playerIds || []
+    const all = teamDayScore(ids, scores, dayPars)
+    const front = teamDayScore(ids, Object.fromEntries(ids.map(id => [id, (scores[id] || []).slice(0, 9)])), dayPars.slice(0, 9).concat(Array(9).fill(0)))
+    return { id: tm.id, name: tm.name, f9: front.total, b9: all.total - front.total, total: all.total, toPar: all.toPar, thru: all.holes }
+  }).filter(r => r.thru > 0).sort((a, b) => a.toPar - b.toPar || b.thru - a.thru || a.name.localeCompare(b.name))
+  const rankOf = (rows: { toPar: number }[], i: number) => {
+    const first = rows.findIndex(r => r.toPar === rows[i].toPar)
+    const tied = rows.filter(r => r.toPar === rows[i].toPar).length > 1
+    return `${tied ? 'T' : ''}${first + 1}`
+  }
   const fmtMoney = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(Math.round(n * 100) / 100).toLocaleString('en-US')}`
   const tripDone = meta.status === 'complete'
 
@@ -454,6 +483,47 @@ export default function ResultsPage() {
         {!showAll && activeTab === 'INDIVIDUAL' && (
           <div className="space-y-8">
 
+            {/* Leaderboard — front, back and combined */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              <div className="bg-emerald-600/20 text-emerald-400 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
+                <span className="font-semibold text-sm">Leaderboard</span>
+                <span className="text-zinc-500 text-xs">Leader first</span>
+              </div>
+              {playerBoard.length === 0 ? (
+                <p className="text-zinc-600 text-sm text-center py-6">No scores yet</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-zinc-500">
+                        <th className="text-left px-4 py-2.5 font-medium">Player</th>
+                        <th className="px-2 py-2.5 text-center font-medium">Front</th>
+                        <th className="px-2 py-2.5 text-center font-medium">Back</th>
+                        <th className="px-2 py-2.5 text-center font-medium">Total</th>
+                        <th className="px-2 py-2.5 text-center font-medium">To par</th>
+                        <th className="px-4 py-2.5 text-right font-medium">Thru</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {playerBoard.map((r, i) => (
+                        <tr key={r.id} className={`border-t border-zinc-800 ${i === 0 ? 'bg-emerald-500/5' : ''}`}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="inline-block w-8 text-zinc-500 text-xs">{rankOf(playerBoard, i)}</span>
+                            <span className="font-semibold">{r.name}</span><DrawBadge id={r.id}/>
+                          </td>
+                          <td className="px-2 py-3 text-center text-zinc-400">{r.f9 || '—'}</td>
+                          <td className="px-2 py-3 text-center text-zinc-400">{r.b9 || '—'}</td>
+                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{r.total}</td>
+                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{fmtPar(r.toPar)}</td>
+                          <td className="px-4 py-3 text-right text-zinc-500">{r.thru >= 18 ? 'F' : r.thru}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
             {/* Front 9 / Back 9 low */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
@@ -604,6 +674,47 @@ export default function ResultsPage() {
                 <span className="font-semibold text-sm text-zinc-400">{byPlace ? 'Team prize pot, paid on the whole tournament' : 'Total Team Pot'}</span>
               </div>
               <span className="text-3xl font-bold text-blue-400">${tm.totalTeamPot}</span>
+            </div>
+
+            {/* Leaderboard — front, back and combined */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              <div className="bg-blue-600/20 text-blue-400 border-b border-zinc-800 px-5 py-3 flex items-center justify-between">
+                <span className="font-semibold text-sm">Leaderboard</span>
+                <span className="text-zinc-500 text-xs">Leader first</span>
+              </div>
+              {teamBoard.length === 0 ? (
+                <p className="text-zinc-600 text-sm text-center py-6">No scores yet</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-zinc-500">
+                        <th className="text-left px-4 py-2.5 font-medium">Team</th>
+                        <th className="px-2 py-2.5 text-center font-medium">Front</th>
+                        <th className="px-2 py-2.5 text-center font-medium">Back</th>
+                        <th className="px-2 py-2.5 text-center font-medium">Total</th>
+                        <th className="px-2 py-2.5 text-center font-medium">To par</th>
+                        <th className="px-4 py-2.5 text-right font-medium">Thru</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamBoard.map((r, i) => (
+                        <tr key={r.id} className={`border-t border-zinc-800 ${i === 0 ? 'bg-emerald-500/5' : ''}`}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="inline-block w-8 text-zinc-500 text-xs">{rankOf(teamBoard, i)}</span>
+                            <span className="font-semibold">{r.name}</span>
+                          </td>
+                          <td className="px-2 py-3 text-center text-zinc-400">{r.f9 || '—'}</td>
+                          <td className="px-2 py-3 text-center text-zinc-400">{r.b9 || '—'}</td>
+                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{r.total}</td>
+                          <td className="px-2 py-3 text-center font-bold text-zinc-200">{fmtPar(r.toPar)}</td>
+                          <td className="px-4 py-3 text-right text-zinc-500">{r.thru >= 18 ? 'F' : r.thru}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Front 9 / Back 9 */}
