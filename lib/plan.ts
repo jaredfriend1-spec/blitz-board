@@ -174,9 +174,15 @@ export function tripDayRecords(tournament: any, history: any): TripDay[] {
 
 export function tournamentTeamStandings(tournament: any, history: any, placePayouts: number[] = []) {
   const t = tournament || {}
-  const liveTeams: any[] = t.teams ? Object.values(t.teams) : []
+  return teamStandingsFromDays(tripDayRecords(t, history), t.teams ? Object.values(t.teams) : [], placePayouts)
+}
+
+// The same standings from a plain list of days — used by the History
+// export, where there is no live tournament to read.
+export function teamStandingsFromDays(days: TripDay[], teamList: any[], placePayouts: number[] = []) {
+  const liveTeams: any[] = teamList || []
   const perDay: Record<string, { teams: any[]; scores: any; pars: number[] }> = {}
-  tripDayRecords(t, history).forEach(d => {
+  days.forEach(d => {
     perDay[d.label] = { teams: Object.values(d.teams || {}), scores: d.scores, pars: d.course?.pars || [] }
   })
 

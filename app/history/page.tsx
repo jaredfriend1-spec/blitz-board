@@ -9,6 +9,7 @@ import {
  Flag, DollarSign, Sword, RefreshCw, Check, FileDown, Loader2, Plus
 } from 'lucide-react'
 import Link from 'next/link'
+import { buildTripExportHtml } from '@/lib/tripExport'
 import { getStrokes as sharedStrokes, runNine, betHandicapPercent, settleWheel, buildCtx } from '@/lib/payouts'
 
 // ── FULL RECAP ENGINE ──────────────────────────────────────────────
@@ -360,7 +361,20 @@ function TripRollup({ trip, onDeleteTrip, renderRound, canDelete }: { trip: any,
               </span>
             </div>
           </div>
-          <div className="text-emerald-500 flex-shrink-0">{open ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={e => {
+                e.stopPropagation()
+                const html = buildTripExportHtml(trip.tripName, trip.days.map((d: any) => d.arch))
+                const win = window.open('', '_blank')
+                if (win) { win.document.write(html); win.document.close() }
+                else alert('The export opens in a new tab. Allow pop-ups for this site and try again.')
+              }}
+              className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white px-3 py-2 rounded-xl font-black text-xs transition-all">
+              <FileDown size={13}/> <span className="normal-case">Export tournament PDF</span>
+            </button>
+            <div className="text-emerald-500">{open ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</div>
+          </div>
         </div>
 
         {champ && (
