@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase'
 import { ref, set, onValue, push } from 'firebase/database'
 import { ArrowLeft, Save, Flag, AlertTriangle, Camera, Loader2, BookOpen, Trash2, CheckCircle2, X, RefreshCw, Check } from 'lucide-react'
 import Link from 'next/link'
+import SetupBack from '@/components/SetupBack'
 
 const DEFAULT_HOLES = Array.from({ length: 18 }, (_, i) => ({ par: 4, hcp: i + 1 }))
 
@@ -276,9 +277,7 @@ export default function CourseSetup() {
 
  return (
  <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans">
- <Link href="/setup"className="text-emerald-500 font-black mb-8 inline-block">
- <ArrowLeft size={18} className="inline mr-2"/> HUB
- </Link>
+ <SetupBack here="Course"/>
 
  <div className="max-w-5xl mx-auto space-y-6">
 

@@ -1,13 +1,15 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, onValue, push } from 'firebase/database'
+import { ref, onValue, push } from 'firebase/database'
+import { set } from '@/components/saved'
 import { useBlockedPlayers } from '@/lib/blocked'
 import {
  ArrowLeft, UserPlus, Trash2, Users, Check, Pencil,
  X, ChevronRight, AlertTriangle, CheckCircle2, RotateCcw, Plus
 } from 'lucide-react'
 import Link from 'next/link'
+import SetupBack from '@/components/SetupBack'
 
 export default function RosterManager() {
  const [players, setPlayers] = useState<any[]>([])
@@ -177,9 +179,7 @@ export default function RosterManager() {
  </div>
  )}
 
- <Link href="/setup/admin"className="text-emerald-500 font-black mb-6 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
- <ArrowLeft size={18}/> CHECKLIST
- </Link>
+ <SetupBack here="Players and teams"/>
 
  <h1 className="text-4xl font-black tracking-tight mb-8">Roster & Teams</h1>
 

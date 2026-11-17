@@ -180,17 +180,18 @@ export default function GuidePage() {
           </div>
         </Section>
 
-        {/* Tournament Wizard */}
-        <Section title="Tournament Wizard" icon={<Trophy size={16}/>}>
+        {/* Tournament setup */}
+        <Section title="Tournament Setup" icon={<Trophy size={16}/>}>
           <p className="text-zinc-500 text-sm font-medium normal-case">Full multi-day tournament mode with entry fees, team assignments, daily scoring, and cumulative leaderboards.</p>
           <div className="space-y-2 mt-2">
-            <Step n={1} text="Tap Tournament Wizard and set trip name + number of days"/>
-            <Step n={2} text="Add players and assign to teams"/>
-            <Step n={3} text="Set entry fees and skins allocation"/>
-            <Step n={4} text="Set up matchups for each day"/>
-            <Step n={5} text="Score each day — cumulative standings update automatically"/>
-            <Step n={6} text="Archive at end of trip to save to History"/>
+            <Step n={1} text="Open Tournament setup and set the name and number of days"/>
+            <Step n={2} text="Add players and put them on teams"/>
+            <Step n={3} text="Set the entry fee and how the team money is paid"/>
+            <Step n={4} text="For each day pick the course, build the pairings and add any side matches"/>
+            <Step n={5} text="Open the day you are playing and score it"/>
+            <Step n={6} text="Finish each day, or finish the tournament, to save it to History"/>
           </div>
+          <a href="/setup/help" className="inline-block mt-3 text-emerald-400 text-sm font-semibold normal-case underline">Full directions for setting up a tournament</a>
         </Section>
 
         {/* Analytics */}
@@ -285,4 +286,4 @@ export default function GuidePage() {
       </div>
     </div>
   )
-}
+}

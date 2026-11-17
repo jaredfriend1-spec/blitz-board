@@ -1,723 +1,854 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, get, onValue } from 'firebase/database'
-import {
- ArrowLeft, CheckCircle2, Circle, ChevronRight, Flag, Users,
- DollarSign, Sword, Loader2, Archive, Trash2, Play, ShieldAlert,
- Eraser, Calendar, Save, Layers, RotateCcw
-} from 'lucide-react'
+import { ref, set, get, update, onValue } from 'firebase/database'
+import { ArrowLeft, ChevronRight, CheckCircle2, Loader2, Play, Pencil, AlertTriangle, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
+import { DAY_LABELS, dayData, dayPath, afterCloseUpdates, openDayUpdates, restartUpdates, sampleFillUpdates, tripDayRecords, archivedDayLabels, isTripArchive } from '@/lib/plan'
 
-const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7','Day 8']
+// ─────────────────────────────────────────────────────────────────────
+// TOURNAMENT SETUP
+//
+// One screen for the whole tournament. The left column is everything that
+// is decided once — the trip, the players and teams, the money, the
+// format. The right column is one row per day: its course, its pairings
+// and its side matches, each of which can be filled in ahead of time.
+//
+// A day is "opened" for scoring and "closed" when it is final. Opening a
+// different day parks the one in play, scores included, so nothing has to
+// be finished in order.
+// ─────────────────────────────────────────────────────────────────────
+
 const MAX_DAYS = DAY_LABELS.length
+const money$ = (n: number) => `$${Number(n || 0).toLocaleString('en-US')}`
 
-export default function AdminWizard() {
- const [meta, setMeta] = useState<any>({})
- const [course, setCourse] = useState<any>(null)
- const [playerCount, setPlayerCount] = useState(0)
- const [teamCount, setTeamCount] = useState(0)
- const [teamsHavePlayers, setTeamsHavePlayers] = useState(false)
- const [moneySet, setMoneySet] = useState(false)
- const [formatName, setFormatName] = useState("Jeff's Blitz")
- const [formatCustom, setFormatCustom] = useState(false)
- const [matchupCount, setMatchupCount] = useState(0)
- const [hasAnyData, setHasAnyData] = useState(false)
- const [archivedDays, setArchivedDays] = useState<string[]>([])
+export default function TournamentSetup() {
+  const [t, setT] = useState<any>(undefined)          // the whole live tournament
+  const [history, setHistory] = useState<any>(null)
+  const [library, setLibrary] = useState<any[]>([])
 
- const [editingTrip, setEditingTrip] = useState(false)
- const [tripNameInput, setTripNameInput] = useState('')
- const [totalDaysInput, setTotalDaysInput] = useState(1)
- const [loading, setLoading] = useState(false)
- const [actionMsg, setActionMsg] = useState<string|null>(null)
- const [showDestructive, setShowDestructive] = useState(false)
- const [destructiveErr, setDestructiveErr] = useState<string | null>(null)
- const [abandonConfirm, setAbandonConfirm] = useState(false)
- const [abandonText, setAbandonText] = useState('')
- const [destructiveBusy, setDestructiveBusy] = useState(false)
- const [transitioningDay, setTransitioningDay] = useState(false)
+  const [editingTrip, setEditingTrip] = useState(false)
+  const [tripNameInput, setTripNameInput] = useState('')
+  const [totalDaysInput, setTotalDaysInput] = useState(1)
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const [openingDay, setOpeningDay] = useState<string | null>(null)
 
- // ── CLOSE DAY FLOW ──
- const [showClose, setShowClose] = useState(false)
- const [closing, setClosing] = useState(false)
- const [closeStep, setCloseStep] = useState<string|null>(null)
- const [closeError, setCloseError] = useState<string|null>(null)
- const [closeDone, setCloseDone] = useState<any>(null)
- const [audit, setAudit] = useState<any>(null)
- const [playDate, setPlayDate] = useState('')
+  // Start over / erase
+  const [showReset, setShowReset] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [confirmKind, setConfirmKind] = useState<null | 'restart' | 'erase'>(null)
+  const [confirmText, setConfirmText] = useState('')
 
- useEffect(() => {
- onValue(ref(db,'tournament/meta'), snap => {
- const m = snap.val() || {}
- setMeta(m)
- setTripNameInput(m.tripName || '')
- setTotalDaysInput(m.totalDays || 1)
- })
- onValue(ref(db,'tournament/course'), snap => setCourse(snap.val()))
- onValue(ref(db,'tournament/roster'), snap => setPlayerCount(snap.val() ? Object.keys(snap.val()).length : 0))
- onValue(ref(db,'tournament/teams'), snap => {
- const t = snap.val()
- if (!t) { setTeamCount(0); setTeamsHavePlayers(false); return }
- const teams = Object.values(t) as any[]
- setTeamCount(teams.length)
- setTeamsHavePlayers(teams.some((tm:any) => (tm.playerIds||[]).length > 0))
- })
- onValue(ref(db,'tournament/money'), snap => setMoneySet(!!(snap.val()?.entryFee > 0)))
- onValue(ref(db,'tournament/format'), snap => {
- if (snap.val()) {
- setFormatCustom(snap.val().name !== "Jeff's Blitz")
- setFormatName(snap.val().name || "Jeff's Blitz")
- }
- })
- onValue(ref(db,'tournament/matchups'), snap => setMatchupCount(snap.val() ? Object.keys(snap.val()).length : 0))
- onValue(ref(db,'tournament'), snap => setHasAnyData(!!snap.val()))
- onValue(ref(db,'history'), snap => {
- if (!snap.val()) { setArchivedDays([]); return }
- const days: string[] = []
- Object.values(snap.val()).forEach((h:any) => { if (h._meta?.dayLabel) days.push(h._meta.dayLabel) })
- setArchivedDays(days)
- })
- }, [])
+  // Close-day flow
+  const [showClose, setShowClose] = useState(false)
+  const [closeTarget, setCloseTarget] = useState<string | null>(null)   // the day being finished
+  const [closing, setClosing] = useState(false)
+  const [closeStep, setCloseStep] = useState<string | null>(null)
+  const [closeError, setCloseError] = useState<string | null>(null)
+  const [closeDone, setCloseDone] = useState<any>(null)
+  const [audit, setAudit] = useState<any>(null)
+  const [playDate, setPlayDate] = useState('')
 
- const flash = (msg:string) => { setActionMsg(msg); setTimeout(()=>setActionMsg(null), 5000) }
+  // Finish-tournament flow
+  const [showFinish, setShowFinish] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [finishStep, setFinishStep] = useState<string | null>(null)
+  const [finishError, setFinishError] = useState<string | null>(null)
 
- // Writes can be rejected by the database rules (for example when an admin
- // session has expired). Previously those failures were silent and the button
- // simply appeared to do nothing — surface them instead.
- const runDestructive = async (label: string, fn: () => Promise<void>) => {
-   setDestructiveErr(null); setDestructiveBusy(true)
-   try {
-     await fn()
-     flash(`✓ ${label}`)
-   } catch (e: any) {
-     const m = String(e?.message || e)
-     setDestructiveErr(/permission|PERMISSION_DENIED/i.test(m)
-       ? 'Permission denied. Your admin session may have expired — sign out, sign back in, and try again.'
-       : m)
-   } finally {
-     setDestructiveBusy(false)
-   }
- }
+  useEffect(() => {
+    const u1 = onValue(ref(db, 'tournament'), snap => setT(snap.val() || {}))
+    const u2 = onValue(ref(db, 'history'), snap => setHistory(snap.val()))
+    const u3 = onValue(ref(db, 'courseHistory'), snap => {
+      const list = snap.val() ? Object.values(snap.val()) as any[] : []
+      setLibrary(list.sort((a, b) => String(a.name).localeCompare(String(b.name))))
+    })
+    return () => { u1(); u2(); u3() }
+  }, [])
 
- const saveTripMeta = async () => {
- await set(ref(db,'tournament/meta'), {
- ...meta,
-  mode: 'tournament',
- tripName: tripNameInput.trim(),
- totalDays: totalDaysInput,
- currentDay: meta.currentDay || 'Day 1',
- isMock: false,
- })
- setEditingTrip(false)
- flash('✓ Trip setup saved.')
- }
+  const say = (text: string, ok = true) => { setNotice({ ok, text }); setTimeout(() => setNotice(null), 6000) }
+  const explain = (e: any) => {
+    const m = String(e?.message || e)
+    return /permission|PERMISSION_DENIED/i.test(m)
+      ? 'That was not saved — your sign-in may have expired. Sign out, sign back in, and try again.'
+      : m
+  }
 
- // Count how many holes each player actually has entered, so we never
- // archive a half-scored day without the operator knowing.
- const runAudit = async () => {
- const [rSnap, sSnap, cSnap] = await Promise.all([
- get(ref(db,'tournament/roster')),
- get(ref(db,'tournament/scores')),
- get(ref(db,'tournament/course')),
- ])
- const roster = rSnap.val() || {}
- const scores = sSnap.val() || {}
- const holes = (cSnap.val()?.pars || []).length || 18
- const partial: string[] = []
- let complete = 0
- Object.entries(roster).forEach(([pid, p]: any) => {
- const arr = scores[pid] || []
- const filled = arr.filter((v: any) => v != null && v > 0).length
- if (filled >= holes) complete++
- else partial.push(`${p.name} (${filled}/${holes})`)
- })
- return { complete, partial, total: Object.keys(roster).length, holes }
- }
+  if (t === undefined) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-zinc-600 text-sm">Loading…</div>
+    </div>
+  )
 
- const openClose = async () => {
- setCloseError(null); setCloseDone(null); setCloseStep(null)
- setShowClose(true)
- setAudit(null)
- const now = new Date()
- setPlayDate(new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,10))
- setAudit(await runAudit())
- }
+  // ── What exists ────────────────────────────────────────────────────
+  const meta = t.meta || {}
+  const course = t.course || null
+  const money = t.money || {}
+  const players: any[] = t.roster ? Object.values(t.roster) : []
+  const teams: any[] = t.teams ? Object.values(t.teams) : []
+  const fieldIds = new Set<string>(teams.flatMap((tm: any) => tm.playerIds || []))
+  const formatName: string = t.format?.name || "Jeff's Blitz"
+  const archivedDays = Array.from(new Set([...archivedDayLabels(history, meta), ...(meta.closedDays || [])]))
 
- // mode 'next' = close this day and open the following one (adding it if needed)
- // mode 'end' = close this day and finish the tournament
- const closeDay = async (mode: 'next' | 'end') => {
- setClosing(true); setCloseError(null)
- try {
- const currentDay = meta.currentDay || 'Day 1'
- const idx = DAY_LABELS.indexOf(currentDay)
- const isFinal = mode === 'end'
+  const tripReady = !!(meta.tripName && meta.totalDays > 0)
+  const courseReady = !!(course?.holes?.length === 18)
+  const rosterReady = players.length > 0 && teams.length > 0 && fieldIds.size > 0
+  const moneyReady = Number(money.entryFee) > 0
+  const allReady = tripReady && courseReady && rosterReady && moneyReady
+  const tripComplete = meta.status === 'complete'
+  const currentDay: string | null = meta.currentDay || null
+  const currentDayIdx = DAY_LABELS.indexOf(currentDay || 'Day 1')
+  const totalDays: number = meta.totalDays || 1
+  const hasMoreDays = (currentDayIdx + 1) < totalDays
+  const canAddDay = (currentDayIdx + 1) < MAX_DAYS
+  const hasAnyData = Object.keys(t).length > 0
 
- setCloseStep('Reading live tournament…')
- const snap = await get(ref(db,'tournament'))
- if (!snap.exists()) throw new Error('No live tournament found. Nothing to archive.')
- const payload = snap.val()
- const liveCards = Object.keys(payload.scores || {}).length
- if (liveCards === 0) throw new Error('No scorecards found. Refusing to archive an empty day.')
+  const byPlace = money.teamPayoutMode === 'places'
+  const prizes: number[] = (money.placePayouts || []).map(Number).filter((n: number) => n > 0)
+  const teamPot = fieldIds.size * ((Number(money.entryFee) || 0) - (Number(money.skinsAllocation) || 0))
 
- const archiveId = Date.now()
- const record = {
- ...payload,
- _meta: {
- tripName: meta.tripName || 'Unnamed Trip',
- dayLabel: currentDay,
- dayNumber: idx + 1,
- totalDays: meta.totalDays || 1,
- archivedAt: archiveId,
- playedAt: playDate ? new Date(playDate + 'T12:00:00').getTime() : archiveId,
- isFinal,
- formatName: payload.format?.name || null,
- courseName: payload.course?.name || null,
- },
- }
+  // ── Trip ───────────────────────────────────────────────────────────
+  const startEditTrip = () => { setTripNameInput(meta.tripName || ''); setTotalDaysInput(meta.totalDays || 1); setEditingTrip(true) }
+  const saveTrip = async () => {
+    if (!tripNameInput.trim()) return say('Give the tournament a name first.', false)
+    try {
+      await set(ref(db, 'tournament/meta'), {
+        ...meta,
+        mode: 'tournament',
+        tripName: tripNameInput.trim(),
+        totalDays: totalDaysInput,
+        currentDay: meta.currentDay || 'Day 1',
+        // Ties this trip's closed days together, even if a trip name is reused.
+        tripId: meta.tripId || String(Date.now()),
+        isMock: false,
+      })
+      setEditingTrip(false)
+      say('Tournament saved.')
+    } catch (e) { say(explain(e), false) }
+  }
 
- setCloseStep('Writing archive to History…')
- await set(ref(db, `history/${archiveId}`), record)
+  // ── Days ───────────────────────────────────────────────────────────
+  const pickCourse = async (day: string, id: string) => {
+    const c = library.find(x => x.id === id)
+    if (!c) return
+    const live = day === currentDay
+    if (live && t.scores && Object.keys(t.scores).length > 0 &&
+        !confirm(`${day} already has scores entered.\n\nChanging the course changes the pars and stroke holes those scores are judged against. Change it anyway?`)) return
+    try {
+      await set(ref(db, dayPath(day, currentDay, 'course')), { name: c.name, holes: c.holes, pars: c.pars || (c.holes || []).map((h: any) => h.par) })
+      say(`${day} will be played at ${c.name}.`)
+    } catch (e) { say(explain(e), false) }
+  }
 
- // Read the archive back and prove it landed BEFORE deleting anything live.
- setCloseStep('Verifying archive…')
- const verify = (await get(ref(db, `history/${archiveId}`))).val()
- const savedCards = Object.keys(verify?.scores || {}).length
- if (!verify || savedCards !== liveCards || verify._meta?.dayLabel !== currentDay) {
- throw new Error(
- `ARCHIVE VERIFICATION FAILED — saved ${savedCards} of ${liveCards} scorecards. ` +
- `Nothing has been deleted. Your live scores are untouched. Try again.`
- )
- }
+  // Park the day in play (scores included) and bring another day live.
+  const openDay = async (day: string) => {
+    if (!confirm(`Open ${day} for scoring?\n\n${currentDay ? `${currentDay} is saved exactly as it is — scores, pairings and side matches — and you can come back to it.\n\n` : ''}The scorer, results and payouts will switch to ${day}.`)) return
+    setOpeningDay(day)
+    try {
+      const snap = await get(ref(db, 'tournament'))
+      const u = openDayUpdates(snap.val() || {}, day)
+      if (Object.keys(u).length) await update(ref(db, 'tournament'), u)
+      say(`${day} is open for scoring.`)
+    } catch (e) { say(`${day} was not opened. ${explain(e)}`, false) }
+    finally { setOpeningDay(null) }
+  }
 
- setCloseStep('Verified. Clearing the day…')
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
+  // ── Finish a day ───────────────────────────────────────────────────
+  // Finishing saves a day to History as a permanent record and locks it.
+  // It is never needed to move on — any day can be opened at any time — so
+  // days can be finished in any order, whenever their scores are final.
 
- if (isFinal) {
- await set(ref(db,'tournament/meta'), {
- ...meta, mode:'tournament', isMock:false,
- status:'complete', completedAt: archiveId, currentDay: null,
- })
- setCloseDone({ mode:'end', day: currentDay, cards: savedCards })
- } else {
- const nextDay = DAY_LABELS[idx + 1]
- if (!nextDay) throw new Error(`No day slot beyond ${currentDay}.`)
- await set(ref(db,'tournament/meta'), {
- ...meta, mode:'tournament', isMock:false, status:'active',
- totalDays: Math.max(meta.totalDays || 1, idx + 2),
- currentDay: nextDay,
- })
- setCloseDone({ mode:'next', day: currentDay, next: nextDay, cards: savedCards })
- }
- setCloseStep(null)
- } catch (e:any) {
- setCloseError(e?.message || String(e))
- setCloseStep(null)
- } finally {
- setClosing(false)
- }
- }
+  // Count how many holes each player has entered, so a half-scored day is
+  // never finished without the person finishing it knowing.
+  const runAudit = (day: string) => {
+    const d = dayData(t, day)
+    const holes = ((d.course || t.course)?.pars || []).length || 18
+    const scores = d.scores || {}
+    const partial: string[] = []
+    let complete = 0
+    Object.entries(t.roster || {}).forEach(([pid, p]: any) => {
+      if (!fieldIds.has(pid) && fieldIds.size > 0) return
+      const filled = (scores[pid] || []).filter((v: any) => v != null && v > 0).length
+      if (filled >= holes) complete++
+      else partial.push(`${p.name} (${filled}/${holes})`)
+    })
+    return { complete, partial, total: complete + partial.length, holes }
+  }
 
- // Only reachable once a trip is marked complete.
- const startNewTournament = async () => {
- if (!confirm("Start a brand new tournament?\n\nKeeps roster and course. Clears trip, teams, matchups and scores.")) return
- setLoading(true)
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/draws'), null) // a draw applies to one day only
- await set(ref(db,'tournament/teams'), null)
- await set(ref(db,'tournament/meta'), null)
- flash("✓ Ready for a fresh tournament.")
- setLoading(false)
- }
+  const openClose = (day: string) => {
+    setCloseError(null); setCloseDone(null); setCloseStep(null)
+    setCloseTarget(day)
+    const now = new Date()
+    setPlayDate(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10))
+    setAudit(runAudit(day))
+    setShowClose(true)
+  }
 
- const tripReady = !!(meta.tripName && meta.totalDays > 0)
- const courseReady = !!(course?.holes?.length === 18)
- const rosterReady = playerCount > 0 && teamCount > 0 && teamsHavePlayers
- const moneyReady = moneySet
- const matchupsReady = matchupCount > 0
- const stepsComplete = [tripReady,courseReady,rosterReady,moneyReady,matchupsReady].filter(Boolean).length
- const allComplete = tripReady && courseReady && rosterReady && moneyReady && matchupsReady
- const currentDayIdx = DAY_LABELS.indexOf(meta.currentDay || 'Day 1')
- const tripComplete = meta.status === 'complete'
- const hasMoreDaysConfigured = (currentDayIdx + 1) < (meta.totalDays || 1)
- const canAddAnotherDay = (currentDayIdx + 1) < MAX_DAYS
- const canGoNextDay = tripReady && hasMoreDaysConfigured && !tripComplete
+  // Write one day to History and read it back. Throws — before anything
+  // live is touched — if the saved copy does not match.
+  const archiveDay = async (live: any, day: string, archiveId: number, tripId: string, isFinal: boolean, played: string) => {
+    const liveMeta = live.meta || {}
+    const d = dayData(live, day)
+    // The tournament-wide setup plus this one day. Other days stay out of it.
+    const { plan: _plan, course: _c, matchups: _m, pairings: _p, scores: _s, draws: _d, ...base } = live
+    const payload = { ...base, ...d, course: d.course || live.course || null }
+    const liveCards = Object.keys(payload.scores || {}).length
+    if (liveCards === 0) throw new Error(`${day} has no scores, so there is nothing to save.`)
+    const record = {
+      ...payload,
+      _meta: {
+        tripName: liveMeta.tripName || 'Unnamed Trip',
+        tripId,
+        dayLabel: day,
+        dayNumber: DAY_LABELS.indexOf(day) + 1,
+        totalDays: liveMeta.totalDays || 1,
+        archivedAt: archiveId,
+        playedAt: played ? new Date(played + 'T12:00:00').getTime() : archiveId,
+        isFinal,
+        formatName: payload.format?.name || null,
+        courseName: payload.course?.name || null,
+      },
+    }
+    await set(ref(db, `history/${archiveId}`), record)
+    const verify = (await get(ref(db, `history/${archiveId}`))).val()
+    const savedCards = Object.keys(verify?.scores || {}).length
+    if (!verify || savedCards !== liveCards || verify._meta?.dayLabel !== day) {
+      throw new Error(`The saved copy of ${day} did not match — ${savedCards} of ${liveCards} scorecards. Nothing was cleared and your scores are untouched. Try again.`)
+    }
+    return savedCards
+  }
 
- return (
- <div className="min-h-screen bg-black text-white font-sans">
- <div className="sticky top-0 z-20 bg-black/95 backdrop-blur border-b border-zinc-900 px-4 py-3 flex items-center justify-between">
- <Link href="/setup" className="text-emerald-500 font-black flex items-center gap-2 text-sm hover:text-emerald-400 transition-colors">
- <ArrowLeft size={16}/> SETUP
- </Link>
- <span className="font-black text-sm tracking-widest text-zinc-400">TOURNAMENT WIZARD</span>
- <div className="w-20"/>
- </div>
+  // ── Finish the whole tournament ────────────────────────────────────
+  // Saves every day that has scores and is not finished yet, then marks the
+  // tournament complete. Each day is saved and checked before anything is
+  // cleared; if any one fails, the live tournament is left exactly as it was.
+  const finishTournament = async () => {
+    setFinishing(true); setFinishError(null)
+    try {
+      const snap = await get(ref(db, 'tournament'))
+      if (!snap.exists()) throw new Error('There is no tournament to finish.')
+      const live = snap.val()
+      const liveMeta = live.meta || {}
+      const already: string[] = Array.from(new Set([...archivedDays, ...(liveMeta.closedDays || [])]))
+      const toSave = DAY_LABELS.slice(0, liveMeta.totalDays || 1)
+        .filter(day => !already.includes(day) && Object.keys(dayData(live, day).scores || {}).length > 0)
+      const tripId = liveMeta.tripId || String(Date.now())
+      const stamp = Date.now()
+      const saved: string[] = []
+      for (let k = 0; k < toSave.length; k++) {
+        setFinishStep(`Saving ${toSave[k]} to History…`)
+        await archiveDay(live, toSave[k], stamp + k, tripId, k === toSave.length - 1, '')
+        saved.push(toSave[k])
+      }
+      setFinishStep('Finishing…')
+      await update(ref(db, 'tournament'), { scores: null, draws: null, matchups: null, pairings: null, plan: null })
+      await set(ref(db, 'tournament/meta'), {
+        ...liveMeta, tripId, mode: 'tournament', isMock: false,
+        closedDays: Array.from(new Set([...already, ...saved])),
+        status: 'complete', completedAt: stamp, currentDay: null,
+      })
+      setShowFinish(false)
+      say(saved.length ? `Tournament finished. ${saved.join(', ')} saved to History.` : 'Tournament finished.')
+    } catch (e) { setFinishError(explain(e)) }
+    finally { setFinishing(false); setFinishStep(null) }
+  }
 
- <div className="max-w-lg mx-auto px-4 py-8 space-y-3">
+  // endHere = also end the tournament, even if later days were never played
+  const closeDay = async (endHere = false) => {
+    const day = closeTarget
+    if (!day) return
+    setClosing(true); setCloseError(null)
+    try {
+      const idx = DAY_LABELS.indexOf(day)
 
- <div className="flex items-center gap-3 mb-4">
- <ShieldAlert size={26} className="text-rose-500"/>
- <div>
- <h1 className="text-3xl font-black tracking-tight">Setup Checklist</h1>
- <p className="text-zinc-600 text-[10px] font-black tracking-widest normal-case">Complete all steps to unlock the scorer</p>
- </div>
- </div>
+      setCloseStep('Reading the day…')
+      const snap = await get(ref(db, 'tournament'))
+      if (!snap.exists()) throw new Error('There is no tournament to finish.')
+      const live = snap.val()
+      const liveMeta = live.meta || {}
+      const isOpenDay = day === liveMeta.currentDay
+      const closedDays: string[] = Array.from(new Set([...archivedDays, ...(liveMeta.closedDays || []), day]))
+      const remaining = DAY_LABELS.slice(0, liveMeta.totalDays || 1).filter(x => !closedDays.includes(x))
+      const tournamentOver = endHere || remaining.length === 0
+      const tripId = liveMeta.tripId || String(Date.now())
+      const archiveId = Date.now()
 
- {actionMsg && (
- <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 p-4 rounded-2xl text-sm font-black">
- {actionMsg}
- </div>
- )}
+      setCloseStep('Saving to History and checking the copy…')
+      const savedCards = await archiveDay(live, day, archiveId, tripId, tournamentOver, playDate)
 
- {/* ── TRIP COMPLETE ── */}
- {tripComplete && (
- <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 p-5">
- <div className="flex items-center gap-2 mb-1">
- <CheckCircle2 size={18} className="text-emerald-400"/>
- <p className="text-sm font-black text-emerald-400">TRIP COMPLETE</p>
- </div>
- <p className="text-[11px] font-black text-zinc-500 mb-4">
- {(meta.tripName||'Tournament').toUpperCase()} · ALL {meta.totalDays} DAY{meta.totalDays>1?'S':''} ARCHIVED
- </p>
- <div className="flex gap-2">
- <Link href="/history" className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors">
- <Archive size={14}/> VIEW RESULTS
- </Link>
- <button onClick={startNewTournament} disabled={loading}
- className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors">
- {loading ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14}/>} NEW TOURNAMENT
- </button>
- </div>
- </div>
- )}
+      setCloseStep('Finishing…')
+      const metaBase = { ...liveMeta, tripId, mode: 'tournament', isMock: false, closedDays }
+      let next: string | null = null
+      if (isOpenDay) {
+        // Move scoring on to the next day that is not finished yet.
+        next = tournamentOver ? null : (remaining.find(x => DAY_LABELS.indexOf(x) > idx) || remaining[0] || null)
+        await update(ref(db, 'tournament'), afterCloseUpdates(live, next))
+        await set(ref(db, 'tournament/meta'), next
+          ? { ...metaBase, status: 'active', currentDay: next }
+          : { ...metaBase, status: 'complete', completedAt: archiveId, currentDay: null })
+      } else {
+        // A day that was not the open one: just drop its parked copy.
+        await update(ref(db, 'tournament'), { [`plan/${day}`]: null })
+        await set(ref(db, 'tournament/meta'), tournamentOver
+          ? { ...metaBase, status: 'complete', completedAt: archiveId, currentDay: null }
+          : metaBase)
+      }
+      setCloseDone({ day, cards: savedCards, next, over: tournamentOver })
+      setCloseStep(null)
+    } catch (e: any) {
+      setCloseError(explain(e))
+      setCloseStep(null)
+    } finally {
+      setClosing(false)
+    }
+  }
 
- {/* ── CLOSE DAY — TOP ── */}
- {hasAnyData && !tripComplete && (
- <div className="rounded-2xl border-2 border-blue-500/30 bg-blue-500/5 p-5">
- <div className="flex items-center justify-between mb-3">
- <p className="text-[10px] font-black tracking-widest text-zinc-500">
- {meta.tripName ? meta.tripName.toUpperCase() : 'TOURNAMENT'} IN PROGRESS
- </p>
- {meta.currentDay && (
- <span className="text-[10px] font-black text-blue-400 bg-blue-500/20 px-2 py-1 rounded-lg">
- {meta.currentDay}{meta.totalDays>1 && <span className="text-blue-600"> OF {meta.totalDays}</span>}
- </span>
- )}
- </div>
- <button
- onClick={openClose}
- disabled={loading}
- className="w-full py-3.5 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all border bg-blue-500/20 hover:bg-blue-500/30 border-blue-500/40 text-blue-400"
- >
- <Archive size={13}/> CLOSE {(meta.currentDay||'DAY').toUpperCase()}
- </button>
- <p className="text-[9px] font-black text-zinc-600 text-center mt-2 tracking-wider">
- {hasMoreDaysConfigured
- ? `${DAY_LABELS[currentDayIdx+1]?.toUpperCase()} IS CONFIGURED AND READY`
- : 'LAST CONFIGURED DAY · YOU CAN END OR ADD A DAY'}
- </p>
- </div>
- )}
+  // ── Start over ─────────────────────────────────────────────────────
+  const run = async (done: string, fn: () => Promise<void>) => {
+    setResetBusy(true)
+    try { await fn(); say(done) } catch (e) { say(explain(e), false) }
+    finally { setResetBusy(false); setConfirmKind(null); setConfirmText('') }
+  }
 
- {/* ── CLOSE DAY MODAL ── */}
- {showClose && (
- <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
- onClick={()=>{ if(!closing) { setShowClose(false); setCloseDone(null) } }}>
- <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
- onClick={e=>e.stopPropagation()}>
+  const clearTodayScores = () => {
+    if (!confirm(`Clear every score entered for ${currentDay || 'today'}?\n\nPairings, side matches and everything else stay.`)) return
+    run('Scores cleared.', async () => { await update(ref(db, 'tournament'), { scores: null, draws: null }) })
+  }
 
- {closeDone ? (
- <div className="space-y-4 text-center">
- <CheckCircle2 size={44} className="text-emerald-400 mx-auto"/>
- <div>
- <p className="font-black text-lg text-white">{closeDone.day} ARCHIVED</p>
- <p className="text-xs font-black text-zinc-500 mt-1">
- {closeDone.cards} scorecards saved to {(meta.tripName||'trip').toUpperCase()}
- </p>
- </div>
- {closeDone.mode === 'next' ? (
- <p className="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
- {closeDone.next?.toUpperCase()} IS NOW ACTIVE.<br/>
- <span className="text-zinc-500">Set up matchups, then go live.</span>
- </p>
- ) : (
- <p className="text-xs font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
- TOURNAMENT COMPLETE — all days are in History.
- </p>
- )}
- <button onClick={()=>{setShowClose(false); setCloseDone(null)}}
- className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-black text-sm">DONE</button>
- </div>
- ) : (
- <>
- <div>
- <p className="font-black text-lg text-white">Close {meta.currentDay}</p>
- <p className="text-[11px] font-black text-zinc-500 mt-0.5">
- {(meta.tripName||'').toUpperCase()} · DAY {currentDayIdx+1} OF {meta.totalDays}
- </p>
- </div>
+  // Wipe practice rounds: every score on every day, and this trip's closed days.
+  const restartFromDayOne = () => run('Back to Day 1 with a clean slate. Players, teams, courses, pairings and side matches are all still here.', async () => {
+    const snap = await get(ref(db, 'tournament'))
+    const live = snap.val() || {}
+    const hSnap = await get(ref(db, 'history'))
+    const removals: Record<string, null> = {}
+    const closed: Record<string, any> = {}
+    Object.entries(hSnap.val() || {}).forEach(([id, h]: any) => {
+      if (isTripArchive(h, live.meta)) { removals[id] = null; closed[h._meta.dayLabel] = h }
+    })
+    await update(ref(db, 'tournament'), restartUpdates(live, closed))
+    if (Object.keys(removals).length) await update(ref(db, 'history'), removals)
+  })
 
- {/* Play date */}
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">DATE THIS ROUND WAS PLAYED</label>
- <input type="date" value={playDate} onChange={e=>setPlayDate(e.target.value)}
- className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-sm transition-colors"/>
- <p className="text-[9px] font-black text-zinc-700 mt-1">DEFAULTS TO TODAY — CHANGE IT IF YOU ARE CLOSING A ROUND THE NEXT MORNING.</p>
- </div>
+  const newTournament = () => {
+    if (!confirm('Start a new tournament?\n\nThis clears the trip, teams, pairings, side matches, scores and every day\'s plan.\n\nPlayers, the course in play and the money settings stay. Closed days stay in History.')) return
+    run('Ready for a new tournament.', async () => {
+      await update(ref(db, 'tournament'), { scores: null, draws: null, matchups: null, pairings: null, plan: null, teams: null, meta: null })
+    })
+  }
 
- {/* Score audit */}
- {audit === null ? (
- <div className="flex items-center gap-2 text-zinc-500 text-xs font-black">
- <Loader2 size={14} className="animate-spin"/> CHECKING SCORECARDS…
- </div>
- ) : audit.partial.length === 0 ? (
- <div className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 rounded-xl p-3 text-xs font-black flex items-center gap-2">
- <CheckCircle2 size={14}/> ALL {audit.total} SCORECARDS COMPLETE ({audit.holes} HOLES)
- </div>
- ) : (
- <div className="border border-amber-500/40 bg-amber-500/10 text-amber-400 rounded-xl p-3 text-xs font-black space-y-1">
- <div className="flex items-center gap-2"><ShieldAlert size={14}/> {audit.partial.length} INCOMPLETE CARD{audit.partial.length>1?'S':''}</div>
- <ul className="text-[10px] text-amber-300/80 font-bold pl-5 list-disc">
- {audit.partial.slice(0,6).map((n:string)=><li key={n}>{n}</li>)}
- {audit.partial.length>6 && <li>+{audit.partial.length-6} more</li>}
- </ul>
- <p className="text-[10px] text-zinc-500 pt-1">You can still archive — payouts will use what is entered.</p>
- </div>
- )}
+  // Made-up pairings, side matches and scores, for looking the screens over.
+  // Only offered while the trip has no scores of its own, so it can never
+  // overwrite a real round.
+  const canSample = rosterReady && tripReady && archivedDays.length === 0 && tripDayRecords(t, history).length === 0
+  const fillSample = () => {
+    if (!confirm('Fill the tournament with sample data?\n\nThis adds made-up pairings, side matches and scores using your real players, teams and courses, so you can see how every screen looks. Anything you have already set up is kept.\n\nTo remove it afterwards, use Start over from Day 1.')) return
+    run('Sample data added. Have a look at the scorer and results. Start over from Day 1 removes it.', async () => {
+      const snap = await get(ref(db, 'tournament'))
+      await update(ref(db, 'tournament'), sampleFillUpdates(snap.val() || {}, library))
+    })
+  }
 
- {closeError && (
- <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-xs font-black">
- {closeError}
- </div>
- )}
+  const eraseEverything = () => run('Everything in the setup was erased.', async () => { await set(ref(db, 'tournament'), null) })
 
- {closeStep && (
- <div className="flex items-center gap-2 text-blue-400 text-xs font-black">
- <Loader2 size={14} className="animate-spin"/> {closeStep.toUpperCase()}
- </div>
- )}
+  // ── Day rows ───────────────────────────────────────────────────────
+  const dayRows = Array.from({ length: totalDays }, (_, i) => {
+    const day = DAY_LABELS[i]
+    const d = dayData(t, day)
+    const isCurrent = day === currentDay
+    const isClosed = archivedDays.includes(day)
+    const groups: any[] = d.pairings ? Object.values(d.pairings) : []
+    const placed = new Set(groups.flatMap((g: any) => g.playerIds || [])).size
+    const matches = d.matchups ? Object.keys(d.matchups).length : 0
+    const scored = d.scores ? Object.keys(d.scores).length : 0
+    return { day, d, isCurrent, isClosed, groups: groups.length, placed, matches, scored }
+  })
 
- {/* Choices */}
- <div className="space-y-2">
- {hasMoreDaysConfigured ? (
- <>
- <button onClick={()=>closeDay('next')} disabled={closing}
- className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
- <RotateCcw size={16}/> CLOSE &amp; START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
- </button>
- <button onClick={()=>closeDay('end')} disabled={closing}
- className="w-full bg-transparent hover:bg-zinc-900 border border-zinc-700 text-zinc-400 py-3 rounded-2xl font-black text-xs">
- END TOURNAMENT HERE INSTEAD
- </button>
- </>
- ) : (
- <>
- <p className="text-[10px] font-black text-zinc-500 tracking-wider">
- THIS IS THE LAST CONFIGURED DAY. WHAT NEXT?
- </p>
- <button onClick={()=>closeDay('end')} disabled={closing}
- className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 text-black py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
- <CheckCircle2 size={16}/> END TOURNAMENT
- </button>
- {canAddAnotherDay && (
- <button onClick={()=>closeDay('next')} disabled={closing}
- className="w-full bg-transparent hover:bg-zinc-900 border border-blue-500/40 text-blue-400 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2">
- <Calendar size={14}/> ADD {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}{' '}&amp; CONTINUE
- </button>
- )}
- </>
- )}
- <button onClick={()=>setShowClose(false)} disabled={closing}
- className="w-full text-zinc-600 hover:text-zinc-400 py-2 font-black text-xs">CANCEL</button>
- </div>
+  const missing = [
+    !tripReady && 'name the tournament',
+    !rosterReady && 'add players and teams',
+    !moneyReady && 'set the entry fee',
+    !courseReady && `pick a course for ${currentDay || 'Day 1'}`,
+  ].filter(Boolean) as string[]
 
- <p className="text-[9px] font-black text-zinc-700 text-center leading-relaxed">
- THE ARCHIVE IS WRITTEN AND READ BACK BEFORE ANY LIVE DATA IS CLEARED.<br/>
- IF VERIFICATION FAILS, NOTHING IS DELETED.
- </p>
- </>
- )}
- </div>
- </div>
- )}
+  return (
+    <div className="min-h-screen bg-black text-white font-sans">
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur border-b border-zinc-900">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <Link href="/" className="text-emerald-400 font-semibold flex items-center gap-2 text-sm hover:text-emerald-300">
+            <ArrowLeft size={16}/> Home
+          </Link>
+          <Link href="/setup/help" className="text-sm text-zinc-400 hover:text-emerald-400 underline underline-offset-4">How to set up a tournament</Link>
+        </div>
+      </div>
 
- {/* Progress */}
- <div className="bg-zinc-900 rounded-full h-2 overflow-hidden">
- <div className="h-full bg-emerald-500 transition-all duration-700" style={{width:`${(stepsComplete/5)*100}%`}}/>
- </div>
- <div className="flex justify-between text-[9px] font-black text-zinc-600 tracking-widest px-0.5">
- <span>SETUP PROGRESS</span><span>{stepsComplete} / 5 COMPLETE</span>
- </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-28 space-y-6">
 
- {/* ── STEP 1: TRIP ── */}
- <StepCard number={1} title="Trip Setup" icon={<Calendar size={18}/>}
- status={tripReady?'complete':'empty'}
- summary={tripReady?`${meta.tripName} · ${meta.totalDays} Day${meta.totalDays>1?'s':''}`:'No trip configured'}
- >
- {editingTrip ? (
- <div className="space-y-3">
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">TRIP NAME</label>
- <input value={tripNameInput} onChange={e=>setTripNameInput(e.target.value)}
- className="w-full bg-black border border-zinc-700 focus:border-emerald-500 p-3 rounded-xl font-black text-white outline-none text-base transition-colors"
- placeholder="E.G. CABO 2026"/>
- </div>
- <div>
- <label className="text-[10px] font-black text-zinc-600 tracking-widest block mb-1.5">NUMBER OF DAYS</label>
- <div className="flex gap-2">
- {[1,2,3,4,5].map(n => (
- <button key={n} onClick={()=>setTotalDaysInput(n)}
- className={`w-11 h-11 rounded-xl font-black text-lg transition-all border-2 ${totalDaysInput===n?'bg-emerald-500 border-emerald-400 text-black':'bg-black border-zinc-700 text-zinc-500 hover:border-zinc-500'}`}>
- {n}
- </button>
- ))}
- </div>
- </div>
- <div className="flex gap-2 pt-1">
- <button onClick={saveTripMeta} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-colors">
- <Save size={14}/> SAVE
- </button>
- <button onClick={()=>setEditingTrip(false)} className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-sm transition-colors">CANCEL</button>
- </div>
- </div>
- ) : tripReady ? (
- <div className="space-y-4">
- <div className="flex items-center justify-between">
- <div>
- <div className="text-white font-black">{meta.tripName}</div>
- <div className="text-zinc-500 text-[10px] font-black mt-0.5">{meta.totalDays} Day{meta.totalDays>1?'s':''}</div>
- </div>
- <button onClick={()=>setEditingTrip(true)} className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></button>
- </div>
- {meta.totalDays > 1 && (
- <div>
- <p className="text-[9px] font-black text-zinc-600 tracking-widest mb-2">TOURNAMENT DAYS</p>
- <div className="flex gap-2 flex-wrap">
- {Array.from({length:meta.totalDays},(_,i) => {
- const dayLabel = DAY_LABELS[i]
- const isArchived = archivedDays.includes(dayLabel)
- const isCurrent = meta.currentDay === dayLabel
- return (
- <div key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border font-black text-xs ${
- isArchived?'border-emerald-500/40 bg-emerald-500/10 text-emerald-400':
- isCurrent?'border-blue-500/50 bg-blue-500/10 text-blue-400':
- 'border-zinc-800 bg-black text-zinc-600'}`}>
- {isArchived?<CheckCircle2 size={12}/>:isCurrent?<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"/>:<Circle size={12}/>}
- {dayLabel}
- {isCurrent && <span className="text-[9px]">← NOW</span>}
- </div>
- )
- })}
- </div>
- </div>
- )}
- {canGoNextDay && (
- <button onClick={openClose} disabled={transitioningDay}
- className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2">
- {transitioningDay?<Loader2 size={14} className="animate-spin"/>:<RotateCcw size={14}/>}
- CLOSE {meta.currentDay?.toUpperCase()} · START {DAY_LABELS[currentDayIdx+1]?.toUpperCase()}
- </span>
- <span className="text-[9px] text-blue-600">ARCHIVES + RESETS SCORES</span>
- </button>
- )}
- </div>
- ) : (
- <button onClick={()=>setEditingTrip(true)} className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Calendar size={14}/> SET UP TRIP</span><ChevronRight size={14}/>
- </button>
- )}
- </StepCard>
+        {/* ── Title ── */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{meta.tripName || 'New tournament'}</h1>
+            <p className="text-zinc-500 text-sm mt-1.5">
+              {tripReady
+                ? `${totalDays} day${totalDays > 1 ? 's' : ''}, ${fieldIds.size} player${fieldIds.size === 1 ? '' : 's'} on ${teams.length} team${teams.length === 1 ? '' : 's'}`
+                : 'Set up the tournament once on the left, then plan each day on the right.'}
+            </p>
+          </div>
+          {allReady && !tripComplete && currentDay && (
+            <div className="flex items-center gap-2">
+              <Link href="/scorer" className="bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2">
+                <Play size={15}/> Score {currentDay}
+              </Link>
+              {dayRows.some(r => !r.isClosed && r.scored > 0) && (
+                <button onClick={() => { setFinishError(null); setShowFinish(true) }}
+                  className="border border-zinc-700 hover:border-zinc-500 text-zinc-300 px-4 py-2.5 rounded-xl font-semibold text-sm">
+                  Finish tournament
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
- {/* ── STEP 2: COURSE ── */}
- <StepCard number={2} title="Course Setup" icon={<Flag size={18}/>} status={courseReady?'complete':'empty'} summary={courseReady?`${course?.name} · Par ${(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)}`:'No course set'}>
- {courseReady ? (
- <div className="flex items-center justify-between">
- <div><div className="text-white font-black">{course?.name}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">Par {(course?.pars||[]).reduce((a:number,b:number)=>a+b,0)} · 18 holes</div></div>
- <Link href="/setup/settings" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/settings" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Flag size={14}/> SET UP COURSE</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
+        {notice && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${notice.ok ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-rose-500/40 bg-rose-500/10 text-rose-400'}`}>
+            {notice.text}
+          </div>
+        )}
 
- {/* ── STEP 3: ROSTER ── */}
- <StepCard number={3} title="Roster & Teams" icon={<Users size={18}/>} status={rosterReady?'complete':'empty'} summary={playerCount>0?`${playerCount} players · ${teamCount} teams`:'No players yet'}>
- {rosterReady ? (
- <div className="flex items-center justify-between">
- <div><div className="text-white font-black">{playerCount} Players · {teamCount} Teams</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">All players assigned</div></div>
- <Link href="/setup/roster" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/roster" className="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Users size={14}/> BUILD ROSTER & TEAMS</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
+        {meta.sampleData && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-400 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
+            <span>This tournament is showing sample scores. They are made up. Remove them before the real thing.</span>
+            <button onClick={() => { setShowReset(true); setConfirmKind('restart'); setConfirmText('') }} className="font-semibold underline underline-offset-4">Remove the sample data</button>
+          </div>
+        )}
 
- {/* ── STEP 4: MONEY ── */}
- <StepCard number={4} title="Money & Pots" icon={<DollarSign size={18}/>} status={moneyReady?'complete':'empty'} summary={moneyReady?'Entry fee configured':'Not configured'}>
- {moneyReady ? (
- <div className="flex items-center justify-between">
- <div className="text-white font-black text-sm">Entry fee configured</div>
- <Link href="/setup/money" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/money" className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><DollarSign size={14}/> CONFIGURE MONEY</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
+        {tripComplete && (
+          <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-emerald-400 flex items-center gap-2"><CheckCircle2 size={16}/> This tournament is finished</p>
+              <p className="text-sm text-zinc-500 mt-1">Every day is saved in History.</p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/history" className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl font-semibold text-sm">See the results</Link>
+              <button onClick={newTournament} disabled={resetBusy} className="border border-zinc-700 hover:border-zinc-500 text-zinc-300 px-4 py-2.5 rounded-xl font-semibold text-sm">Start a new tournament</button>
+            </div>
+          </div>
+        )}
 
- {/* ── STEP 5: FORMAT ── */}
- <StepCard number={5} title="Team Scoring Format" icon={<Layers size={18}/>} status="complete" summary={formatCustom?formatName:"Jeff's Blitz (Default)"}>
- <div className="flex items-center justify-between">
- <div><div className="text-white font-black text-sm">{formatName}</div><div className="text-zinc-500 text-[10px] font-black mt-0.5">{formatCustom?'Custom format':'Default · Best 2 Net (Best 3 on Par 3)'}</div></div>
- <Link href="/setup/format" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">{formatCustom?'EDIT':'CONFIGURE'} <ChevronRight size={14}/></Link>
- </div>
- </StepCard>
+        {!allReady && !tripComplete && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-400 px-4 py-3 text-sm flex items-start gap-2">
+            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5"/>
+            <span>Before scoring can start: {missing.join(', ')}.</span>
+          </div>
+        )}
 
- {/* ── STEP 6: MATCHUPS ── */}
- <StepCard number={6} title="Side Bets & Matches" icon={<Sword size={18}/>} status={matchupsReady?'complete':'empty'} summary={matchupsReady?`${matchupCount} match${matchupCount>1?'es':''} configured`:'No matches set up'}>
- {matchupsReady ? (
- <div className="flex items-center justify-between">
- <div className="text-white font-black text-sm">{matchupCount} match{matchupCount>1?'es':''} configured</div>
- <Link href="/setup/matchups" className="text-emerald-500 text-xs font-black flex items-center gap-1 hover:text-emerald-400">EDIT <ChevronRight size={14}/></Link>
- </div>
- ) : (
- <Link href="/setup/matchups" className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-between transition-all">
- <span className="flex items-center gap-2"><Sword size={14}/> SET UP MATCHES</span><ChevronRight size={14}/>
- </Link>
- )}
- </StepCard>
+        <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-6 items-start">
 
- {/* ── GO LIVE ── */}
- <div className={`mt-4 rounded-[2rem] border-2 p-6 transition-all ${allComplete?'bg-emerald-950/40 border-emerald-500/60':'bg-zinc-900/40 border-zinc-800'}`}>
- <div className="flex items-center gap-3 mb-4">
- <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${allComplete?'bg-emerald-500 text-black':'bg-zinc-800 text-zinc-600'}`}>
- {allComplete?<Play size={14}/>:'7'}
- </div>
- <div>
- <h3 className={`font-black text-base ${allComplete?'text-emerald-400':'text-zinc-600'}`}>GO LIVE</h3>
- <p className="text-[10px] font-black text-zinc-600 tracking-wider">{allComplete?'All set · Ready to start scoring':'Complete steps 1–6 above'}</p>
- </div>
- </div>
- <Link href="/scorer" className={`w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all shadow-xl ${allComplete?'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20':'bg-zinc-800 text-zinc-600 pointer-events-none'}`}>
- <Play size={22}/> {meta.currentDay?`START ${meta.currentDay.toUpperCase()}`:'START TOURNAMENT'}
- </Link>
- </div>
+          {/* ── LEFT: decided once ── */}
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <h2 className="font-semibold">The tournament</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Set once. Stays the same every day.</p>
+            </div>
 
- {/* ── RESET / ABANDON ── */}
- <div className="pt-4 border-t border-zinc-900">
- <button onClick={()=>setShowDestructive(!showDestructive)} className="w-full text-[9px] font-black text-zinc-700 hover:text-zinc-500 tracking-[0.3em] py-3 transition-colors">
- {showDestructive?'▲ HIDE':'▼ SHOW'} RESET &amp; ABANDON
- </button>
- {showDestructive && (
- <div className="space-y-2 pt-1">
+            {/* Trip */}
+            <div className="px-5 py-4 border-b border-zinc-800">
+              {editingTrip ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-zinc-500 block mb-1.5">Name</label>
+                    <input value={tripNameInput} onChange={e => setTripNameInput(e.target.value)} autoFocus
+                      placeholder="Pinehurst 2026"
+                      className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-lg text-white outline-none text-sm"/>
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 block mb-1.5">Days of golf</label>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                        <button key={n} onClick={() => setTotalDaysInput(n)}
+                          className={`w-9 h-9 rounded-lg font-semibold text-sm border ${totalDaysInput === n ? 'bg-emerald-500 border-emerald-500 text-black' : 'bg-black border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveTrip} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-lg font-semibold text-sm">Save</button>
+                    <button onClick={() => setEditingTrip(false)} className="px-4 border border-zinc-700 text-zinc-400 hover:border-zinc-500 py-2.5 rounded-lg text-sm">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <SetupRow done={tripReady} label="Name and days"
+                  value={tripReady ? `${meta.tripName} — ${totalDays} day${totalDays > 1 ? 's' : ''}` : 'Not set yet'}
+                  action={<button onClick={startEditTrip} className="text-emerald-400 hover:text-emerald-300 text-sm font-semibold flex items-center gap-1 flex-shrink-0"><Pencil size={13}/> {tripReady ? 'Edit' : 'Set'}</button>}/>
+              )}
+            </div>
 
- {destructiveErr && (
- <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400 rounded-xl px-4 py-3 text-[11px] font-black leading-snug">
- {destructiveErr}
- </div>
- )}
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <SetupRow done={rosterReady} label="Players and teams"
+                value={rosterReady ? `${fieldIds.size} players on ${teams.length} teams` : players.length ? `${players.length} players, no teams yet` : 'No players yet'}
+                action={<RowLink href="/setup/roster" label={rosterReady ? 'Edit' : 'Add'}/>}/>
+            </div>
 
- <button disabled={destructiveBusy}
- onClick={()=>{
- if(!confirm("Wipe scores only?\n\nTeams, matchups, course and trip settings all stay.")) return
- runDestructive('Scores wiped.', async()=>{ await set(ref(db,'tournament/scores'), null); await set(ref(db,'tournament/draws'), null) })
- }}
- className="w-full bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/50 text-amber-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Eraser size={12} className="inline mr-2"/>WIPE SCORES ONLY</span>
- <span className="text-amber-800 text-[9px]">KEEPS TEAMS &amp; BETS</span>
- </button>
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <SetupRow done={moneyReady} label="Money"
+                value={!moneyReady ? 'Entry fee not set'
+                  : byPlace
+                    ? `${money$(money.entryFee)} entry. Team prize ${prizes.length ? prizes.map(money$).join(' / ') : 'not set'}, paid at the end.`
+                    : `${money$(money.entryFee)} entry${Number(money.skinsAllocation) > 0 ? `, ${money$(money.skinsAllocation)} of it to skins` : ''}. Team pot ${money$(Math.max(0, teamPot))} a day.`}
+                action={<RowLink href="/setup/money" label={moneyReady ? 'Edit' : 'Set'}/>}/>
+            </div>
 
- <button disabled={destructiveBusy}
- onClick={()=>{
- if(!confirm("Reset the round?\n\nClears scores, teams, matchups and trip settings.\nKeeps the course and money settings so you can run it again.")) return
- runDestructive('Round reset. Course and money settings kept.', async()=>{
- await set(ref(db,'tournament/scores'), null)
- await set(ref(db,'tournament/teams'), null)
- await set(ref(db,'tournament/matchups'), null)
- await set(ref(db,'tournament/meta'), null)
- })
- }}
- className="w-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/50 text-rose-600 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Trash2 size={12} className="inline mr-2"/>RESET ROUND</span>
- <span className="text-rose-900 text-[9px]">KEEPS COURSE</span>
- </button>
+            <div className="px-5 py-4">
+              <SetupRow done label="Team scoring format" value={formatName}
+                action={<RowLink href="/setup/format" label="Edit"/>}/>
+            </div>
+          </section>
 
- {/* Abandon — the only action that clears the course and money too */}
- {!abandonConfirm ? (
- <button disabled={destructiveBusy}
- onClick={()=>{ setDestructiveErr(null); setAbandonText(''); setAbandonConfirm(true) }}
- className="w-full bg-rose-600/15 border border-rose-600/40 hover:border-rose-500 text-rose-400 py-3 px-4 rounded-xl font-black text-xs flex items-center justify-between transition-all">
- <span><Trash2 size={12} className="inline mr-2"/>ABANDON SETUP</span>
- <span className="text-rose-700 text-[9px]">CLEARS EVERYTHING</span>
- </button>
- ) : (
- <div className="border border-rose-500/40 bg-rose-500/10 rounded-2xl p-4 space-y-3">
- <p className="text-[11px] font-black text-rose-400 leading-snug">
- THIS CLEARS THE ENTIRE TOURNAMENT — SCORES, TEAMS, MATCHUPS, ROSTER, COURSE,
- MONEY SETTINGS AND TRIP DETAILS. THE WIZARD STARTS FROM SCRATCH.
- </p>
- <p className="text-[10px] font-black text-zinc-500 leading-snug">
- Archived rounds in History, your saved courses and the permanent roster are not touched.
- </p>
- <div>
- <label className="text-[9px] font-black text-zinc-500 tracking-widest block mb-1.5">
- TYPE <span className="text-white">ABANDON</span> TO CONFIRM
- </label>
- <input value={abandonText} onChange={e=>setAbandonText(e.target.value)} placeholder="ABANDON"
- className="w-full bg-black border border-zinc-700 focus:border-rose-500 p-2.5 rounded-xl font-black text-white outline-none text-xs transition-colors"/>
- </div>
- <div className="flex gap-2">
- <button
- disabled={destructiveBusy || abandonText.trim().toUpperCase() !== 'ABANDON'}
- onClick={()=>{
- runDestructive('Setup abandoned. Ready for a fresh tournament.', async()=>{
- await set(ref(db,'tournament'), null)
- setAbandonConfirm(false); setAbandonText('')
- })
- }}
- className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-2.5 rounded-xl font-black text-xs transition-colors">
- {destructiveBusy ? 'CLEARING...' : 'CLEAR EVERYTHING'}
- </button>
- <button onClick={()=>{ setAbandonConfirm(false); setAbandonText('') }}
- className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-2.5 rounded-xl font-black text-xs transition-colors">
- CANCEL
- </button>
- </div>
- </div>
- )}
- </div>
- )}
- </div>
+          {/* ── RIGHT: one row per day ── */}
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="font-semibold">The days</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">Plan any day ahead of time. Side matches are optional.</p>
+              </div>
+              {tripReady && <button onClick={startEditTrip} className="text-xs text-zinc-500 hover:text-emerald-400">Add or remove days</button>}
+            </div>
 
- <p className="text-center text-[9px] text-zinc-800 font-black tracking-widest pb-8">AUTHORIZED ACCESS ONLY · SENIOR MANAGEMENT CONSOLE</p>
- </div>
- </div>
- )
+            {/* Column headings — laptop only */}
+            <div className="hidden lg:grid grid-cols-[110px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_128px] gap-4 px-5 py-2.5 border-b border-zinc-800 text-xs text-zinc-500">
+              <span>Day</span><span>Course</span><span>Pairings</span><span>Side matches</span><span/>
+            </div>
+
+            {dayRows.map(r => (
+              <div key={r.day}
+                className={`grid lg:grid-cols-[110px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_128px] gap-x-4 gap-y-3 px-5 py-4 border-b border-zinc-800 last:border-b-0 lg:items-center ${r.isCurrent && !tripComplete ? 'bg-emerald-500/5' : ''}`}>
+
+                {/* Day + status */}
+                <div className="flex lg:block items-center justify-between gap-3">
+                  <div className="font-semibold">{r.day}</div>
+                  <div className={`text-xs mt-0.5 ${r.isClosed ? 'text-zinc-500' : r.isCurrent ? 'text-emerald-400' : r.scored ? 'text-amber-400' : 'text-zinc-600'}`}>
+                    {r.isClosed ? 'Finished' : r.isCurrent ? 'Open for scoring' : r.scored ? 'Scores saved' : 'Not started'}
+                  </div>
+                </div>
+
+                {r.isClosed ? (
+                  <div className="lg:col-span-3 text-sm text-zinc-500">Finished and saved in History.</div>
+                ) : (
+                  <>
+                    {/* Course */}
+                    <div>
+                      <div className="lg:hidden text-xs text-zinc-500 mb-1">Course</div>
+                      <select value={library.find(c => c.name === r.d.course?.name)?.id || (r.d.course ? '__current' : '')}
+                        onChange={e => pickCourse(r.day, e.target.value)}
+                        className={`w-full bg-black border px-3 py-2.5 rounded-lg text-sm outline-none focus:border-emerald-500 ${r.d.course ? 'border-zinc-700 text-white' : 'border-amber-500/50 text-amber-400'}`}>
+                        {!r.d.course && <option value="">Pick a course…</option>}
+                        {r.d.course && !library.find(c => c.name === r.d.course.name) && <option value="__current">{r.d.course.name}</option>}
+                        {library.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Pairings */}
+                    <Link href={`/setup/day?day=${encodeURIComponent(r.day)}`} className="group block">
+                      <div className="lg:hidden text-xs text-zinc-500 mb-1">Pairings</div>
+                      <div className="flex items-center justify-between gap-2 border border-zinc-800 group-hover:border-zinc-600 rounded-lg px-3 py-2.5 text-sm">
+                        <span className={r.groups ? 'text-white' : 'text-zinc-500'}>
+                          {r.groups ? `${r.groups} group${r.groups > 1 ? 's' : ''}` : 'Not set'}
+                          {r.groups > 0 && r.placed < fieldIds.size && <span className="text-amber-400"> ({fieldIds.size - r.placed} left out)</span>}
+                        </span>
+                        <ChevronRight size={14} className="text-zinc-600 flex-shrink-0"/>
+                      </div>
+                    </Link>
+
+                    {/* Side matches */}
+                    <Link href={`/setup/matchups?day=${encodeURIComponent(r.day)}`} className="group block">
+                      <div className="lg:hidden text-xs text-zinc-500 mb-1">Side matches</div>
+                      <div className="flex items-center justify-between gap-2 border border-zinc-800 group-hover:border-zinc-600 rounded-lg px-3 py-2.5 text-sm">
+                        <span className={r.matches ? 'text-white' : 'text-zinc-500'}>{r.matches ? `${r.matches} match${r.matches > 1 ? 'es' : ''}` : 'None'}</span>
+                        <ChevronRight size={14} className="text-zinc-600 flex-shrink-0"/>
+                      </div>
+                    </Link>
+                  </>
+                )}
+
+                {/* Action */}
+                <div className="lg:text-right">
+                  {r.isClosed ? (
+                    <Link href="/history" className="text-sm text-zinc-400 hover:text-white">See results</Link>
+                  ) : r.isCurrent && !tripComplete ? (
+                    <Link href="/scorer" className="inline-flex items-center justify-center gap-1.5 w-full lg:w-auto bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-lg font-semibold text-sm">
+                      <Play size={13}/> Scorer
+                    </Link>
+                  ) : (
+                    <button onClick={() => openDay(r.day)} disabled={!!openingDay}
+                      className="inline-flex items-center justify-center gap-1.5 w-full lg:w-auto border border-zinc-700 hover:border-emerald-500 hover:text-emerald-400 text-zinc-300 px-4 py-2.5 rounded-lg font-semibold text-sm">
+                      {openingDay === r.day ? <Loader2 size={13} className="animate-spin"/> : null} Open
+                    </button>
+                  )}
+                  {!r.isClosed && r.scored > 0 && (
+                    <button onClick={() => openClose(r.day)} className="block w-full lg:w-auto lg:ml-auto mt-2 text-xs text-zinc-500 hover:text-emerald-400 whitespace-nowrap">
+                      Finish day
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <div className="px-5 py-3.5 bg-black/40 text-xs text-zinc-500 leading-relaxed">
+              Open whichever day you are playing. Opening another day keeps the scores on the one you leave, so you can move between days freely.
+              When a day's scores are final, finish it: that saves it to History for the record and locks it. You never have to finish a day to move on.{' '}
+              <Link href="/courses" className="text-zinc-400 hover:text-emerald-400 underline">Add a course to the list</Link>
+            </div>
+          </section>
+        </div>
+
+        {/* ── Start over ── */}
+        {hasAnyData && (
+          <div className="pt-2">
+            <button onClick={() => setShowReset(!showReset)} className="text-sm text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5">
+              <ChevronDown size={15} className={showReset ? 'rotate-180' : ''}/> Sample data, clear scores or start over
+            </button>
+
+            {showReset && (
+              <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-950 divide-y divide-zinc-800">
+                <ResetRow title={`Clear ${currentDay || 'today'}'s scores`}
+                  detail="Removes the scores entered for the open day. Everything else stays."
+                  button="Clear scores" onClick={clearTodayScores} disabled={resetBusy}/>
+
+                <div className="px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">Start over from Day 1</p>
+                      <p className="text-xs text-zinc-500 mt-0.5 max-w-xl">
+                        For clearing out practice rounds. Removes every score on every day and deletes this tournament's closed days from History.
+                        Players, teams, courses, pairings, side matches and money all stay.
+                      </p>
+                    </div>
+                    {confirmKind !== 'restart' && (
+                      <button onClick={() => { setConfirmKind('restart'); setConfirmText('') }} disabled={resetBusy}
+                        className="border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 px-4 py-2 rounded-lg text-sm font-semibold">Start over</button>
+                    )}
+                  </div>
+                  {confirmKind === 'restart' && (
+                    <TypeToConfirm word="START OVER" text={confirmText} setText={setConfirmText} busy={resetBusy}
+                      warning="The scores and closed days cannot be brought back."
+                      go="Remove the scores and go back to Day 1" onGo={restartFromDayOne} onCancel={() => setConfirmKind(null)}/>
+                  )}
+                </div>
+
+                <ResetRow title="Fill with sample data"
+                  detail={canSample
+                    ? 'Adds made-up pairings, side matches and scores using your real players, teams and courses, so you can see every screen with something in it. Start over from Day 1 removes it again.'
+                    : 'Only available while the tournament has no scores. Use Start over from Day 1 first if you want to try it.'}
+                  button="Add sample data" onClick={fillSample} disabled={resetBusy || !canSample}/>
+
+                <ResetRow title="Start a new tournament"
+                  detail="Clears the trip, teams, pairings, side matches and scores. Keeps the players, the course and the money settings. Closed days stay in History."
+                  button="New tournament" onClick={newTournament} disabled={resetBusy}/>
+
+                <div className="px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">Erase the whole setup</p>
+                      <p className="text-xs text-zinc-500 mt-0.5 max-w-xl">
+                        Removes everything on this screen, including players, teams and money. History, saved courses and the permanent roster are not touched.
+                      </p>
+                    </div>
+                    {confirmKind !== 'erase' && (
+                      <button onClick={() => { setConfirmKind('erase'); setConfirmText('') }} disabled={resetBusy}
+                        className="border border-rose-500/50 text-rose-400 hover:bg-rose-500/10 px-4 py-2 rounded-lg text-sm font-semibold">Erase</button>
+                    )}
+                  </div>
+                  {confirmKind === 'erase' && (
+                    <TypeToConfirm word="ERASE" text={confirmText} setText={setConfirmText} busy={resetBusy}
+                      warning="This cannot be undone."
+                      go="Erase the setup" onGo={eraseEverything} onCancel={() => setConfirmKind(null)}/>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Finish-tournament dialog ── */}
+      {showFinish && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => { if (!finishing) setShowFinish(false) }}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="font-semibold text-lg">Finish the tournament</p>
+              <p className="text-sm text-zinc-500 mt-1">
+                Saves every day below to History in one go and marks the tournament finished. Scores are locked after this, so fix any mistakes first.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+              {dayRows.map(r => {
+                const a = !r.isClosed && r.scored > 0 ? runAudit(r.day) : null
+                return (
+                  <div key={r.day} className="px-4 py-3 flex items-start justify-between gap-3 text-sm">
+                    <span className="font-semibold">{r.day}</span>
+                    <span className={`text-right ${r.isClosed ? 'text-zinc-500' : !a ? 'text-zinc-500' : a.partial.length ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {r.isClosed ? 'Already in History'
+                        : !a ? 'No scores, will be skipped'
+                        : a.partial.length ? `Will be saved. ${a.partial.length} of ${a.total} scorecards not finished.`
+                        : `Will be saved. All ${a.total} scorecards complete.`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {finishError && <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-sm">{finishError}</div>}
+            {finishStep && <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 size={14} className="animate-spin"/> {finishStep}</div>}
+
+            <div className="space-y-2">
+              <button onClick={finishTournament} disabled={finishing}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black py-3.5 rounded-xl font-semibold text-sm">
+                Save to History and finish the tournament
+              </button>
+              <button onClick={() => setShowFinish(false)} disabled={finishing} className="w-full text-zinc-500 hover:text-zinc-300 py-2 text-sm">Cancel</button>
+            </div>
+
+            <p className="text-xs text-zinc-600 text-center leading-relaxed">
+              Each day is saved and checked before anything is cleared. If a check fails, your scores are left alone.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Finish-day dialog ── */}
+      {showClose && closeTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => { if (!closing) { setShowClose(false); setCloseDone(null) } }}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+
+            {closeDone ? (
+              <div className="space-y-4 text-center">
+                <CheckCircle2 size={40} className="text-emerald-400 mx-auto"/>
+                <div>
+                  <p className="font-semibold text-lg">{closeDone.day} is finished</p>
+                  <p className="text-sm text-zinc-500 mt-1">{closeDone.cards} scorecards saved to History.</p>
+                </div>
+                {(closeDone.over || closeDone.next) && (
+                  <p className="text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+                    {closeDone.over ? 'That was the last day. The tournament is finished.' : `${closeDone.next} is now open for scoring.`}
+                  </p>
+                )}
+                <button onClick={() => { setShowClose(false); setCloseDone(null) }}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-xl font-semibold text-sm">Done</button>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <p className="font-semibold text-lg">Finish {closeTarget}</p>
+                  <p className="text-sm text-zinc-500 mt-1">
+                    Saves {closeTarget} to History as the permanent record and locks its scores. Do this once the scores are final. It still counts toward the team prize.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs text-zinc-500 block mb-1.5">Date this round was played</label>
+                  <input type="date" value={playDate} onChange={e => setPlayDate(e.target.value)}
+                    className="w-full bg-black border border-zinc-700 focus:border-emerald-500 px-3 py-2.5 rounded-lg text-white outline-none text-sm"/>
+                </div>
+
+                {audit && (audit.partial.length === 0 ? (
+                  <div className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 rounded-xl p-3 text-sm flex items-center gap-2">
+                    <CheckCircle2 size={15}/> All {audit.total} scorecards are complete.
+                  </div>
+                ) : (
+                  <div className="border border-amber-500/40 bg-amber-500/10 text-amber-400 rounded-xl p-3 text-sm space-y-1.5">
+                    <div className="flex items-center gap-2 font-semibold"><AlertTriangle size={15}/> {audit.partial.length} scorecard{audit.partial.length > 1 ? 's are' : ' is'} not finished</div>
+                    <ul className="text-xs pl-5 list-disc">
+                      {audit.partial.slice(0, 6).map((n: string) => <li key={n}>{n}</li>)}
+                      {audit.partial.length > 6 && <li>and {audit.partial.length - 6} more</li>}
+                    </ul>
+                    <p className="text-xs text-zinc-500">You can still finish the day, but its scores are locked once you do.</p>
+                  </div>
+                ))}
+
+                {closeError && <div className="border border-rose-500/40 bg-rose-500/10 text-rose-400 rounded-xl p-3 text-sm">{closeError}</div>}
+                {closeStep && <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 size={14} className="animate-spin"/> {closeStep}</div>}
+
+                <div className="space-y-2">
+                  <button onClick={() => closeDay(false)} disabled={closing}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black py-3.5 rounded-xl font-semibold text-sm">
+                    Finish {closeTarget}
+                  </button>
+                  {dayRows.filter(r => !r.isClosed && r.day !== closeTarget).length > 0 && (
+                    <button onClick={() => { if (confirm(`End the whole tournament after ${closeTarget}?\n\nDays that are not finished will not be saved to History.`)) closeDay(true) }} disabled={closing}
+                      className="w-full border border-zinc-700 hover:border-zinc-500 text-zinc-400 py-3 rounded-xl text-sm">
+                      Finish {closeTarget} and end the tournament early
+                    </button>
+                  )}
+                  <button onClick={() => setShowClose(false)} disabled={closing} className="w-full text-zinc-500 hover:text-zinc-300 py-2 text-sm">Cancel</button>
+                </div>
+
+                <p className="text-xs text-zinc-600 text-center leading-relaxed">
+                  The day is saved and checked before anything is cleared. If the check fails, your scores are left alone.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
-function StepCard({number,title,summary,status,icon,children}:{number:number;title:string;summary:string;status:'complete'|'empty'|'warning';icon:React.ReactNode;children:React.ReactNode}) {
- const isComplete=status==='complete',isWarning=status==='warning'
- return (
- <div className={`rounded-[1.75rem] border-2 overflow-hidden transition-all ${isComplete?'border-emerald-500/40 bg-zinc-950':isWarning?'border-amber-500/40 bg-zinc-950':'border-zinc-800 bg-zinc-950'}`}>
- <div className={`px-5 py-4 flex items-center gap-4 border-b ${isComplete?'border-emerald-500/20':isWarning?'border-amber-500/20':'border-zinc-800'}`}>
- <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${isComplete?'bg-emerald-500 text-black':isWarning?'bg-amber-500/30 text-amber-400':'bg-zinc-800 text-zinc-500'}`}>
- {isComplete?<CheckCircle2 size={16}/>:number}
- </div>
- <div className="flex-1 min-w-0">
- <div className={`font-black text-sm ${isComplete?'text-emerald-400':isWarning?'text-amber-400':'text-zinc-400'}`}>{title}</div>
- <div className="text-[10px] font-black text-zinc-600 tracking-wider truncate normal-case mt-0.5">{summary}</div>
- </div>
- <div className={`flex-shrink-0 ${isComplete?'text-emerald-500':isWarning?'text-amber-500':'text-zinc-700'}`}>{icon}</div>
- </div>
- <div className="px-5 py-4">{children}</div>
- </div>
- )
+function SetupRow({ done, label, value, action }: { done: boolean; label: string; value: string; action: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <CheckCircle2 size={17} className={`flex-shrink-0 mt-0.5 ${done ? 'text-emerald-400' : 'text-zinc-700'}`}/>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-semibold text-sm">{label}</span>
+          {action}
+        </div>
+        <p className={`text-sm mt-0.5 ${done ? 'text-zinc-400' : 'text-amber-400'}`}>{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function RowLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="text-emerald-400 hover:text-emerald-300 text-sm font-semibold flex items-center gap-0.5 flex-shrink-0">
+      {label} <ChevronRight size={14}/>
+    </Link>
+  )
+}
+
+function ResetRow({ title, detail, button, onClick, disabled }: { title: string; detail: string; button: string; onClick: () => void; disabled: boolean }) {
+  return (
+    <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="font-semibold text-sm">{title}</p>
+        <p className="text-xs text-zinc-500 mt-0.5 max-w-xl">{detail}</p>
+      </div>
+      <button onClick={onClick} disabled={disabled}
+        className="border border-zinc-700 hover:border-zinc-500 disabled:opacity-40 disabled:hover:border-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-sm font-semibold">{button}</button>
+    </div>
+  )
+}
+
+function TypeToConfirm({ word, text, setText, busy, warning, go, onGo, onCancel }: {
+  word: string; text: string; setText: (s: string) => void; busy: boolean; warning: string; go: string; onGo: () => void; onCancel: () => void
+}) {
+  return (
+    <div className="mt-3 rounded-xl border border-rose-500/40 bg-rose-500/5 p-4 space-y-3">
+      <p className="text-sm text-rose-400">{warning} Type <span className="font-semibold text-white">{word}</span> to go ahead.</p>
+      <input value={text} onChange={e => setText(e.target.value)} placeholder={word} autoFocus
+        className="w-full sm:w-64 bg-black border border-zinc-700 focus:border-rose-500 px-3 py-2 rounded-lg text-white outline-none text-sm"/>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onGo} disabled={busy || text.trim().toUpperCase() !== word}
+          className="bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+          {busy ? 'Working…' : go}
+        </button>
+        <button onClick={onCancel} className="px-4 border border-zinc-700 text-zinc-400 hover:border-zinc-500 py-2 rounded-lg text-sm">Cancel</button>
+      </div>
+    </div>
+  )
 }

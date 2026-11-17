@@ -109,7 +109,9 @@ function computeAnalytics(history: any[]) {
     const courseName: string = arch.course?.name || 'Unknown'
     const money = arch.money || {}
     const draws: Record<string, any> = arch.draws || {}
-    const entryFee = Number(money.entryFee) || 0
+    // A whole-tournament entry is paid once, not once per day — count it on Day 1 only.
+    const entryOnce = money.teamPayoutMode === 'places' && Number(arch._meta?.dayNumber) > 1
+    const entryFee = entryOnce ? 0 : (Number(money.entryFee) || 0)
     const archDate = Number(arch.id) || 0
     const nineHole = !!arch.course?.nineHole
     const holeOffset = nineHole && arch.course?.nineHoleStart === 'back' ? 9 : 0
@@ -387,7 +389,7 @@ function computeAnalytics(history: any[]) {
 
   history.forEach(arch => {
     const matchups: any[] = arch.matchups ? Object.values(arch.matchups) : []
-    const entryFee = Number(arch.money?.entryFee) || 0
+    const entryFee = (arch.money?.teamPayoutMode === 'places' && Number(arch._meta?.dayNumber) > 1) ? 0 : (Number(arch.money?.entryFee) || 0)
     const players: any[] = arch.roster ? Object.values(arch.roster) : []
     totalPotMoney += entryFee * players.length
 

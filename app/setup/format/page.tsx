@@ -1,9 +1,11 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
-import { ref, set, push, onValue } from 'firebase/database'
+import { ref, push, onValue } from 'firebase/database'
+import { set } from '@/components/saved'
 import { ArrowLeft, Save, CheckCircle2, Info, AlertTriangle, X, BookOpen, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
+import SetupBack from '@/components/SetupBack'
 
 type BallType = 'net' | 'gross'
 type Ball = { type: BallType }
@@ -169,9 +171,7 @@ export default function FormatPage() {
 
  return (
  <div className="min-h-screen bg-black text-white p-4 sm:p-8 font-sans">
- <Link href="/setup/admin"className="text-emerald-500 font-black mb-8 inline-flex items-center gap-2 hover:text-emerald-400 transition-colors">
- <ArrowLeft size={18}/> CHECKLIST
- </Link>
+ <SetupBack here="Team scoring format"/>
 
  <div className="max-w-xl mx-auto space-y-6">
 
@@ -442,4 +442,4 @@ export default function FormatPage() {
  )}
  </div>
  )
-}
+}

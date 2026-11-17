@@ -1,11 +1,12 @@
 "use client"
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { db } from '@/lib/firebase'
-import { ref, set, get, onValue } from 'firebase/database'
+import { ref, set, get, update, onValue } from 'firebase/database'
 import { Home, CheckCircle2, Lock, Unlock, Eye, EyeOff, Archive, Copy, X, AlertTriangle } from 'lucide-react'
 import { applyDraws, normalizeDraws, type DrawMap } from '@/lib/draws'
 import Link from 'next/link'
+import DayBar from '@/components/DayBar'
 
 
 // ── GOLF SCORING SYMBOL ────────────────────────────────────────────
@@ -98,7 +99,9 @@ export default function ScorerPage() {
  if (sessionStorage.getItem('scorer-edit') === 'true') setEditMode(true)
  setIsAdmin(sessionStorage.getItem('role') === 'admin')
  onValue(ref(db,'tournament/meta'), snap => setIsMock(!!snap.val()?.isMock))
- onValue(ref(db,'tournament/scores'), snap => snap.val() && setScores(snap.val()))
+ // An empty day must clear the card — otherwise yesterday's scores linger on
+ // screen after a new day is opened and get written into it on the next edit.
+ onValue(ref(db,'tournament/scores'), snap => setScores(snap.val() || {}))
  onValue(ref(db,'tournament/course'), snap => {
  if (snap.val()) setCourse(snap.val())
  })
@@ -106,7 +109,25 @@ export default function ScorerPage() {
  onValue(ref(db,'tournament/roster'), snap => setPlayers(snap.val() ? Object.values(snap.val()) : []))
  onValue(ref(db,'tournament/money'), snap => setMoney(snap.val() || {}))
  onValue(ref(db,'tournament/matchups'), snap => setMatchups(snap.val() || {}))
+ onValue(ref(db,'tournament/pairings'), snap => setPairings(snap.val() ? Object.values(snap.val()) : []))
  }, [])
+
+ // ── PAIRINGS ──
+ // Teams hold for the whole tournament; pairings are who plays together
+ // today. When the day has pairings the cards are laid out by group, since
+ // that is how a card is kept on the course. Scores are stored per player
+ // either way, so the view is only a layout choice.
+ const [pairings, setPairings] = useState<any[]>([])
+ const [viewBy, setViewBy] = useState<'pairing'|'team'>('pairing')
+ const teamOf = (pid: string) => teams.find((t:any) => (t.playerIds || []).includes(pid))
+ const sortedPairings = [...pairings].sort((a:any, b:any) => (a.order ?? 0) - (b.order ?? 0))
+ const byPairing = sortedPairings.length > 0 && viewBy === 'pairing'
+ const pairedIds = new Set<string>(sortedPairings.flatMap((g:any) => g.playerIds || []))
+ const teamPlayerIds: string[] = teams.flatMap((t:any) => t.playerIds || [])
+ const unpaired = teamPlayerIds.filter(id => !pairedIds.has(id))
+ const cards: any[] = byPairing
+   ? [...sortedPairings, ...(unpaired.length ? [{ id:'__unpaired', name:'Not in a group', playerIds: unpaired }] : [])]
+   : teams
 
  // ── DRAW SCORES ──
  // A player who misses a day can take another player's card. The drawn card
@@ -161,10 +182,20 @@ export default function ScorerPage() {
    })
  }
 
+ // Save only the cards that were touched. Each group keeps its own players'
+ // cards, so two people scoring different groups at once can never overwrite
+ // each other the way writing the whole score sheet could.
+ const dirtyIds = useRef<Set<string>>(new Set())
+ const latestScores = useRef<Record<string, number[]>>({})
  const saveScores = useCallback(
- debounce(async (s: Record<string, number[]>) => {
+ debounce(async () => {
+ const ids = Array.from(dirtyIds.current)
+ dirtyIds.current = new Set()
+ if (!ids.length) return
  setSaveStatus('saving')
- await set(ref(db,'tournament/scores'), s)
+ const patch: Record<string, number[]> = {}
+ ids.forEach(id => { patch[id] = latestScores.current[id] })
+ await update(ref(db,'tournament/scores'), patch)
  setSaveStatus('saved')
  setTimeout(() => setSaveStatus('idle'), 2000)
  }, 800),
@@ -179,7 +210,9 @@ export default function ScorerPage() {
  updated[holeIdx] = val
  const newScores = { ...scores, [pid]: updated }
  setScores(newScores)
- saveScores(newScores)
+ latestScores.current = { ...latestScores.current, [pid]: updated }
+ dirtyIds.current.add(pid)
+ saveScores()
  }
 
 
@@ -267,6 +300,8 @@ export default function ScorerPage() {
  </div>
 
 
+
+ <DayBar/>
 
  {/* Legend */}
  <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto border-b border-zinc-900/50">
@@ -443,12 +478,23 @@ export default function ScorerPage() {
  </div>
  )}
 
- {teams.map(team => {
+ {teams.length > 0 && sortedPairings.length > 0 && (
+ <div className="px-2 flex bg-zinc-900 rounded-2xl p-1.5 border border-zinc-800 gap-1">
+ {([['pairing','By Pairing'],['team','By Team']] as const).map(([k,lbl]) => (
+ <button key={k} onClick={() => setViewBy(k)}
+ className={`flex-1 py-2.5 rounded-xl font-black text-xs transition-all ${viewBy===k ? 'bg-emerald-500 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}>
+ {lbl}
+ </button>
+ ))}
+ </div>
+ )}
+
+ {teams.length > 0 && cards.map(team => {
  const teamPlayers = (team.playerIds || []).map((pid: string) => players.find(p => p.id === pid)).filter(Boolean)
  return (
  <div key={team.id} className="bg-zinc-950 rounded-[2rem] border-2 border-zinc-800 overflow-hidden shadow-2xl">
  <div className="bg-zinc-900 px-6 py-4 border-b-2 border-zinc-800 flex items-center justify-between">
- <h2 className="text-xl font-black text-emerald-400 tracking-tight">{team.name}</h2>
+ <h2 className="text-xl font-black text-emerald-400 tracking-tight">{team.name}{byPairing && team.teeTime ? <span className="text-zinc-500 text-sm ml-3">{team.teeTime}</span> : null}</h2>
  <span className="text-[10px] text-zinc-600 font-black">{teamPlayers.length} PLAYERS</span>
  </div>
  <div className="overflow-x-auto">
@@ -497,7 +543,7 @@ export default function ScorerPage() {
  <tr key={p.id} className="border-t border-zinc-900 hover:bg-zinc-900/30 transition-colors">
  <td className="sticky left-0 bg-zinc-950 z-20 border-r border-zinc-800 px-4 py-3">
  <div className="font-black text-sm text-white leading-tight">{p.name}</div>
- <div className="text-[9px] text-zinc-600 font-black mt-0.5">HCP {p.handicap||0}</div>
+ <div className="text-[9px] text-zinc-600 font-black mt-0.5">HCP {p.handicap||0}{byPairing && teamOf(p.id) ? <span className="text-blue-400/80"> · {teamOf(p.id).name}</span> : null}</div>
  {draws[p.id] ? (
  <button onClick={() => clearDraw(p.id)}
  className="mt-1 flex items-center gap-1 text-[9px] font-black text-amber-400 bg-amber-500/15 border border-amber-500/30 hover:border-amber-500 px-1.5 py-0.5 rounded-md transition-colors">
